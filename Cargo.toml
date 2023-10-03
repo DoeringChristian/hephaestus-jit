@@ -1,0 +1,18 @@
+[package]
+name = "context-jit"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+
+cuda-rs = { git = "https://github.com/DoeringChristian/cuda-rs.git" }
+optix-rs = { git = "https://github.com/DoeringChristian/optix-rs.git" }
+thiserror = "1.0.49"
+enum_dispatch = "0.3.12"
+resource-pool = { git = "https://github.com/DoeringChristian/resource-pool.git" }
+libloading = "0.8.0"
+log = "0.4.17"
+bytesize = "1.2.0"
