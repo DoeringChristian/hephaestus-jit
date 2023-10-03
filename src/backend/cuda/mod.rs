@@ -1,3 +1,4 @@
+mod codegen;
 mod core;
 use crate::backend::{BackendBuffer, BackendDevice};
 
