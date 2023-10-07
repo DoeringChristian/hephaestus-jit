@@ -82,7 +82,7 @@ pub fn assemble_trace(
     };
 
     // Write out debug info:
-    writeln!(asm, "// {:?}", trace.op(opid))?;
+    writeln!(asm, "// {:?}:", trace.op(opid))?;
 
     let op = trace.op(opid);
     match op {
@@ -96,11 +96,43 @@ pub fn assemble_trace(
                 reg(*rhs)
             )?;
         }
-        Op::Scatter { dst, src, idx } => todo!(),
+        Op::Scatter { dst, src, idx } => {
+            let src_var = trace.var(*src);
+            let dst_var = trace.var(*dst);
+
+            assert!(dst_var.external.is_some());
+            assert_eq!(dst_var.ty, VarType::Array);
+
+            let param_offset = param_layout.array_offset(dst_var.external.unwrap());
+
+            writeln!(asm, "\tld.{param_ty}.u64 %rd0 [params+{}]", param_offset)?;
+
+            // Multiply idx with type size and add ptr
+            let ty = trace.var_ty(*src);
+            writeln!(
+                asm,
+                "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
+                ty = tyname(ty),
+                idx = reg(*idx),
+                ty_size = ty.size(),
+            )?;
+
+            let op_type = "st";
+            let op = "";
+            writeln!(
+                asm,
+                "\t{}.global{}.{} [%rd3], {};",
+                op_type,
+                op,
+                tyname(ty),
+                reg(*src),
+            )?;
+        }
         Op::Gather { dst, src, idx } => {
             let src_var = trace.var(*src);
+
             assert!(src_var.external.is_some());
-            assert!(src_var.ty == VarType::Array);
+            assert_eq!(src_var.ty, VarType::Array);
 
             // Load array ptr:
 

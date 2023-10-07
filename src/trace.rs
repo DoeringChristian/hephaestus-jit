@@ -52,18 +52,26 @@ pub struct Var {
 #[derive(Clone, Copy, Debug)]
 pub struct OpId(pub(crate) usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum Op {
     Add { dst: VarId, lhs: VarId, rhs: VarId },
     Scatter { dst: VarId, src: VarId, idx: VarId },
     Gather { dst: VarId, src: VarId, idx: VarId },
+}
+impl std::fmt::Debug for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Op::Add { dst, lhs, rhs } => write!(f, "{dst:?} <- {lhs:?} + {rhs:?}"),
+            Op::Scatter { dst, src, idx } => write!(f, "{dst:?}[{idx:?}] <- {src:?}"),
+            Op::Gather { dst, src, idx } => write!(f, "{dst:?} <- {src:?}[{idx:?}]"),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct Trace {
     pub(crate) ops: Vec<Op>,
     pub(crate) vars: Vec<Var>,
-    pub(crate) n_externals: usize,
 }
 
 impl Trace {

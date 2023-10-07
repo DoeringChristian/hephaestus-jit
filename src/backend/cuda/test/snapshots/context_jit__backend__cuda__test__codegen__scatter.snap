@@ -2,8 +2,8 @@
 source: src/backend/cuda/test/codegen.rs
 expression: asm
 ---
-// VarId(1) <- VarId(0)[VarId(2)]:
+// VarId(0)[VarId(2)] <- VarId(1):
 	ld.global.u64 %rd0 [params+8]
 	mad.wide.u8 %rd3, %r2, 1, %rd0;
-	ld.global.nc.u8 %b1, [%rd3];
+	st.global.u8 [%rd3], %b1;
 
