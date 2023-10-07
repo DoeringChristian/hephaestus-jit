@@ -97,7 +97,6 @@ pub fn assemble_trace(
             )?;
         }
         Op::Scatter { dst, src, idx } => {
-            let src_var = trace.var(*src);
             let dst_var = trace.var(*dst);
 
             assert!(dst_var.external.is_some());
