@@ -1,9 +1,10 @@
 #[derive(Clone, Copy, Debug)]
 pub struct VarId(pub(crate) usize);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum VarType {
     // Primitive Types (might move out)
+    #[default]
     Void,
     Bool,
     I8,
@@ -17,12 +18,35 @@ pub enum VarType {
     F16,
     F32,
     F64,
-    Array(Box<VarType>),
+    Array,
+}
+impl VarType {
+    pub fn size(&self) -> usize {
+        match self {
+            VarType::Void => 0,
+            VarType::Bool => 1,
+            VarType::I8 => 1,
+            VarType::U8 => 1,
+            VarType::I16 => 2,
+            VarType::U16 => 2,
+            VarType::I32 => 4,
+            VarType::U32 => 4,
+            VarType::I64 => 8,
+            VarType::U64 => 8,
+            VarType::F16 => 2,
+            VarType::F32 => 4,
+            VarType::F64 => 8,
+            VarType::Array => 0,
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
+    // External Array, Texture or Acceleration structure (not
+    // quite sure how to handle this)
+    pub(crate) external: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -35,10 +59,11 @@ pub enum Op {
     Gather { dst: VarId, src: VarId, idx: VarId },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Trace {
     pub(crate) ops: Vec<Op>,
     pub(crate) vars: Vec<Var>,
+    pub(crate) n_externals: usize,
 }
 
 impl Trace {

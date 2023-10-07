@@ -1,0 +1,9 @@
+---
+source: src/backend/cuda/test/codegen.rs
+expression: asm
+---
+// Gather { dst: VarId(1), src: VarId(0), idx: VarId(2) }
+	ld.global.u64 %rd0 [params+8]
+	mad.wide.u8 %rd3, %r2, 1, %rd0;
+	ld.global.nc.u8 %b1, [%rd3];
+

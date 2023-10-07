@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::ops::Range;
-
 use crate::trace::*;
+
+use super::param_layout::ParamLayout;
 pub fn prefix(ty: &VarType) -> &'static str {
     match ty {
         VarType::Void => "%u",
@@ -75,13 +73,16 @@ pub fn assemble_trace(
     asm: &mut impl std::fmt::Write,
     trace: &Trace,
     opid: OpId,
-    ctx: &Context,
     param_ty: &str,
+    param_layout: ParamLayout,
 ) -> std::fmt::Result {
     let reg = |id: VarId| Reg {
         reg: id.0,
         ty: &trace.var_ty(id),
     };
+
+    // Write out debug info:
+    writeln!(asm, "// {:?}", trace.op(opid))?;
 
     let op = trace.op(opid);
     match op {
@@ -97,10 +98,34 @@ pub fn assemble_trace(
         }
         Op::Scatter { dst, src, idx } => todo!(),
         Op::Gather { dst, src, idx } => {
+            let src_var = trace.var(*src);
+            assert!(src_var.external.is_some());
+            assert!(src_var.ty == VarType::Array);
+
             // Load array ptr:
 
+            let param_offset = param_layout.array_offset(src_var.external.unwrap());
+
             writeln!(asm, "\tld.{param_ty}.u64 %rd0 [params+{}]", param_offset)?;
+
+            // Multiply idx with type size and add ptr
+            let ty = trace.var_ty(*dst);
+            writeln!(
+                asm,
+                "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
+                ty = tyname(ty),
+                idx = reg(*idx),
+                ty_size = ty.size(),
+            )?;
+
+            // Load value from buffer
+            writeln!(
+                asm,
+                "\tld.global.nc.{ty} {ptr}, [%rd3];",
+                ty = tyname(ty),
+                ptr = reg(*dst),
+            )?;
         }
-    }
-    todo!()
+    };
+    Ok(())
 }

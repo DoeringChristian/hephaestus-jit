@@ -1,5 +1,10 @@
 mod codegen;
 mod core;
+mod param_layout;
+
+#[cfg(test)]
+mod test;
+
 use crate::backend::{BackendBuffer, BackendDevice};
 
 #[derive(Clone, Debug)]
