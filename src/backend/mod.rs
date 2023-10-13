@@ -1,5 +1,9 @@
 mod cuda;
+use std::sync::Arc;
+
 use cuda::CudaDevice;
+
+use crate::trace::Trace;
 
 use self::cuda::CudaBuffer;
 
@@ -37,8 +41,14 @@ impl Buffer {}
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
+    fn execute_trace(&self, trace: Trace, params: Parameters) -> Result<()>;
 }
 
 pub trait BackendBuffer {
     type Device: BackendDevice;
+}
+
+#[derive(Debug)]
+pub struct Parameters {
+    buffers: Vec<Arc<Buffer>>,
 }

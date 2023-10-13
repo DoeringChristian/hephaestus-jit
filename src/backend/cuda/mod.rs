@@ -38,6 +38,14 @@ impl BackendDevice for CudaDevice {
             size,
         })
     }
+
+    fn execute_trace(
+        &self,
+        trace: crate::trace::Trace,
+        params: backend::Parameters,
+    ) -> backend::Result<()> {
+        todo!()
+    }
 }
 
 impl BackendBuffer for CudaBuffer {

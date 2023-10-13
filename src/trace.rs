@@ -94,4 +94,7 @@ impl Trace {
     pub fn var_ids(&self) -> impl Iterator<Item = VarId> {
         (0..self.vars.len()).map(|i| VarId(i))
     }
+    pub fn op_ids(&self) -> impl Iterator<Item = OpId> {
+        (0..self.ops.len()).map(|i| OpId(i))
+    }
 }
