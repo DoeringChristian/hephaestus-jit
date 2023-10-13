@@ -99,10 +99,9 @@ pub fn assemble_trace(
         Op::Scatter { dst, src, idx } => {
             let dst_var = trace.var(*dst);
 
-            assert!(dst_var.external.is_some());
             assert_eq!(dst_var.ty, VarType::Array);
 
-            let param_offset = param_layout.array_offset(dst_var.external.unwrap());
+            let param_offset = param_layout.byte_offset(*dst);
 
             writeln!(asm, "\tld.{param_ty}.u64 %rd0 [params+{}]", param_offset)?;
 
@@ -130,12 +129,11 @@ pub fn assemble_trace(
         Op::Gather { dst, src, idx } => {
             let src_var = trace.var(*src);
 
-            assert!(src_var.external.is_some());
             assert_eq!(src_var.ty, VarType::Array);
 
             // Load array ptr:
 
-            let param_offset = param_layout.array_offset(src_var.external.unwrap());
+            let param_offset = param_layout.byte_offset(*src);
 
             writeln!(asm, "\tld.{param_ty}.u64 %rd0 [params+{}]", param_offset)?;
 

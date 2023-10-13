@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(pub(crate) usize);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -44,9 +44,6 @@ impl VarType {
 #[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
-    // External Array, Texture or Acceleration structure (not
-    // quite sure how to handle this)
-    pub(crate) external: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -93,5 +90,8 @@ impl Trace {
     }
     pub fn op(&self, id: OpId) -> &Op {
         &self.ops[id.0]
+    }
+    pub fn var_ids(&self) -> impl Iterator<Item = VarId> {
+        (0..self.vars.len()).map(|i| VarId(i))
     }
 }
