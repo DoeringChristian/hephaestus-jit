@@ -149,15 +149,19 @@ pub fn assemble_trace(
         asm,
         "\tld.param.u32 %r2, [params]; // r2 <- params[0] (Size)"
     )?;
+    writeln!(
+        asm,
+        "\tld.param.u64 %rd1, [params+8]; // rd1 <- params[8] (parameter table)"
+    )?;
 
     write!(
         asm,
         "\tsetp.ge.u32 %p0, %r0, %r2; // p0 <- r0 >= r2\n\
-           \t@%p0 bra done; // if p0 => done\n\
-           \t\n\
-           \tmov.u32 %r3, %nctaid.x; // r3 <- nctaid.x\n\
-           \tmul.lo.u32 %r1, %r3, %r1; // r1 <- r3 * r1\n\
-           \t\n"
+        \t@%p0 bra done; // if p0 => done\n\
+        \t\n\
+        \tmov.u32 %r3, %nctaid.x; // r3 <- nctaid.x\n\
+        \tmul.lo.u32 %r1, %r3, %r1; // r1 <- r3 * r1\n\
+        \t\n"
     )?;
 
     write!(asm, "body: // sm_{}\n", 86)?; // TODO: compute capability from device
@@ -195,6 +199,7 @@ pub fn assemble_op(
     let reg = Reg::constructor(trace);
 
     // Write out debug info:
+    writeln!(asm, "")?;
     writeln!(asm, "// {:?}:", trace.op(opid))?;
 
     let op = trace.op(opid);
@@ -216,14 +221,17 @@ pub fn assemble_op(
 
             let param_offset = param_layout.byte_offset(*dst);
 
-            writeln!(asm, "\tld.{param_ty}.u64 %rd0, [params+{}];", param_offset)?;
+            writeln!(
+                asm,
+                "\tld.global.u64 %rd0, [%rd1+{param_offset}]; //Load buffer pointer from table"
+            )?;
 
             // Multiply idx with type size and add ptr
             let ty = trace.var_ty(*src);
             writeln!(
                 asm,
                 "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
-                ty = tyname(ty),
+                ty = tyname(trace.var_ty(*idx)),
                 idx = reg(*idx),
                 ty_size = ty.size(),
             )?;
@@ -248,14 +256,17 @@ pub fn assemble_op(
 
             let param_offset = param_layout.byte_offset(*src);
 
-            writeln!(asm, "\tld.{param_ty}.u64 %rd0, [params+{}];", param_offset)?;
+            writeln!(
+                asm,
+                "\tld.global.u64 %rd0, [%rd1+{param_offset}]; //Load buffer pointer from table"
+            )?;
 
             // Multiply idx with type size and add ptr
             let ty = trace.var_ty(*dst);
             writeln!(
                 asm,
                 "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
-                ty = tyname(ty),
+                ty = tyname(trace.var_ty(*idx)),
                 idx = reg(*idx),
                 ty_size = ty.size(),
             )?;
@@ -270,7 +281,7 @@ pub fn assemble_op(
         }
         Op::Index { dst } => {
             let ty = trace.var_ty(*dst);
-            writeln!(asm, "\tmov.{} {}, %r0;\n", tyname(ty), reg(*dst))?;
+            writeln!(asm, "\tmov.{} {}, 0;", tyname(ty), reg(*dst))?;
         }
     };
     Ok(())

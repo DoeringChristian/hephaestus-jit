@@ -47,10 +47,13 @@ fn main() {
         .execute_trace(
             &trace,
             Parameters {
-                buffers: vec![input_buffer, output_buffer],
+                size: 1,
+                buffers: vec![input_buffer, output_buffer.clone()],
             },
         )
         .unwrap();
+
+    dbg!(output_buffer.to_host().unwrap());
 
     dbg!(input);
     dbg!(device);

@@ -41,7 +41,13 @@ pub enum Buffer {
     CudaBuffer(CudaBuffer),
 }
 
-impl Buffer {}
+impl Buffer {
+    pub fn to_host(&self) -> Result<Vec<u8>> {
+        match self {
+            Buffer::CudaBuffer(buffer) => buffer.to_host(),
+        }
+    }
+}
 
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
@@ -51,9 +57,11 @@ pub trait BackendDevice: Clone {
 
 pub trait BackendBuffer {
     type Device: BackendDevice;
+    fn to_host(&self) -> Result<Vec<u8>>;
 }
 
 #[derive(Debug)]
 pub struct Parameters {
+    pub size: u32,
     pub buffers: Vec<Arc<Buffer>>,
 }
