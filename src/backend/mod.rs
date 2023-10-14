@@ -29,6 +29,11 @@ impl Device {
             Self::CudaDevice(device) => Ok(Buffer::CudaBuffer(device.create_buffer(size)?)),
         }
     }
+    pub fn execute_trace(&self, trace: &Trace, params: Parameters) -> Result<()> {
+        match self {
+            Self::CudaDevice(device) => device.execute_trace(trace, params),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -41,7 +46,7 @@ impl Buffer {}
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
-    fn execute_trace(&self, trace: Trace, params: Parameters) -> Result<()>;
+    fn execute_trace(&self, trace: &Trace, params: Parameters) -> Result<()>;
 }
 
 pub trait BackendBuffer {
@@ -50,5 +55,5 @@ pub trait BackendBuffer {
 
 #[derive(Debug)]
 pub struct Parameters {
-    buffers: Vec<Arc<Buffer>>,
+    pub buffers: Vec<Arc<Buffer>>,
 }

@@ -1,4 +1,4 @@
-use crate::backend::cuda::codegen::assemble_trace;
+use crate::backend::cuda::codegen::assemble_op;
 use crate::backend::cuda::param_layout::ParamLayout;
 use crate::trace::*;
 
@@ -33,7 +33,7 @@ fn gather() {
     };
 
     let mut asm = String::new();
-    assemble_trace(&mut asm, &trace, gather, "global", layout).unwrap();
+    assemble_op(&mut asm, &trace, gather, "global", layout).unwrap();
     insta::assert_snapshot!(asm);
 }
 
@@ -68,6 +68,6 @@ fn scatter() {
     };
 
     let mut asm = String::new();
-    assemble_trace(&mut asm, &trace, scatter, "global", layout).unwrap();
+    assemble_op(&mut asm, &trace, scatter, "global", layout).unwrap();
     insta::assert_snapshot!(asm);
 }

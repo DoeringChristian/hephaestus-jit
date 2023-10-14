@@ -100,8 +100,9 @@ pub fn assemble_trace(
     trace: &Trace,
     entry_point: &str,
     param_ty: &str,
-    param_layout: &ParamLayout,
+    // param_layout: &ParamLayout,
 ) -> std::fmt::Result {
+    let param_layout = ParamLayout::generate(trace);
     let n_regs = trace.vars.len() + REGISTER_OFFSET; // Add 4 utility registers
 
     // Generate Code
@@ -162,7 +163,7 @@ pub fn assemble_trace(
     write!(asm, "body: // sm_{}\n", 86)?; // TODO: compute capability from device
 
     for opid in trace.op_ids() {
-        assemble_op(asm, trace, opid, param_ty, param_layout)?;
+        assemble_op(asm, trace, opid, param_ty, &param_layout)?;
     }
 
     // End of kernel:
@@ -215,7 +216,7 @@ pub fn assemble_op(
 
             let param_offset = param_layout.byte_offset(*dst);
 
-            writeln!(asm, "\tld.{param_ty}.u64 %rd0 [params+{}]", param_offset)?;
+            writeln!(asm, "\tld.{param_ty}.u64 %rd0, [params+{}];", param_offset)?;
 
             // Multiply idx with type size and add ptr
             let ty = trace.var_ty(*src);
@@ -247,7 +248,7 @@ pub fn assemble_op(
 
             let param_offset = param_layout.byte_offset(*src);
 
-            writeln!(asm, "\tld.{param_ty}.u64 %rd0 [params+{}]", param_offset)?;
+            writeln!(asm, "\tld.{param_ty}.u64 %rd0, [params+{}];", param_offset)?;
 
             // Multiply idx with type size and add ptr
             let ty = trace.var_ty(*dst);
@@ -266,6 +267,10 @@ pub fn assemble_op(
                 ty = tyname(ty),
                 ptr = reg(*dst),
             )?;
+        }
+        Op::Index { dst } => {
+            let ty = trace.var_ty(*dst);
+            writeln!(asm, "\tmov.{} {}, %r0;\n", tyname(ty), reg(*dst))?;
         }
     };
     Ok(())

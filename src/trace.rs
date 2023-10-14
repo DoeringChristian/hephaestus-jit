@@ -54,6 +54,7 @@ pub enum Op {
     Add { dst: VarId, lhs: VarId, rhs: VarId },
     Scatter { dst: VarId, src: VarId, idx: VarId },
     Gather { dst: VarId, src: VarId, idx: VarId },
+    Index { dst: VarId },
 }
 impl std::fmt::Debug for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,6 +62,7 @@ impl std::fmt::Debug for Op {
             Op::Add { dst, lhs, rhs } => write!(f, "{dst:?} <- {lhs:?} + {rhs:?}"),
             Op::Scatter { dst, src, idx } => write!(f, "{dst:?}[{idx:?}] <- {src:?}"),
             Op::Gather { dst, src, idx } => write!(f, "{dst:?} <- {src:?}[{idx:?}]"),
+            Op::Index { dst } => write!(f, "{dst:?} <- idx"),
         }
     }
 }
