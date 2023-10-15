@@ -15,7 +15,6 @@ pub enum VarType {
     U32,
     I64,
     U64,
-    F16,
     F32,
     F64,
     Array,
@@ -33,7 +32,6 @@ impl VarType {
             VarType::U32 => 4,
             VarType::I64 => 8,
             VarType::U64 => 8,
-            VarType::F16 => 2,
             VarType::F32 => 4,
             VarType::F64 => 8,
             VarType::Array => 0,
@@ -49,12 +47,13 @@ pub struct Var {
 #[derive(Clone, Copy, Debug)]
 pub struct OpId(pub(crate) usize);
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum Op {
     Add { dst: VarId, lhs: VarId, rhs: VarId },
     Scatter { dst: VarId, src: VarId, idx: VarId },
     Gather { dst: VarId, src: VarId, idx: VarId },
     Index { dst: VarId },
+    Const { dst: VarId, data: u64 },
 }
 impl std::fmt::Debug for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -63,6 +62,7 @@ impl std::fmt::Debug for Op {
             Op::Scatter { dst, src, idx } => write!(f, "{dst:?}[{idx:?}] <- {src:?}"),
             Op::Gather { dst, src, idx } => write!(f, "{dst:?} <- {src:?}[{idx:?}]"),
             Op::Index { dst } => write!(f, "{dst:?} <- idx"),
+            Op::Const { dst, data } => write!(f, "{dst:?} <- {data:?}"),
         }
     }
 }

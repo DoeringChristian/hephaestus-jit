@@ -26,7 +26,7 @@ pub fn prefix(ty: &VarType) -> &'static str {
         VarType::U32 => "%r",
         VarType::I64 => "%rd",
         VarType::U64 => "%rd",
-        VarType::F16 => "%h",
+        // VarType::F16 => "%h",
         VarType::F32 => "%f",
         VarType::F64 => "%d",
         _ => todo!(),
@@ -45,7 +45,7 @@ pub fn tyname(ty: &VarType) -> &'static str {
         VarType::U32 => "u32",
         VarType::I64 => "s64",
         VarType::U64 => "u64",
-        VarType::F16 => "f16",
+        // VarType::F16 => "f16",
         VarType::F32 => "f32",
         VarType::F64 => "f64",
         _ => todo!(),
@@ -63,7 +63,7 @@ pub fn tyname_bin(ty: &VarType) -> &'static str {
         VarType::U32 => "b32",
         VarType::I64 => "b64",
         VarType::U64 => "b64",
-        VarType::F16 => "b16",
+        // VarType::F16 => "b16",
         VarType::F32 => "b32",
         VarType::F64 => "b64",
         _ => todo!(),
@@ -282,6 +282,17 @@ pub fn assemble_op(
         Op::Index { dst } => {
             let ty = trace.var_ty(*dst);
             writeln!(asm, "\tmov.{} {}, 0;", tyname(ty), reg(*dst))?;
+        }
+        Op::Const { dst, data } => {
+            let ty = trace.var_ty(*dst);
+
+            writeln!(
+                asm,
+                "\tmov.{tyname} {dst}, 0x{data:x};\n",
+                tyname = tyname_bin(trace.var_ty(*dst)),
+                dst = reg(*dst),
+                data = data,
+            )?;
         }
     };
     Ok(())
