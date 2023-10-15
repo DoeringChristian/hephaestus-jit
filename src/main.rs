@@ -5,7 +5,11 @@ use crate::trace::{Op, Trace, Var, VarType};
 
 use self::backend::Device;
 
+#[macro_use]
+extern crate pest_derive;
+
 mod backend;
+mod frontend;
 mod trace;
 mod tracer;
 

@@ -5,9 +5,6 @@ pub use cudarc::driver::DriverError;
 use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
 use std::sync::Arc;
 
-#[cfg(test)]
-mod test;
-
 use crate::backend::{self, BackendBuffer, BackendDevice};
 
 #[derive(Clone, Debug)]
