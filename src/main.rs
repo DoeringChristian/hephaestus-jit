@@ -5,8 +5,8 @@ use crate::trace::{Op, Trace, Var, VarType};
 
 use self::backend::Device;
 
-mod backend;
-mod trace;
+pub mod backend;
+pub mod trace;
 mod tracer;
 
 fn main() {
