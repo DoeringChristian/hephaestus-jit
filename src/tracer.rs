@@ -32,9 +32,15 @@ impl<'a> VarRef<'a> {
 
 impl Tracer {
     pub fn index<'a>(&'a self) -> VarRef<'a> {
-        let id = self.trace.borrow_mut().push_var(Var { ty: VarType::U32 });
+        let id = self.trace.borrow_mut().push_var(Var {
+            ty: VarType::U32,
+            ..Default::default()
+        });
         self.trace.borrow_mut().push_op(Op::Index { dst: id });
         VarRef { id, r: self }
+    }
+    pub fn array<'a>(&'a self, ident: impl AsRef<str>) -> VarRef<'a> {
+        todo!()
     }
 }
 
@@ -49,6 +55,8 @@ mod test {
         let idx = t.index();
 
         let idx2 = idx.add(&idx);
+
+        let arr = t.array("test");
 
         dbg!(t);
     }

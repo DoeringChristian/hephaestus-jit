@@ -15,9 +15,18 @@ fn main() {
 
     let mut trace = Trace::default();
 
-    let output = trace.push_var(Var { ty: VarType::Array });
-    let c = trace.push_var(Var { ty: VarType::U32 });
-    let idx = trace.push_var(Var { ty: VarType::U32 });
+    let output = trace.push_var(Var {
+        ty: VarType::Array,
+        ..Default::default()
+    });
+    let c = trace.push_var(Var {
+        ty: VarType::U32,
+        ..Default::default()
+    });
+    let idx = trace.push_var(Var {
+        ty: VarType::U32,
+        ..Default::default()
+    });
 
     trace.push_op(Op::Index { dst: idx });
     trace.push_op(Op::Const { dst: c, data: 1 });

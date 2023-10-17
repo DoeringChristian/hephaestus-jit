@@ -42,6 +42,7 @@ impl VarType {
 #[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
+    pub(crate) ident: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
