@@ -9,13 +9,11 @@ use self::backend::Device;
 extern crate pest_derive;
 
 mod backend;
-mod frontend;
 mod trace;
 mod tracer;
 
 fn main() {
     let device = Device::cuda(0).unwrap();
-    let input_buffer = Arc::new(device.create_buffer(10).unwrap());
     let output_buffer = Arc::new(device.create_buffer(10).unwrap());
 
     let mut trace = Trace::default();

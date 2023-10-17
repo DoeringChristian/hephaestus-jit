@@ -281,7 +281,7 @@ pub fn assemble_op(
         }
         Op::Index { dst } => {
             let ty = trace.var_ty(*dst);
-            writeln!(asm, "\tmov.{} {}, 0;", tyname(ty), reg(*dst))?;
+            writeln!(asm, "\tmov.{} {}, %r0;", tyname(ty), reg(*dst))?;
         }
         Op::Const { dst, data } => {
             let ty = trace.var_ty(*dst);
