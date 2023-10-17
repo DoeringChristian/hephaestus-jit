@@ -3,6 +3,25 @@
 version = 3
 
 [[package]]
+name = " hephaestus-jit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytesize",
+ "cuda-rs",
+ "cudarc",
+ "enum_dispatch",
+ "insta",
+ "libloading",
+ "log",
+ "optix-rs",
+ "pest",
+ "pest_derive",
+ "resource-pool",
+ "thiserror",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -39,25 +58,6 @@ dependencies = [
  "lazy_static",
  "libc",
  "windows-sys 0.45.0",
-]
-
-[[package]]
-name = "context-jit"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytesize",
- "cuda-rs",
- "cudarc",
- "enum_dispatch",
- "insta",
- "libloading",
- "log",
- "optix-rs",
- "pest",
- "pest_derive",
- "resource-pool",
- "thiserror",
 ]
 
 [[package]]
