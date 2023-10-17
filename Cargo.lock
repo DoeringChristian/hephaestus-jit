@@ -3,25 +3,6 @@
 version = 3
 
 [[package]]
-name = " hephaestus-jit"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytesize",
- "cuda-rs",
- "cudarc",
- "enum_dispatch",
- "insta",
- "libloading",
- "log",
- "optix-rs",
- "pest",
- "pest_derive",
- "resource-pool",
- "thiserror",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -138,6 +119,25 @@ name = "glob"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
+
+[[package]]
+name = "hephaestus-jit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytesize",
+ "cuda-rs",
+ "cudarc",
+ "enum_dispatch",
+ "insta",
+ "libloading",
+ "log",
+ "optix-rs",
+ "pest",
+ "pest_derive",
+ "resource-pool",
+ "thiserror",
+]
 
 [[package]]
 name = "insta"
