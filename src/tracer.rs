@@ -4,7 +4,7 @@ use crate::trace::{Op, Trace, Var, VarId, VarType};
 
 #[derive(Default, Debug)]
 pub struct Tracer {
-    trace: RefCell<Trace>,
+    pub(crate) trace: RefCell<Trace>,
 }
 
 #[derive(Clone, Copy)]
@@ -20,13 +20,36 @@ impl<'a> VarRef<'a> {
     pub fn add(&self, other: &Self) -> Self {
         assert_eq!(self.ty(), other.ty());
         let ty = self.ty();
-        let dst = self.r.trace.borrow_mut().push_var(Var { ty });
+        let dst = self.r.trace.borrow_mut().push_var(Var {
+            ty,
+            ..Default::default()
+        });
         self.r.trace.borrow_mut().push_op(Op::Add {
             dst,
             lhs: self.id,
             rhs: other.id,
         });
         Self { id: dst, r: self.r }
+    }
+    pub fn scatter(&self, target: &Self, idx: &Self) {
+        self.r.trace.borrow_mut().push_op(Op::Scatter {
+            src: self.id,
+            dst: target.id,
+            idx: idx.id,
+        });
+    }
+    pub fn gather(&self, idx: &Self) -> Self {
+        let ty = self.ty();
+        let dst = self.r.trace.borrow_mut().push_var(Var {
+            ty,
+            ..Default::default()
+        });
+        self.r.trace.borrow_mut().push_op(Op::Gather {
+            src: self.id,
+            dst,
+            idx: idx.id,
+        });
+        return Self { id: dst, r: self.r };
     }
 }
 
@@ -39,25 +62,45 @@ impl Tracer {
         self.trace.borrow_mut().push_op(Op::Index { dst: id });
         VarRef { id, r: self }
     }
-    pub fn array<'a>(&'a self, ident: impl AsRef<str>) -> VarRef<'a> {
-        todo!()
+    pub fn array<'a>(&'a self, ty: VarType) -> VarRef<'a> {
+        let id = self.trace.borrow_mut().push_array_var(Var { ty });
+        VarRef { id, r: self }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
+    use crate::backend::{Device, Parameters};
+    use crate::trace::VarType;
+
     use super::Tracer;
 
     #[test]
     fn index() {
-        let mut t = Tracer::default();
+        let t = Tracer::default();
 
+        let output = t.array(VarType::U32);
         let idx = t.index();
 
-        let idx2 = idx.add(&idx);
+        idx.scatter(&output, &idx);
 
-        let arr = t.array("test");
+        dbg!(&t);
 
-        dbg!(t);
+        let device = Device::cuda(0).unwrap();
+        let output = Arc::new(device.create_buffer(10 * 4).unwrap());
+
+        device
+            .execute_trace(
+                &t.trace.borrow(),
+                Parameters {
+                    size: 10,
+                    buffers: vec![output.clone()],
+                },
+            )
+            .unwrap();
+
+        dbg!(output.to_host().unwrap());
     }
 }

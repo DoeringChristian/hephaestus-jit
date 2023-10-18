@@ -13,16 +13,18 @@ impl ParamLayout {
         2 * 8
     }
     pub fn generate(trace: &Trace) -> Self {
-        let mut offsets = HashMap::default();
-
         let mut offset: usize = 0;
 
-        for id in trace.var_ids() {
-            if trace.var(id).ty == VarType::Array {
-                offsets.insert(id, offset);
+        let offsets = trace
+            .arrays
+            .iter()
+            .map(|id| {
+                let o = offset;
                 offset += 1;
-            }
-        }
+                (*id, o)
+            })
+            .collect::<HashMap<_, _>>();
+
         Self(offsets)
     }
 }

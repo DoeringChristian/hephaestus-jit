@@ -16,7 +16,7 @@ fn main() {
     let mut trace = Trace::default();
 
     let output = trace.push_var(Var {
-        ty: VarType::Array,
+        // ty: VarType::Array,
         ..Default::default()
     });
     let c = trace.push_var(Var {

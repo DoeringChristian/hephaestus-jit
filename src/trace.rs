@@ -17,7 +17,7 @@ pub enum VarType {
     U64,
     F32,
     F64,
-    Array,
+    // Array,
 }
 impl VarType {
     pub fn size(&self) -> usize {
@@ -34,7 +34,7 @@ impl VarType {
             VarType::U64 => 8,
             VarType::F32 => 4,
             VarType::F64 => 8,
-            VarType::Array => 0,
+            // VarType::Array => 0,
         }
     }
 }
@@ -42,7 +42,6 @@ impl VarType {
 #[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
-    pub(crate) ident: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -70,6 +69,7 @@ impl std::fmt::Debug for Op {
 
 #[derive(Debug, Default)]
 pub struct Trace {
+    pub(crate) arrays: Vec<VarId>,
     pub(crate) ops: Vec<Op>,
     pub(crate) vars: Vec<Var>,
 }
@@ -78,6 +78,11 @@ impl Trace {
     pub fn push_var(&mut self, var: Var) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
+        id
+    }
+    pub fn push_array_var(&mut self, var: Var) -> VarId {
+        let id = self.push_var(var);
+        self.arrays.push(id);
         id
     }
     pub fn push_op(&mut self, op: Op) -> OpId {

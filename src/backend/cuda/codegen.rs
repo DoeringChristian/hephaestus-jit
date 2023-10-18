@@ -217,7 +217,7 @@ pub fn assemble_op(
         Op::Scatter { dst, src, idx } => {
             let dst_var = trace.var(*dst);
 
-            assert_eq!(dst_var.ty, VarType::Array);
+            // assert_eq!(dst_var.ty, VarType::Array);
 
             let param_offset = param_layout.byte_offset(*dst);
 
@@ -249,8 +249,6 @@ pub fn assemble_op(
         }
         Op::Gather { dst, src, idx } => {
             let src_var = trace.var(*src);
-
-            assert_eq!(src_var.ty, VarType::Array);
 
             // Load array ptr:
 
