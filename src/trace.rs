@@ -42,6 +42,7 @@ impl VarType {
 #[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
+    pub(crate) size: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -72,15 +73,17 @@ pub struct Trace {
     pub(crate) arrays: Vec<VarId>,
     pub(crate) ops: Vec<Op>,
     pub(crate) vars: Vec<Var>,
+    pub(crate) size: usize,
 }
 
 impl Trace {
     pub fn push_var(&mut self, var: Var) -> VarId {
         let id = VarId(self.vars.len());
+        self.size = self.size.max(var.size);
         self.vars.push(var);
         id
     }
-    pub fn push_array_var(&mut self, var: Var) -> VarId {
+    pub fn push_array(&mut self, var: Var) -> VarId {
         let id = self.push_var(var);
         self.arrays.push(id);
         id

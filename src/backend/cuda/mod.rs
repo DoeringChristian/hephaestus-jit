@@ -80,13 +80,17 @@ impl BackendArray for CudaArray {
     fn to_host(&self) -> backend::Result<Vec<u8>> {
         Ok(self.device.device.dtoh_sync_copy(&self.buffer)?)
     }
+
+    fn size(&self) -> usize {
+        self.size
+    }
 }
 
 pub fn params_buffer(params: &backend::Parameters) -> Vec<u64> {
     let buffers = params.arrays.iter().map(|b| *match b {
-        backend::Array::CudaArray(buffer) => {
-            println!("{:#x?}", buffer.buffer.device_ptr());
-            buffer.buffer.device_ptr()
+        backend::Array::CudaArray(array, ..) => {
+            println!("{:#x?}", array.buffer.device_ptr());
+            array.buffer.device_ptr()
         }
         _ => todo!(),
     });

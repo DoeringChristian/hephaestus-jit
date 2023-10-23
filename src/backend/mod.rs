@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use cuda::CudaDevice;
 
-use crate::trace::Trace;
+use crate::trace::{Trace, VarType};
 
 use self::cuda::CudaArray;
 
@@ -13,7 +13,7 @@ pub enum Error {
     CudaError(#[from] cuda::DriverError),
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
 pub enum Device {
@@ -24,9 +24,12 @@ impl Device {
     pub fn cuda(id: usize) -> Result<Self> {
         Ok(Device::CudaDevice(CudaDevice::create(id)?))
     }
-    pub fn create_array(&self, size: usize) -> Result<Array> {
+    pub fn create_array(&self, size: usize, ty: VarType) -> Result<Array> {
         match self {
-            Self::CudaDevice(device) => Ok(Array::CudaArray(Arc::new(device.create_array(size)?))),
+            Self::CudaDevice(device) => Ok(Array::CudaArray(
+                Arc::new(device.create_array(size * ty.size())?),
+                ty,
+            )),
         }
     }
     pub fn execute_trace(&self, trace: &Trace, params: Parameters) -> Result<()> {
@@ -38,13 +41,23 @@ impl Device {
 
 #[derive(Debug, Clone)]
 pub enum Array {
-    CudaArray(Arc<CudaArray>),
+    CudaArray(Arc<CudaArray>, VarType),
 }
 
 impl Array {
     pub fn to_host(&self) -> Result<Vec<u8>> {
         match self {
-            Array::CudaArray(array) => array.to_host(),
+            Array::CudaArray(array, _) => array.to_host(),
+        }
+    }
+    pub fn ty(&self) -> VarType {
+        match self {
+            Array::CudaArray(_, ty) => ty.clone(),
+        }
+    }
+    pub fn len(&self) -> usize {
+        match self {
+            Array::CudaArray(array, ty) => array.size() / ty.size(),
         }
     }
 }
@@ -58,6 +71,7 @@ pub trait BackendDevice: Clone {
 pub trait BackendArray {
     type Device: BackendDevice;
     fn to_host(&self) -> Result<Vec<u8>>;
+    fn size(&self) -> usize;
 }
 
 #[derive(Debug)]

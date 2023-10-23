@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::backend::Parameters;
 use crate::trace::{Op, Trace, Var, VarType};
+use crate::tracer::Kernel;
 
 use self::backend::Device;
 
@@ -11,43 +12,18 @@ mod tracer;
 
 fn main() {
     let device = Device::cuda(0).unwrap();
-    let output_buffer = device.create_array(10).unwrap();
+    let output = device.create_array(10, VarType::U32).unwrap();
 
-    let mut trace = Trace::default();
+    let k = Kernel::default();
 
-    let output = trace.push_var(Var {
-        // ty: VarType::Array,
-        ..Default::default()
-    });
-    let c = trace.push_var(Var {
-        ty: VarType::U32,
-        ..Default::default()
-    });
-    let idx = trace.push_var(Var {
-        ty: VarType::U32,
-        ..Default::default()
-    });
+    {
+        let output = k.array(&output);
+        let idx = k.index(10);
 
-    trace.push_op(Op::Index { dst: idx });
-    trace.push_op(Op::Const { dst: c, data: 1 });
+        idx.scatter(&output, &idx);
+    }
 
-    trace.push_op(Op::Scatter {
-        dst: output,
-        src: c,
-        idx,
-    });
+    k.launch(&device).unwrap();
 
-    device
-        .execute_trace(
-            &trace,
-            Parameters {
-                size: 10,
-                arrays: vec![output_buffer.clone()],
-            },
-        )
-        .unwrap();
-
-    dbg!(output_buffer.to_host().unwrap());
-
-    dbg!(device);
+    dbg!(output.to_host().unwrap());
 }
