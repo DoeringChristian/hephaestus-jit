@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::backend::Buffer;
+use crate::backend::{Array, Buffer};
 use crate::trace::{Op, Trace, Var, VarId, VarType};
 
 #[derive(Default, Debug)]
@@ -63,7 +63,7 @@ impl Tracer {
         self.trace.borrow_mut().push_op(Op::Index { dst: id });
         VarRef { id, r: self }
     }
-    pub fn array<'a>(&'a self, array: &Buffer) -> VarRef<'a> {
+    pub fn array<'a>(&'a self, array: &Array) -> VarRef<'a> {
         let id = self.trace.borrow_mut().push_array_var(Var { ty });
         VarRef { id, r: self }
     }

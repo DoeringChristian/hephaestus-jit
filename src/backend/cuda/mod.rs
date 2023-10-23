@@ -5,7 +5,7 @@ pub use cudarc::driver::DriverError;
 use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
 use std::sync::Arc;
 
-use crate::backend::{self, BackendBuffer, BackendDevice};
+use crate::backend::{self, BackendArray, BackendDevice};
 
 #[derive(Clone, Debug)]
 pub struct CudaDevice {
@@ -28,9 +28,9 @@ pub struct CudaArray {
 }
 
 impl BackendDevice for CudaDevice {
-    type Buffer = CudaArray;
+    type Array = CudaArray;
 
-    fn create_array(&self, size: usize) -> backend::Result<Self::Buffer> {
+    fn create_array(&self, size: usize) -> backend::Result<Self::Array> {
         Ok(CudaArray {
             device: self.clone(),
             buffer: unsafe { self.device.alloc(size)? },
@@ -74,7 +74,7 @@ impl BackendDevice for CudaDevice {
     }
 }
 
-impl BackendBuffer for CudaArray {
+impl BackendArray for CudaArray {
     type Device = CudaDevice;
 
     fn to_host(&self) -> backend::Result<Vec<u8>> {
@@ -84,7 +84,7 @@ impl BackendBuffer for CudaArray {
 
 pub fn params_buffer(params: &backend::Parameters) -> Vec<u64> {
     let buffers = params.arrays.iter().map(|b| *match b {
-        backend::Buffer::CudaBuffer(buffer) => {
+        backend::Array::CudaArray(buffer) => {
             println!("{:#x?}", buffer.buffer.device_ptr());
             buffer.buffer.device_ptr()
         }
