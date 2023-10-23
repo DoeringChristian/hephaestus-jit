@@ -25,5 +25,5 @@ fn main() {
 
     k.launch(&device).unwrap();
 
-    dbg!(output.to_host().unwrap());
+    dbg!(output.to_host::<u8>().unwrap());
 }

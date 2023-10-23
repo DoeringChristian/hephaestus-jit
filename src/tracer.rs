@@ -123,6 +123,6 @@ mod test {
 
         k.launch(&device).unwrap();
 
-        dbg!(output.to_host().unwrap());
+        dbg!(output.to_host::<u32>().unwrap());
     }
 }

@@ -45,9 +45,9 @@ pub enum Array {
 }
 
 impl Array {
-    pub fn to_host(&self) -> Result<Vec<u8>> {
+    pub fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>> {
         match self {
-            Array::CudaArray(array, _) => array.to_host(),
+            Array::CudaArray(array, _) => Ok(bytemuck::cast_vec(array.to_host()?)),
         }
     }
     pub fn ty(&self) -> VarType {
