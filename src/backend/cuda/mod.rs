@@ -21,17 +21,17 @@ impl CudaDevice {
 }
 
 #[derive(Debug)]
-pub struct CudaBuffer {
+pub struct CudaArray {
     device: CudaDevice,
     buffer: core::CudaSlice<u8>,
     size: usize,
 }
 
 impl BackendDevice for CudaDevice {
-    type Buffer = CudaBuffer;
+    type Buffer = CudaArray;
 
-    fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
-        Ok(CudaBuffer {
+    fn create_array(&self, size: usize) -> backend::Result<Self::Buffer> {
+        Ok(CudaArray {
             device: self.clone(),
             buffer: unsafe { self.device.alloc(size)? },
             size,
@@ -74,7 +74,7 @@ impl BackendDevice for CudaDevice {
     }
 }
 
-impl BackendBuffer for CudaBuffer {
+impl BackendBuffer for CudaArray {
     type Device = CudaDevice;
 
     fn to_host(&self) -> backend::Result<Vec<u8>> {
@@ -83,7 +83,7 @@ impl BackendBuffer for CudaBuffer {
 }
 
 pub fn params_buffer(params: &backend::Parameters) -> Vec<u64> {
-    let buffers = params.buffers.iter().map(|b| *match b.as_ref() {
+    let buffers = params.arrays.iter().map(|b| *match b {
         backend::Buffer::CudaBuffer(buffer) => {
             println!("{:#x?}", buffer.buffer.device_ptr());
             buffer.buffer.device_ptr()

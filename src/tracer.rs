@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use crate::backend::Buffer;
 use crate::trace::{Op, Trace, Var, VarId, VarType};
 
 #[derive(Default, Debug)]
@@ -62,7 +63,7 @@ impl Tracer {
         self.trace.borrow_mut().push_op(Op::Index { dst: id });
         VarRef { id, r: self }
     }
-    pub fn array<'a>(&'a self, ty: VarType) -> VarRef<'a> {
+    pub fn array<'a>(&'a self, array: &Buffer) -> VarRef<'a> {
         let id = self.trace.borrow_mut().push_array_var(Var { ty });
         VarRef { id, r: self }
     }
@@ -89,14 +90,14 @@ mod test {
         dbg!(&t);
 
         let device = Device::cuda(0).unwrap();
-        let output = Arc::new(device.create_buffer(10 * 4).unwrap());
+        let output = device.create_array(10 * 4).unwrap();
 
         device
             .execute_trace(
                 &t.trace.borrow(),
                 Parameters {
                     size: 10,
-                    buffers: vec![output.clone()],
+                    arrays: vec![output.clone()],
                 },
             )
             .unwrap();

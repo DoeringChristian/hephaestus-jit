@@ -11,7 +11,7 @@ mod tracer;
 
 fn main() {
     let device = Device::cuda(0).unwrap();
-    let output_buffer = Arc::new(device.create_buffer(10).unwrap());
+    let output_buffer = device.create_array(10).unwrap();
 
     let mut trace = Trace::default();
 
@@ -42,7 +42,7 @@ fn main() {
             &trace,
             Parameters {
                 size: 10,
-                buffers: vec![output_buffer.clone()],
+                arrays: vec![output_buffer.clone()],
             },
         )
         .unwrap();
