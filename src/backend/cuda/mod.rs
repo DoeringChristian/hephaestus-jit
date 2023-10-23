@@ -3,6 +3,7 @@ mod param_layout;
 
 pub use cudarc::driver::DriverError;
 use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::backend::{self, BackendArray, BackendDevice};
@@ -21,17 +22,19 @@ impl CudaDevice {
 }
 
 #[derive(Debug)]
-pub struct CudaArray {
+pub struct CudaArray<T> {
+    _ty: PhantomData<T>,
     device: CudaDevice,
     buffer: core::CudaSlice<u8>,
     size: usize,
 }
 
 impl BackendDevice for CudaDevice {
-    type Array = CudaArray;
+    type Array<T: bytemuck::Pod> = CudaArray<T>;
 
-    fn create_array(&self, size: usize) -> backend::Result<Self::Array> {
+    fn create_array<T: bytemuck::Pod>(&self, size: usize) -> backend::Result<Self::Array<T>> {
         Ok(CudaArray {
+            _ty: PhantomData,
             device: self.clone(),
             buffer: unsafe { self.device.alloc(size)? },
             size,
@@ -74,11 +77,13 @@ impl BackendDevice for CudaDevice {
     }
 }
 
-impl BackendArray for CudaArray {
+impl<T: bytemuck::Pod> BackendArray<T> for CudaArray<T> {
     type Device = CudaDevice;
 
-    fn to_host(&self) -> backend::Result<Vec<u8>> {
-        Ok(self.device.device.dtoh_sync_copy(&self.buffer)?)
+    fn to_host(&self) -> backend::Result<Vec<T>> {
+        Ok(bytemuck::cast_vec(
+            self.device.device.dtoh_sync_copy(&self.buffer)?,
+        ))
     }
 }
 

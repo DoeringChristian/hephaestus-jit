@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
-use crate::backend::{Array, Buffer};
-use crate::trace::{Op, Trace, Var, VarId, VarType};
+use crate::backend::Array;
+use crate::trace::{AsVarType, Op, Trace, Var, VarId, VarType};
 
 #[derive(Default, Debug)]
 pub struct Tracer {
@@ -63,8 +63,11 @@ impl Tracer {
         self.trace.borrow_mut().push_op(Op::Index { dst: id });
         VarRef { id, r: self }
     }
-    pub fn array<'a>(&'a self, array: &Array) -> VarRef<'a> {
-        let id = self.trace.borrow_mut().push_array_var(Var { ty });
+    pub fn array<'a, T: bytemuck::Pod + AsVarType>(&'a self, array: &Array<T>) -> VarRef<'a> {
+        let id = self
+            .trace
+            .borrow_mut()
+            .push_array_var(Var { ty: T::var_ty() });
         VarRef { id, r: self }
     }
 }

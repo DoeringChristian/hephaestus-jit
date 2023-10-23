@@ -39,6 +39,37 @@ impl VarType {
     }
 }
 
+pub trait AsVarType {
+    fn var_ty() -> VarType;
+}
+
+macro_rules! as_var_type {
+{$($from:ident => $to:ident;)*} =>{
+    $(as_var_type!($from => $to);)*
+};
+    ($from:ident => $to:ident) => {
+        impl AsVarType for $from {
+            fn var_ty() -> VarType {
+                VarType::$to
+            }
+        }
+    };
+}
+
+as_var_type! {
+    bool => Bool;
+    u8 => U8;
+    i8 => I8;
+    u16 => U16;
+    i16 => I16;
+    u32 => U32;
+    i32 => I32;
+    u64 => U64;
+    i64 => I64;
+    f32 => F32;
+    f64 => F64;
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
