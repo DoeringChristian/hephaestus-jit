@@ -1,11 +1,14 @@
 mod buffer;
+mod codegen;
 mod device;
+mod param_layout;
 
 use crate::backend;
 use ash::vk::{self, CommandPoolCreateInfo};
 use buffer::{Buffer, BufferInfo};
 use device::Device;
 use gpu_allocator::MemoryLocation;
+use param_layout::ParamLayout;
 
 #[derive(Clone, Debug)]
 pub struct VulkanDevice(Device);
@@ -47,6 +50,8 @@ impl backend::BackendDevice for VulkanDevice {
         trace: &crate::trace::Trace,
         params: backend::Parameters,
     ) -> backend::Result<()> {
+        let layout = ParamLayout::generate(trace);
+        codegen::assemble_trace(trace, "main");
         todo!()
     }
 }
