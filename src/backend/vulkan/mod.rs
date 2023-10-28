@@ -51,7 +51,7 @@ impl backend::BackendDevice for VulkanDevice {
         params: backend::Parameters,
     ) -> backend::Result<()> {
         let layout = ParamLayout::generate(trace);
-        codegen::assemble_trace(trace, "main");
+        let spirv = codegen::assemble_trace(trace, "main");
         todo!()
     }
 }
