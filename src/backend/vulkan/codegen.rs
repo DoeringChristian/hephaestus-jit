@@ -30,7 +30,7 @@ pub fn assemble_trace(trace: &Trace, entry_point: &str) -> Result<Vec<u32>, rspi
         )],
     );
 
-    b.begin_function(
+    let func = b.begin_function(
         void,
         None,
         spirv::FunctionControl::DONT_INLINE | spirv::FunctionControl::CONST,
@@ -54,6 +54,7 @@ pub fn assemble_trace(trace: &Trace, entry_point: &str) -> Result<Vec<u32>, rspi
 
     b.ret()?;
     b.end_function()?;
+    b.entry_point(spirv::ExecutionModel::GLCompute, func, entry_point, vec![]);
 
     let module = b.module();
     print!("{}", module.disassemble());
