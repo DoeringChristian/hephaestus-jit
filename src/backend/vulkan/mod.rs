@@ -3,6 +3,8 @@ mod codegen;
 mod device;
 mod param_layout;
 
+use std::ffi::CStr;
+
 use crate::backend;
 use ash::vk::{self, CommandPoolCreateInfo};
 use buffer::{Buffer, BufferInfo};
@@ -50,8 +52,39 @@ impl backend::BackendDevice for VulkanDevice {
         trace: &crate::trace::Trace,
         params: backend::Parameters,
     ) -> backend::Result<()> {
-        let layout = ParamLayout::generate(trace);
-        let spirv = codegen::assemble_trace(trace, "main");
+        let spirv = codegen::assemble_trace(trace, "main").unwrap();
+        let num = trace.size;
+
+        unsafe {
+            let shader_info = vk::ShaderModuleCreateInfo::builder().code(&spirv).build();
+            let shader = self.create_shader_module(&shader_info, None).unwrap();
+
+            let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(&[]);
+            let pipeline_layout = self
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .unwrap();
+            let pipeline_cache = self
+                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::builder(), None)
+                .unwrap();
+
+            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::COMPUTE)
+                .module(shader)
+                .name(CStr::from_bytes_with_nul(b"main\0").unwrap());
+
+            let compute_pipeline_info = vk::ComputePipelineCreateInfo::builder()
+                .stage(pipeline_shader_info.build())
+                .layout(pipeline_layout);
+            let compute_pipeline = self
+                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info.build()], None)
+                .unwrap()[0];
+
+            self.submit_global(|device, cb| {
+                device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, compute_pipeline);
+                device.cmd_dispatch(cb, num as _, 0, 0);
+            });
+        }
+
         todo!()
     }
 }
