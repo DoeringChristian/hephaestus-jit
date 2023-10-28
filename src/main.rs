@@ -11,7 +11,7 @@ pub mod trace;
 mod tracer;
 
 fn main() {
-    let device = Device::cuda(0).unwrap();
+    let device = Device::vulkan(0).unwrap();
     let output = device.create_array(10, VarType::U32).unwrap();
 
     let k = Kernel::default();
