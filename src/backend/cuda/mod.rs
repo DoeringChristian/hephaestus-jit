@@ -61,6 +61,7 @@ impl BackendDevice for CudaDevice {
         println!("{:#x?}", param_buffer.device_ptr());
 
         let cfg = LaunchConfig::for_num_elems(params.size);
+        dbg!(&cfg);
 
         unsafe {
             func.launch(cfg, (params.size as u64, *(param_buffer.device_ptr())))

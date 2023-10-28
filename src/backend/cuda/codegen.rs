@@ -166,8 +166,8 @@ pub fn assemble_trace(
 
     write!(asm, "body: // sm_{}\n", 86)?; // TODO: compute capability from device
 
-    for opid in trace.op_ids() {
-        assemble_op(asm, trace, opid, param_ty, &param_layout)?;
+    for var in trace.var_ids() {
+        assemble_var(asm, trace, var, param_ty, &param_layout)?;
     }
 
     // End of kernel:
@@ -189,10 +189,10 @@ pub fn assemble_trace(
     Ok(())
 }
 
-pub fn assemble_op(
+pub fn assemble_var(
     asm: &mut impl std::fmt::Write,
     trace: &Trace,
-    opid: OpId,
+    varid: VarId,
     param_ty: &str,
     param_layout: &ParamLayout,
 ) -> std::fmt::Result {
@@ -200,16 +200,17 @@ pub fn assemble_op(
 
     // Write out debug info:
     writeln!(asm, "")?;
-    writeln!(asm, "// {:?}:", trace.op(opid))?;
 
-    let op = trace.op(opid);
-    match op {
-        Op::Add { dst, lhs, rhs } => {
+    let op = &trace.var(varid).op;
+    writeln!(asm, "// {:?}:", op)?;
+    match &op {
+        Op::Nop => {}
+        Op::Add { lhs, rhs } => {
             writeln!(
                 asm,
                 "\tadd.{} {}, {}, {};",
-                tyname(trace.var_ty(*dst)),
-                reg(*dst),
+                tyname(trace.var_ty(varid)),
+                reg(varid),
                 reg(*lhs),
                 reg(*rhs)
             )?;
@@ -247,7 +248,7 @@ pub fn assemble_op(
                 reg(*src),
             )?;
         }
-        Op::Gather { dst, src, idx } => {
+        Op::Gather { src, idx } => {
             let src_var = trace.var(*src);
 
             // Load array ptr:
@@ -260,7 +261,7 @@ pub fn assemble_op(
             )?;
 
             // Multiply idx with type size and add ptr
-            let ty = trace.var_ty(*dst);
+            let ty = trace.var_ty(varid);
             writeln!(
                 asm,
                 "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
@@ -274,24 +275,25 @@ pub fn assemble_op(
                 asm,
                 "\tld.global.nc.{ty} {ptr}, [%rd3];",
                 ty = tyname(ty),
-                ptr = reg(*dst),
+                ptr = reg(varid),
             )?;
         }
-        Op::Index { dst } => {
-            let ty = trace.var_ty(*dst);
-            writeln!(asm, "\tmov.{} {}, %r0;", tyname(ty), reg(*dst))?;
+        Op::Index => {
+            let ty = trace.var_ty(varid);
+            writeln!(asm, "\tmov.{} {}, %r0;", tyname(ty), reg(varid))?;
         }
-        Op::Const { dst, data } => {
-            let ty = trace.var_ty(*dst);
+        Op::Const { data } => {
+            let ty = trace.var_ty(varid);
 
             writeln!(
                 asm,
                 "\tmov.{tyname} {dst}, 0x{data:x};\n",
-                tyname = tyname_bin(trace.var_ty(*dst)),
-                dst = reg(*dst),
+                tyname = tyname_bin(trace.var_ty(varid)),
+                dst = reg(varid),
                 data = data,
             )?;
         }
+        Op::LoadArray => {}
     };
     Ok(())
 }

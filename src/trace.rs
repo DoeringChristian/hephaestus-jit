@@ -42,55 +42,59 @@ impl VarType {
 #[derive(Clone, Debug, Default)]
 pub struct Var {
     pub(crate) ty: VarType,
-    pub(crate) size: usize,
+    pub(crate) op: Op,
+    // pub(crate) deps: (usize, usize),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct OpId(pub(crate) usize);
-
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub enum Op {
-    Add { dst: VarId, lhs: VarId, rhs: VarId },
-    Scatter { dst: VarId, src: VarId, idx: VarId },
-    Gather { dst: VarId, src: VarId, idx: VarId },
-    Index { dst: VarId },
-    Const { dst: VarId, data: u64 },
-}
-impl std::fmt::Debug for Op {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Op::Add { dst, lhs, rhs } => write!(f, "{dst:?} <- {lhs:?} + {rhs:?}"),
-            Op::Scatter { dst, src, idx } => write!(f, "{dst:?}[{idx:?}] <- {src:?}"),
-            Op::Gather { dst, src, idx } => write!(f, "{dst:?} <- {src:?}[{idx:?}]"),
-            Op::Index { dst } => write!(f, "{dst:?} <- idx"),
-            Op::Const { dst, data } => write!(f, "{dst:?} <- {data:?}"),
-        }
-    }
+    #[default]
+    Nop,
+    LoadArray,
+    Add {
+        lhs: VarId,
+        rhs: VarId,
+    },
+    Scatter {
+        dst: VarId,
+        src: VarId,
+        idx: VarId,
+    },
+    Gather {
+        src: VarId,
+        idx: VarId,
+    },
+    Index,
+    Const {
+        data: u64,
+    },
 }
 
 #[derive(Debug, Default)]
 pub struct Trace {
     pub(crate) arrays: Vec<VarId>,
-    pub(crate) ops: Vec<Op>,
     pub(crate) vars: Vec<Var>,
     pub(crate) size: usize,
 }
 
 impl Trace {
-    pub fn push_var(&mut self, var: Var) -> VarId {
+    // pub fn push_var(&mut self, mut var: Var, size: usize, deps: &[VarId]) -> VarId {
+    pub fn push_var(&mut self, mut var: Var, size: usize) -> VarId {
         let id = VarId(self.vars.len());
-        self.size = self.size.max(var.size);
+        self.size = self.size.max(size);
+
+        // // Add dependencies
+        // let start = self.deps.len();
+        // self.deps.extend_from_slice(deps);
+        // let stop = self.deps.len();
+
+        // var.deps = (start, stop);
         self.vars.push(var);
         id
     }
     pub fn push_array(&mut self, var: Var) -> VarId {
-        let id = self.push_var(var);
+        let id = self.push_var(var, 0);
         self.arrays.push(id);
-        id
-    }
-    pub fn push_op(&mut self, op: Op) -> OpId {
-        let id = OpId(self.ops.len());
-        self.ops.push(op);
         id
     }
     pub fn var(&self, id: VarId) -> &Var {
@@ -99,13 +103,7 @@ impl Trace {
     pub fn var_ty(&self, id: VarId) -> &VarType {
         &self.var(id).ty
     }
-    pub fn op(&self, id: OpId) -> &Op {
-        &self.ops[id.0]
-    }
     pub fn var_ids(&self) -> impl Iterator<Item = VarId> {
         (0..self.vars.len()).map(|i| VarId(i))
-    }
-    pub fn op_ids(&self) -> impl Iterator<Item = OpId> {
-        (0..self.ops.len()).map(|i| OpId(i))
     }
 }
