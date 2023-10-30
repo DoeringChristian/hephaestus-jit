@@ -47,6 +47,7 @@ impl Device {
     }
     pub fn submit_global<F: FnOnce(&Self, vk::CommandBuffer)>(&self, f: F) {
         unsafe {
+            self.reset_fences(&[self.fence]).unwrap();
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
             self.begin_command_buffer(self.command_buffer, &command_buffer_begin_info)
@@ -64,7 +65,7 @@ impl Device {
                 .unwrap();
 
             self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
-            self.reset_fences(&[self.fence]).unwrap();
+            // self.reset_fences(&[self.fence]).unwrap();
         }
     }
 }

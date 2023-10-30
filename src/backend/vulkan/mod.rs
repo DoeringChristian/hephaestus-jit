@@ -55,11 +55,46 @@ impl backend::BackendDevice for VulkanDevice {
         let spirv = codegen::assemble_trace(trace, "main").unwrap();
         let num = trace.size;
 
+        let num_buffers = params.arrays.len(); // TODO: get from trace
+
         unsafe {
             let shader_info = vk::ShaderModuleCreateInfo::builder().code(&spirv).build();
             let shader = self.create_shader_module(&shader_info, None).unwrap();
 
-            let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(&[]);
+            // Create Descriptor Pool
+            let desc_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: num_buffers as _,
+            }];
+            let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .pool_sizes(&desc_sizes)
+                .max_sets(1);
+            let desc_pool = self.create_descriptor_pool(&desc_pool_info, None).unwrap();
+
+            // Create Layout
+            let desc_layout_bindings = [vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: num_buffers as _,
+                stage_flags: vk::ShaderStageFlags::ALL,
+                ..Default::default()
+            }];
+            let desc_info =
+                vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
+
+            let desc_set_layouts = [self.create_descriptor_set_layout(&desc_info, None).unwrap()];
+
+            // Allocate Descriptor Sets
+            let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(desc_pool)
+                .set_layouts(&desc_set_layouts);
+            let desc_sets = self
+                .allocate_descriptor_sets(&desc_sets_allocation_info)
+                .unwrap();
+
+            // Create Pipeline
+            let pipeline_layout_info =
+                vk::PipelineLayoutCreateInfo::builder().set_layouts(&desc_set_layouts);
             let pipeline_layout = self
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .unwrap();
@@ -79,13 +114,44 @@ impl backend::BackendDevice for VulkanDevice {
                 .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info.build()], None)
                 .unwrap()[0];
 
+            let desc_buffer_infos = params
+                .arrays
+                .iter()
+                .map(|array| vk::DescriptorBufferInfo {
+                    buffer: array.as_vulkan().unwrap().buffer.buffer(),
+                    offset: 0,
+                    range: array.size() as _,
+                })
+                .collect::<Vec<_>>();
+            let write_desc_sets = [vk::WriteDescriptorSet::builder()
+                .dst_set(desc_sets[0])
+                .buffer_info(&desc_buffer_infos)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .dst_binding(0)
+                .build()];
+            dbg!(&write_desc_sets);
+            dbg!(&desc_layout_bindings);
+
+            self.update_descriptor_sets(&write_desc_sets, &[]);
+
             self.submit_global(|device, cb| {
                 device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, compute_pipeline);
+                device.cmd_bind_descriptor_sets(
+                    cb,
+                    vk::PipelineBindPoint::COMPUTE,
+                    pipeline_layout,
+                    0,
+                    &desc_sets,
+                    &[],
+                );
                 device.cmd_dispatch(cb, num as _, 0, 0);
             });
         }
 
-        todo!()
+        // WARN: Very leaky function
+        // TODO: Fix
+
+        Ok(())
     }
 }
 

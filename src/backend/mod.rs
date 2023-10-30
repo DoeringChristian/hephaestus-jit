@@ -73,6 +73,18 @@ impl Array {
             Array::VulkanArray(array, ty) => array.size() / ty.size(),
         }
     }
+    pub fn size(&self) -> usize {
+        match self {
+            Array::CudaArray(array, ty) => array.size(),
+            Array::VulkanArray(array, ty) => array.size(),
+        }
+    }
+    pub fn as_vulkan(&self) -> Option<&VulkanArray> {
+        match self {
+            Array::VulkanArray(array, _) => Some(array),
+            _ => None,
+        }
+    }
 }
 
 pub trait BackendDevice: Clone {
