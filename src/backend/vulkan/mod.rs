@@ -53,12 +53,32 @@ impl backend::BackendDevice for VulkanDevice {
         params: backend::Parameters,
     ) -> backend::Result<()> {
         let spirv = codegen::assemble_trace(trace, "main").unwrap();
+
+        //         let spirv = inline_spirv::inline_spirv!(
+        //             r#"
+        // #version 460
+        //
+        // layout(set = 0, binding=0) buffer Test{
+        //     uint i[];
+        // }test;
+        //
+        // void main()
+        // {
+        //         test.i[0] = 0;
+        // }
+        //         "#,
+        //             glsl,
+        //             comp
+        //         );
+
         let num = trace.size;
 
         let num_buffers = params.arrays.len(); // TODO: get from trace
 
         unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::builder().code(&spirv).build();
+            let shader_info = vk::ShaderModuleCreateInfo::builder()
+                .code(spirv.as_slice())
+                .build();
             let shader = self.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
@@ -129,8 +149,6 @@ impl backend::BackendDevice for VulkanDevice {
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .dst_binding(0)
                 .build()];
-            dbg!(&write_desc_sets);
-            dbg!(&desc_layout_bindings);
 
             self.update_descriptor_sets(&write_desc_sets, &[]);
 
@@ -144,7 +162,7 @@ impl backend::BackendDevice for VulkanDevice {
                     &desc_sets,
                     &[],
                 );
-                device.cmd_dispatch(cb, num as _, 0, 0);
+                device.cmd_dispatch(cb, num as _, 1, 1);
             });
         }
 

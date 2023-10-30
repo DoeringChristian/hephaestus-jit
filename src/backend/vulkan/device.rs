@@ -65,7 +65,6 @@ impl Device {
                 .unwrap();
 
             self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
-            // self.reset_fences(&[self.fence]).unwrap();
         }
     }
 }
@@ -180,9 +179,10 @@ impl InternalDevice {
             // let queue_family_index =
             // instance.get_physical_device_queue_family_properties(pdevice)
 
-            let device_extension_names = [];
+            let device_extension_names = [vk::ExtDescriptorIndexingFn::name().as_ptr()];
 
             let features = vk::PhysicalDeviceFeatures {
+                shader_storage_buffer_array_dynamic_indexing: vk::TRUE,
                 ..Default::default()
             };
 
