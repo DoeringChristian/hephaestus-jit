@@ -54,23 +54,6 @@ impl backend::BackendDevice for VulkanDevice {
     ) -> backend::Result<()> {
         let spirv = codegen::assemble_trace(trace, "main").unwrap();
 
-        //         let spirv = inline_spirv::inline_spirv!(
-        //             r#"
-        // #version 460
-        //
-        // layout(set = 0, binding=0) buffer Test{
-        //     uint i[];
-        // }test;
-        //
-        // void main()
-        // {
-        //         test.i[0] = 0;
-        // }
-        //         "#,
-        //             glsl,
-        //             comp
-        //         );
-
         let num = trace.size;
 
         let num_buffers = params.arrays.len(); // TODO: get from trace
