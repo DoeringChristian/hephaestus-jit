@@ -1,85 +1,21 @@
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 
 use crate::trace::{Trace, VarId, VarType};
 use rspirv::binary::{Assemble, Disassemble};
-use rspirv::spirv;
+use rspirv::{dr, spirv};
 
 use super::param_layout::ParamLayout;
 
 // fn ty(ty: &VarType) ->
 
-pub fn assemble_trace(trace: &Trace, entry_point: &str) -> Result<Vec<u32>, rspirv::dr::Error> {
-    let param_layout = ParamLayout::generate(trace);
-    dbg!(&param_layout);
-
-    let mut b = rspirv::dr::Builder::new();
-    b.set_version(1, 5);
-    b.capability(spirv::Capability::Shader);
-    b.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
-
-    let void = b.type_void();
-    let voidf = b.type_function(void, vec![]);
-
-    let u32_ty = b.type_int(32, 0);
-    let v3u32_ty = b.type_vector(u32_ty, 3);
-    let ptr_v3u32_ty = b.type_pointer(None, spirv::StorageClass::Input, v3u32_ty);
-    let global_invocation_id = b.variable(ptr_v3u32_ty, None, spirv::StorageClass::Input, None);
-
-    b.decorate(
-        global_invocation_id,
-        spirv::Decoration::BuiltIn,
-        [rspirv::dr::Operand::BuiltIn(
-            spirv::BuiltIn::GlobalInvocationId,
-        )],
-    );
-
-    let mut types = HashMap::new();
-    assemble_types(&mut b, &mut types, trace, &param_layout);
-
-    let func = b.begin_function(
-        void,
-        None,
-        spirv::FunctionControl::DONT_INLINE | spirv::FunctionControl::CONST,
-        voidf,
-    )?;
-
-    b.begin_block(None)?;
-
-    let vars = trace.vars.iter().map(|_| b.id()).collect::<Vec<_>>();
-
-    assemble_vars(
-        &mut b,
-        trace,
-        &vars,
-        &types,
-        &param_layout,
-        global_invocation_id,
-    )?;
-
-    b.ret()?;
-    b.end_function()?;
-    b.entry_point(spirv::ExecutionModel::GLCompute, func, entry_point, vec![]);
-    b.execution_mode(func, spirv::ExecutionMode::LocalSize, [1, 1, 1]);
+pub fn assemble_trace(trace: &Trace, entry_point: &str) -> Result<Vec<u32>, dr::Error> {
+    let mut b = SpirvBuilder::default();
+    b.assemble(trace, entry_point)?;
 
     let module = b.module();
     print!("{}", module.disassemble());
     Ok(module.assemble())
-}
-fn spirv_ty(b: &mut rspirv::dr::Builder, ty: &VarType) -> u32 {
-    match ty {
-        VarType::Void => b.type_void(),
-        VarType::Bool => b.type_bool(),
-        VarType::I8 => b.type_int(8, 1),
-        VarType::U8 => b.type_int(8, 0),
-        VarType::I16 => b.type_int(16, 1),
-        VarType::U16 => b.type_int(16, 0),
-        VarType::I32 => b.type_int(32, 1),
-        VarType::U32 => b.type_int(32, 0),
-        VarType::I64 => b.type_int(64, 1),
-        VarType::U64 => b.type_int(64, 0),
-        VarType::F32 => b.type_float(32),
-        VarType::F64 => b.type_float(64),
-    }
 }
 fn isfloat(ty: &VarType) -> bool {
     match ty {
@@ -101,111 +37,229 @@ fn isint(ty: &VarType) -> bool {
     }
 }
 
+#[derive(Default)]
 struct SpirvBuilder {
-    b: rspirv::dr::Builder,
-    types: HashMap<VarId, u32>,
+    b: dr::Builder,
     spirv_vars: Vec<u32>,
+}
+impl Deref for SpirvBuilder {
+    type Target = dr::Builder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.b
+    }
+}
+impl DerefMut for SpirvBuilder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.b
+    }
 }
 
 impl SpirvBuilder {
+    pub fn module(self) -> dr::Module {
+        self.b.module()
+    }
+    pub fn assemble(&mut self, trace: &Trace, entry_point: &str) -> Result<(), dr::Error> {
+        let param_layout = ParamLayout::generate(trace);
+        dbg!(&param_layout);
+
+        self.id();
+
+        self.acquire_ids(trace);
+
+        self.set_version(1, 5);
+        self.capability(spirv::Capability::Shader);
+        self.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
+
+        let void = self.type_void();
+        let voidf = self.type_function(void, vec![]);
+
+        let u32_ty = self.type_int(32, 0);
+        let v3u32_ty = self.type_vector(u32_ty, 3);
+        let ptr_v3u32_ty = self.type_pointer(None, spirv::StorageClass::Input, v3u32_ty);
+        let global_invocation_id =
+            self.variable(ptr_v3u32_ty, None, spirv::StorageClass::Input, None);
+
+        self.decorate(
+            global_invocation_id,
+            spirv::Decoration::BuiltIn,
+            [dr::Operand::BuiltIn(spirv::BuiltIn::GlobalInvocationId)],
+        );
+
+        let storage_vars = self.assemble_storage_vars(trace, &param_layout);
+
+        let func = self.begin_function(
+            void,
+            None,
+            spirv::FunctionControl::DONT_INLINE | spirv::FunctionControl::CONST,
+            voidf,
+        )?;
+
+        self.begin_block(None)?;
+
+        self.assemble_vars(trace, &param_layout, global_invocation_id)?;
+
+        self.ret()?;
+        self.end_function()?;
+
+        let interface = [global_invocation_id]
+            .into_iter()
+            .chain(storage_vars.into_iter())
+            .collect::<Vec<_>>();
+
+        self.entry_point(
+            spirv::ExecutionModel::GLCompute,
+            func,
+            entry_point,
+            interface,
+        );
+        //OpEntryPoint GLCompute %main "main" %test %gl_GlobalInvocationID %test2
+        self.execution_mode(func, spirv::ExecutionMode::LocalSize, [1, 1, 1]);
+
+        Ok(())
+    }
+    fn acquire_ids(&mut self, trace: &Trace) {
+        let vars = trace.vars.iter().map(|_| self.id()).collect::<Vec<_>>();
+        dbg!(&vars);
+        self.spirv_vars = vars;
+    }
+    fn get(&self, id: VarId) -> u32 {
+        self.spirv_vars[id.0]
+    }
+    fn spirv_ty(&mut self, ty: &VarType) -> u32 {
+        match ty {
+            VarType::Void => self.type_void(),
+            VarType::Bool => self.type_bool(),
+            VarType::I8 => self.type_int(8, 1),
+            VarType::U8 => self.type_int(8, 0),
+            VarType::I16 => self.type_int(16, 1),
+            VarType::U16 => self.type_int(16, 0),
+            VarType::I32 => self.type_int(32, 1),
+            VarType::U32 => self.type_int(32, 0),
+            VarType::I64 => self.type_int(64, 1),
+            VarType::U64 => self.type_int(64, 0),
+            VarType::F32 => self.type_float(32),
+            VarType::F64 => self.type_float(64),
+        }
+    }
     // TODO: Spirv Builder
-}
+    fn assemble_storage_vars(&mut self, trace: &Trace, param_layout: &ParamLayout) -> Vec<u32> {
+        trace
+            .var_ids()
+            .filter_map(|varid| {
+                let var = trace.var(varid);
+                match var.op {
+                    crate::trace::Op::LoadArray => {
+                        let ty = self.spirv_ty(&var.ty);
+                        let u32_ty = self.type_int(32, 0);
+                        let array_len = self.constant_u32(u32_ty, param_layout.len() as _);
+                        let rta_ty = self.type_runtime_array(ty);
+                        let struct_ty = self.type_struct([rta_ty]);
+                        let array_ty = self.type_array(struct_ty, array_len);
 
-fn assemble_types(
-    b: &mut rspirv::dr::Builder,
-    types: &mut HashMap<VarId, u32>,
-    trace: &Trace,
-    param_layout: &ParamLayout,
-) {
-    for varid in trace.var_ids() {
-        let var = trace.var(varid);
-        match var.op {
-            crate::trace::Op::LoadArray => {
-                let ty = spirv_ty(b, &var.ty);
-                let u32_ty = b.type_int(32, 0);
-                let array_len = b.constant_u32(u32_ty, param_layout.len() as _);
-                let rta_ty = b.type_runtime_array(ty);
-                let struct_ty = b.type_struct([rta_ty]);
-                let array_ty = b.type_array(struct_ty, array_len);
+                        self.decorate(struct_ty, spirv::Decoration::Block, []);
+                        self.member_decorate(
+                            struct_ty,
+                            0,
+                            spirv::Decoration::Offset,
+                            [dr::Operand::LiteralInt32(0)],
+                        );
+                        self.decorate(
+                            rta_ty,
+                            rspirv::spirv::Decoration::ArrayStride,
+                            [dr::Operand::LiteralInt32(4)],
+                        );
 
-                b.decorate(struct_ty, spirv::Decoration::Block, []);
+                        let ptr_ty =
+                            self.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
 
-                let ptr_ty = b.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
-                types.insert(varid, ptr_ty);
-            }
-            _ => {}
-        }
-    }
-}
-fn assemble_vars(
-    b: &mut rspirv::dr::Builder,
-    trace: &Trace,
-    vars: &[u32],
-    types: &HashMap<VarId, u32>,
-    param_layout: &ParamLayout,
-    global_invocation_id: u32,
-) -> Result<(), rspirv::dr::Error> {
-    for varid in trace.var_ids() {
-        let var = trace.var(varid);
-        match var.op {
-            crate::trace::Op::Nop => {}
-            crate::trace::Op::Add { lhs, rhs } => {
-                if isint(&var.ty) {
-                    let ty = spirv_ty(b, &var.ty);
-                    b.i_add(ty, Some(vars[varid.0]), vars[lhs.0], vars[rhs.0])?;
-                } else if isfloat(&var.ty) {
-                    let ty = spirv_ty(b, &var.ty);
-                    b.f_add(ty, Some(vars[varid.0]), vars[lhs.0], vars[rhs.0])?;
-                } else {
-                    todo!()
+                        let dst = self.get(varid);
+
+                        self.variable(ptr_ty, Some(dst), spirv::StorageClass::StorageBuffer, None);
+
+                        self.decorate(
+                            dst,
+                            spirv::Decoration::DescriptorSet,
+                            [dr::Operand::LiteralInt32(0)],
+                        );
+                        self.decorate(
+                            dst,
+                            spirv::Decoration::Binding,
+                            [dr::Operand::LiteralInt32(0)],
+                        );
+                        Some(dst)
+                    }
+                    _ => None,
                 }
-            }
-            crate::trace::Op::Scatter { dst, src, idx } => {
-                let ty = spirv_ty(b, &var.ty);
-                let ptr_ty = b.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
-                let int_ty = b.type_int(32, 0);
-                let buffer = b.constant_u32(int_ty, param_layout.buffer_idx(dst) as _);
-                let elem = b.constant_u32(int_ty, 0);
-                let ptr = b.access_chain(ptr_ty, None, vars[dst.0], [buffer, elem, vars[idx.0]])?;
-                b.store(ptr, vars[src.0], None, None)?;
-            }
-            crate::trace::Op::Gather { src, idx } => {
-                let ty = spirv_ty(b, &var.ty);
-                let ptr_ty = b.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
-                let int_ty = b.type_int(32, 0);
-                let buffer = b.constant_u32(int_ty, param_layout.buffer_idx(src) as _);
-                let elem = b.constant_u32(int_ty, 0);
-                let ptr = b.access_chain(ptr_ty, None, vars[src.0], [buffer, elem, vars[idx.0]])?;
-                b.load(ty, Some(vars[varid.0]), ptr, None, None)?;
-            }
-            crate::trace::Op::Index => {
-                let u32_ty = b.type_int(32, 0);
-                let ptr_ty = b.type_pointer(None, spirv::StorageClass::Input, u32_ty);
-                let u32_0 = b.constant_u32(u32_ty, 0);
-                let ptr = b.access_chain(ptr_ty, None, global_invocation_id, [u32_0])?;
-                b.load(u32_ty, Some(vars[varid.0]), ptr, None, None)?;
-            }
-            crate::trace::Op::Const { data } => todo!(),
-            crate::trace::Op::LoadArray => {
-                // let ty = spirv_ty(b, &var.ty);
-                // let u32_ty = b.type_int(32, 0);
-                // let array_len = b.constant_u32(u32_ty, param_layout.len() as _);
-                // let rta_ty = b.type_runtime_array(ty);
-                // let struct_ty = b.type_struct([rta_ty]);
-                // let array_ty = b.type_array(struct_ty, array_len);
-                //
-                // b.decorate(struct_ty, spirv::Decoration::Block, []);
-                //
-                // let ptr_ty = b.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
-                let ptr_ty = types[&varid];
-                b.variable(
-                    ptr_ty,
-                    Some(vars[varid.0]),
-                    spirv::StorageClass::StorageBuffer,
-                    None,
-                );
+            })
+            .collect()
+    }
+
+    fn assemble_vars(
+        &mut self,
+        trace: &Trace,
+        param_layout: &ParamLayout,
+        global_invocation_id: u32,
+    ) -> Result<(), dr::Error> {
+        for varid in trace.var_ids() {
+            let var = trace.var(varid);
+            match var.op {
+                crate::trace::Op::Nop => {}
+                crate::trace::Op::Add { lhs, rhs } => {
+                    let dst = self.get(varid);
+                    let lhs = self.get(lhs);
+                    let rhs = self.get(rhs);
+                    let ty = self.spirv_ty(&var.ty);
+                    if isint(&var.ty) {
+                        self.i_add(ty, Some(dst), lhs, rhs)?;
+                    } else if isfloat(&var.ty) {
+                        self.f_add(ty, Some(dst), lhs, rhs)?;
+                    } else {
+                        todo!()
+                    }
+                }
+                crate::trace::Op::Scatter { dst, src, idx } => {
+                    let ty = self.spirv_ty(&var.ty);
+                    let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
+                    let int_ty = self.type_int(32, 0);
+                    let buffer = self.constant_u32(int_ty, param_layout.buffer_idx(dst) as _);
+                    let elem = self.constant_u32(int_ty, 0);
+
+                    let dst = self.get(dst);
+                    let idx = self.get(idx);
+                    let src = self.get(src);
+
+                    let ptr = self.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
+                    self.store(ptr, src, None, None)?;
+                }
+                crate::trace::Op::Gather { src, idx } => {
+                    let ty = self.spirv_ty(&var.ty);
+                    let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
+                    let int_ty = self.type_int(32, 0);
+                    let buffer = self.constant_u32(int_ty, param_layout.buffer_idx(src) as _);
+                    let elem = self.constant_u32(int_ty, 0);
+
+                    let src = self.get(src);
+                    let idx = self.get(idx);
+                    let dst = self.get(varid);
+
+                    let ptr = self.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
+                    self.load(ty, Some(dst), ptr, None, None)?;
+                }
+                crate::trace::Op::Index => {
+                    let u32_ty = self.type_int(32, 0);
+                    let ptr_ty = self.type_pointer(None, spirv::StorageClass::Input, u32_ty);
+                    let u32_0 = self.constant_u32(u32_ty, 0);
+                    let ptr = self.access_chain(ptr_ty, None, global_invocation_id, [u32_0])?;
+
+                    let dst = self.get(varid);
+
+                    self.load(u32_ty, Some(dst), ptr, None, None)?;
+                }
+                crate::trace::Op::Const { data } => todo!(),
+                crate::trace::Op::LoadArray => {}
             }
         }
+        Ok(())
     }
-    Ok(())
 }

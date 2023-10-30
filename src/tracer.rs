@@ -49,7 +49,7 @@ impl<'a> VarRef<'a> {
     pub fn scatter(&self, target: &Self, idx: &Self) {
         self.r.push_var(
             Var {
-                ty: VarType::Void,
+                ty: self.ty(),
                 op: Op::Scatter {
                     dst: target.id,
                     src: self.id,
