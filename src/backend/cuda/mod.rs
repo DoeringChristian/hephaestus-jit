@@ -41,7 +41,7 @@ impl BackendDevice for CudaDevice {
     fn execute_trace(
         &self,
         trace: &crate::trace::Trace,
-        params: backend::Parameters,
+        arrays: &[&Self::Array],
     ) -> backend::Result<()> {
         let mut asm = String::new();
         codegen::assemble_trace(&mut asm, &trace, "main", "global").unwrap();
@@ -54,17 +54,19 @@ impl BackendDevice for CudaDevice {
 
         let func = self.device.get_func("kernels", "main").unwrap();
 
-        let param_buffer = params_buffer(&params);
-        println!("{:#x?}", param_buffer);
+        let param_buffer = arrays
+            .iter()
+            .map(|a| *a.buffer.device_ptr())
+            .collect::<Vec<_>>();
         let param_buffer = self.device.htod_sync_copy(&param_buffer).unwrap();
 
         println!("{:#x?}", param_buffer.device_ptr());
 
-        let cfg = LaunchConfig::for_num_elems(params.size);
+        let cfg = LaunchConfig::for_num_elems(trace.size as _);
         dbg!(&cfg);
 
         unsafe {
-            func.launch(cfg, (params.size as u64, *(param_buffer.device_ptr())))
+            func.launch(cfg, (trace.size as u64, *(param_buffer.device_ptr())))
                 .unwrap()
         };
 
@@ -85,16 +87,4 @@ impl BackendArray for CudaArray {
     fn size(&self) -> usize {
         self.size
     }
-}
-
-pub fn params_buffer(params: &backend::Parameters) -> Vec<u64> {
-    let buffers = params.arrays.iter().map(|b| *match b {
-        backend::Array::CudaArray(array, ..) => {
-            println!("{:#x?}", array.buffer.device_ptr());
-            array.buffer.device_ptr()
-        }
-        _ => todo!(),
-    });
-
-    buffers.collect()
 }

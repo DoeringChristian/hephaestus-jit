@@ -95,14 +95,7 @@ impl Kernel {
         VarRef { id, r: self }
     }
     pub fn launch(&self, device: &Device) -> backend::Result<()> {
-        let size = self.0.borrow_mut().trace.size;
-        device.execute_trace(
-            &self.0.borrow().trace,
-            Parameters {
-                size: size as _,
-                arrays: self.0.borrow().arrays.clone(),
-            },
-        )
+        device.execute_trace(&self.0.borrow().trace, &self.0.borrow().arrays)
     }
 }
 

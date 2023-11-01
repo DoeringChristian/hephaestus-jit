@@ -40,10 +40,32 @@ impl Device {
             )),
         }
     }
-    pub fn execute_trace(&self, trace: &Trace, params: Parameters) -> Result<()> {
+    pub fn execute_trace(&self, trace: &Trace, arrays: &[Array]) -> Result<()> {
+        // match self {
+        //     Self::CudaDevice(device) => device.execute_trace(trace, arrays),
+        //     Self::VulkanDevice(device) => device.execute_trace(trace, arrays),
+        // }
         match self {
-            Self::CudaDevice(device) => device.execute_trace(trace, params),
-            Self::VulkanDevice(device) => device.execute_trace(trace, params),
+            Self::CudaDevice(device) => {
+                let arrays = arrays
+                    .iter()
+                    .map(|a| match a {
+                        Array::CudaArray(array, _) => array.as_ref(),
+                        _ => todo!(),
+                    })
+                    .collect::<Vec<_>>();
+                device.execute_trace(trace, &arrays)
+            }
+            Self::VulkanDevice(device) => {
+                let arrays = arrays
+                    .iter()
+                    .map(|a| match a {
+                        Array::VulkanArray(array, _) => array.as_ref(),
+                        _ => todo!(),
+                    })
+                    .collect::<Vec<_>>();
+                device.execute_trace(trace, &arrays)
+            }
         }
     }
 }
@@ -90,7 +112,7 @@ impl Array {
 pub trait BackendDevice: Clone {
     type Array: BackendArray;
     fn create_array(&self, size: usize) -> Result<Self::Array>;
-    fn execute_trace(&self, trace: &Trace, params: Parameters) -> Result<()>;
+    fn execute_trace(&self, trace: &Trace, arrays: &[&Self::Array]) -> Result<()>;
 }
 
 pub trait BackendArray {
