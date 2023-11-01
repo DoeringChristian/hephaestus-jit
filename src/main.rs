@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::backend::Parameters;
 use crate::trace::{Op, Trace, Var, VarType};
 use crate::tracer::Kernel;
 

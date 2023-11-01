@@ -120,9 +120,3 @@ pub trait BackendArray {
     fn to_host(&self) -> Result<Vec<u8>>;
     fn size(&self) -> usize;
 }
-
-#[derive(Debug)]
-pub struct Parameters {
-    pub size: u32,
-    pub arrays: Vec<Array>,
-}

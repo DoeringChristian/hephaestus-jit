@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::backend::{self, Array, Device, Parameters};
+use crate::backend::{self, Array, Device};
 use crate::trace::{Op, Trace, Var, VarId, VarType};
 
 #[derive(Default, Debug)]
