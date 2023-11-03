@@ -40,24 +40,24 @@ impl Device {
     pub fn execute_trace(&self, trace: &Trace, arrays: &[Array]) -> Result<()> {
         match self {
             Self::CudaDevice(device) => {
-                let arrays = arrays
+                let buffers = arrays
                     .iter()
                     .map(|a| match a.buffer() {
                         Buffer::CudaBuffer(buffer) => buffer,
                         _ => todo!(),
                     })
                     .collect::<Vec<_>>();
-                device.execute_trace(trace, &arrays)
+                device.execute_trace(trace, &buffers)
             }
             Self::VulkanDevice(device) => {
-                let arrays = arrays
+                let buffers = arrays
                     .iter()
                     .map(|a| match a.buffer() {
                         Buffer::VulkanBuffer(buffer) => buffer,
                         _ => todo!(),
                     })
                     .collect::<Vec<_>>();
-                device.execute_trace(trace, &arrays)
+                device.execute_trace(trace, &buffers)
             }
         }
     }

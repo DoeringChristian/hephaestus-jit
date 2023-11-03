@@ -50,13 +50,13 @@ impl backend::BackendDevice for VulkanDevice {
     fn execute_trace(
         &self,
         trace: &crate::trace::Trace,
-        arrays: &[&Self::Buffer],
+        buffers: &[&Self::Buffer],
     ) -> backend::Result<()> {
         let spirv = codegen::assemble_trace(trace, "main").unwrap();
 
         let num = trace.size;
 
-        let num_buffers = arrays.len(); // TODO: get from trace
+        let num_buffers = buffers.len(); // TODO: get from trace
 
         unsafe {
             let shader_info = vk::ShaderModuleCreateInfo::builder()
@@ -118,12 +118,12 @@ impl backend::BackendDevice for VulkanDevice {
                 .unwrap()[0];
 
             // Create Buffer Updates
-            let desc_buffer_infos = arrays
+            let desc_buffer_infos = buffers
                 .iter()
-                .map(|array| vk::DescriptorBufferInfo {
-                    buffer: array.buffer.buffer(),
+                .map(|buffer| vk::DescriptorBufferInfo {
+                    buffer: buffer.buffer.buffer(),
                     offset: 0,
-                    range: array.buffer.info().size as _,
+                    range: buffer.buffer.info().size as _,
                 })
                 .collect::<Vec<_>>();
             let write_desc_sets = [vk::WriteDescriptorSet::builder()
