@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use crate::trace::{Op, Trace, Var, VarType};
-use crate::tracer::Kernel;
+use crate::trace::VarType;
 
 use self::backend::Device;
 
@@ -9,20 +8,20 @@ pub mod backend;
 pub mod trace;
 mod tracer;
 
+use tracer as jit;
+
 fn main() {
     let device = Device::vulkan(0).unwrap();
     let output = device.create_array(10, VarType::U32).unwrap();
 
-    let k = Kernel::default();
-
     {
-        let output = k.array(&output);
-        let idx = k.index(10);
+        let output = jit::array(&output);
+        let idx = jit::index(10);
 
         idx.scatter(&output, &idx);
     }
 
-    k.launch(&device).unwrap();
+    jit::launch(&device).unwrap();
 
     dbg!(output.to_host::<u8>().unwrap());
 }
