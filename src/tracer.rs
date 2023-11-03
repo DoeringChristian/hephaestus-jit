@@ -41,6 +41,18 @@ pub fn array(array: &Array) -> VarRef {
     })
 }
 
+impl From<&Array> for VarRef {
+    fn from(array: &Array) -> Self {
+        with_kernel(|k| {
+            k.arrays.push(array.clone());
+            VarRef(k.trace.push_array(Var {
+                ty: array.ty(),
+                op: Op::LoadArray,
+            }))
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct VarRef(VarId);
 
