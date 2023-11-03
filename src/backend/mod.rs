@@ -1,9 +1,10 @@
 mod cuda;
 mod vulkan;
+use std::ops::Deref;
 use std::sync::Arc;
 
-use cuda::{CudaArray, CudaDevice};
-use vulkan::{VulkanArray, VulkanDevice};
+use cuda::{CudaBuffer, CudaDevice};
+use vulkan::{VulkanBuffer, VulkanDevice};
 
 use crate::trace::{Trace, VarType};
 
@@ -28,17 +29,13 @@ impl Device {
     pub fn vulkan(id: usize) -> Result<Self> {
         Ok(Device::VulkanDevice(VulkanDevice::create(id)?))
     }
-    pub fn create_array(&self, size: usize, ty: VarType) -> Result<Array> {
-        match self {
-            Self::CudaDevice(device) => Ok(Array::CudaArray(
-                Arc::new(device.create_array(size * ty.size())?),
-                ty,
-            )),
-            Self::VulkanDevice(device) => Ok(Array::VulkanArray(
-                Arc::new(device.create_array(size * ty.size())?),
-                ty,
-            )),
-        }
+    pub fn create_array(&self, len: usize, ty: VarType) -> Result<Array> {
+        let size = len * ty.size();
+        let buffer = match self {
+            Device::CudaDevice(device) => Buffer::CudaBuffer(device.create_buffer(size)?),
+            Device::VulkanDevice(device) => Buffer::VulkanBuffer(device.create_buffer(size)?),
+        };
+        Ok(Array(Arc::new(InternalArray { ty, buffer })))
     }
     pub fn execute_trace(&self, trace: &Trace, arrays: &[Array]) -> Result<()> {
         // match self {
@@ -49,8 +46,8 @@ impl Device {
             Self::CudaDevice(device) => {
                 let arrays = arrays
                     .iter()
-                    .map(|a| match a {
-                        Array::CudaArray(array, _) => array.as_ref(),
+                    .map(|a| match a.buffer() {
+                        Buffer::CudaBuffer(buffer) => buffer,
                         _ => todo!(),
                     })
                     .collect::<Vec<_>>();
@@ -59,8 +56,8 @@ impl Device {
             Self::VulkanDevice(device) => {
                 let arrays = arrays
                     .iter()
-                    .map(|a| match a {
-                        Array::VulkanArray(array, _) => array.as_ref(),
+                    .map(|a| match a.buffer() {
+                        Buffer::VulkanBuffer(buffer) => buffer,
                         _ => todo!(),
                     })
                     .collect::<Vec<_>>();
@@ -70,52 +67,60 @@ impl Device {
     }
 }
 
+#[derive(Debug)]
+pub enum Buffer {
+    CudaBuffer(CudaBuffer),
+    VulkanBuffer(VulkanBuffer),
+}
+impl Buffer {
+    pub fn size(&self) -> usize {
+        match self {
+            Buffer::CudaBuffer(buffer) => buffer.size(),
+            Buffer::VulkanBuffer(buffer) => buffer.size(),
+        }
+    }
+    pub fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>> {
+        match self {
+            Self::CudaBuffer(buffer) => Ok(bytemuck::cast_vec(buffer.to_host()?)),
+            Self::VulkanBuffer(buffer) => Ok(bytemuck::cast_vec(buffer.to_host()?)),
+        }
+    }
+}
+#[derive(Debug)]
+struct InternalArray {
+    ty: VarType,
+    buffer: Buffer,
+}
 #[derive(Debug, Clone)]
-pub enum Array {
-    CudaArray(Arc<CudaArray>, VarType),
-    VulkanArray(Arc<VulkanArray>, VarType),
+pub struct Array(Arc<InternalArray>);
+
+impl Deref for Array {
+    type Target = Buffer;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.buffer
+    }
 }
 
 impl Array {
-    pub fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>> {
-        match self {
-            Array::CudaArray(array, _) => Ok(bytemuck::cast_vec(array.to_host()?)),
-            Array::VulkanArray(array, _) => Ok(bytemuck::cast_vec(array.to_host()?)),
-        }
-    }
     pub fn ty(&self) -> VarType {
-        match self {
-            Array::CudaArray(_, ty) => ty.clone(),
-            Array::VulkanArray(_, ty) => ty.clone(),
-        }
+        self.0.ty.clone()
     }
     pub fn len(&self) -> usize {
-        match self {
-            Array::CudaArray(array, ty) => array.size() / ty.size(),
-            Array::VulkanArray(array, ty) => array.size() / ty.size(),
-        }
+        self.size() / self.ty().size()
     }
-    pub fn size(&self) -> usize {
-        match self {
-            Array::CudaArray(array, ty) => array.size(),
-            Array::VulkanArray(array, ty) => array.size(),
-        }
-    }
-    pub fn as_vulkan(&self) -> Option<&VulkanArray> {
-        match self {
-            Array::VulkanArray(array, _) => Some(array),
-            _ => None,
-        }
+    fn buffer(&self) -> &Buffer {
+        &self.0.buffer
     }
 }
 
 pub trait BackendDevice: Clone {
-    type Array: BackendArray;
-    fn create_array(&self, size: usize) -> Result<Self::Array>;
-    fn execute_trace(&self, trace: &Trace, arrays: &[&Self::Array]) -> Result<()>;
+    type Buffer: BackendBuffer;
+    fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
+    fn execute_trace(&self, trace: &Trace, arrays: &[&Self::Buffer]) -> Result<()>;
 }
 
-pub trait BackendArray {
+pub trait BackendBuffer {
     type Device: BackendDevice;
     fn to_host(&self) -> Result<Vec<u8>>;
     fn size(&self) -> usize;

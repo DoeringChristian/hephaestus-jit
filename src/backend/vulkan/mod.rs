@@ -29,9 +29,9 @@ impl std::ops::Deref for VulkanDevice {
 }
 
 impl backend::BackendDevice for VulkanDevice {
-    type Array = VulkanArray;
+    type Buffer = VulkanBuffer;
 
-    fn create_array(&self, size: usize) -> backend::Result<Self::Array> {
+    fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
         let info = BufferInfo {
             size,
             alignment: 0,
@@ -41,7 +41,7 @@ impl backend::BackendDevice for VulkanDevice {
             memory_location: MemoryLocation::GpuOnly,
         };
         let buffer = Buffer::create(self, info);
-        Ok(VulkanArray {
+        Ok(VulkanBuffer {
             buffer,
             device: self.clone(),
         })
@@ -50,7 +50,7 @@ impl backend::BackendDevice for VulkanDevice {
     fn execute_trace(
         &self,
         trace: &crate::trace::Trace,
-        arrays: &[&Self::Array],
+        arrays: &[&Self::Buffer],
     ) -> backend::Result<()> {
         let spirv = codegen::assemble_trace(trace, "main").unwrap();
 
@@ -157,12 +157,12 @@ impl backend::BackendDevice for VulkanDevice {
 }
 
 #[derive(Debug)]
-pub struct VulkanArray {
+pub struct VulkanBuffer {
     buffer: Buffer,
     device: VulkanDevice,
 }
 
-impl backend::BackendArray for VulkanArray {
+impl backend::BackendBuffer for VulkanBuffer {
     type Device = VulkanDevice;
 
     fn to_host(&self) -> backend::Result<Vec<u8>> {

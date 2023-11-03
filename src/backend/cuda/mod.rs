@@ -5,7 +5,7 @@ pub use cudarc::driver::DriverError;
 use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
 use std::sync::Arc;
 
-use crate::backend::{self, BackendArray, BackendDevice};
+use crate::backend::{self, BackendBuffer, BackendDevice};
 
 #[derive(Clone, Debug)]
 pub struct CudaDevice {
@@ -21,17 +21,17 @@ impl CudaDevice {
 }
 
 #[derive(Debug)]
-pub struct CudaArray {
+pub struct CudaBuffer {
     device: CudaDevice,
     buffer: core::CudaSlice<u8>,
     size: usize,
 }
 
 impl BackendDevice for CudaDevice {
-    type Array = CudaArray;
+    type Buffer = CudaBuffer;
 
-    fn create_array(&self, size: usize) -> backend::Result<Self::Array> {
-        Ok(CudaArray {
+    fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
+        Ok(CudaBuffer {
             device: self.clone(),
             buffer: unsafe { self.device.alloc(size)? },
             size,
@@ -41,7 +41,7 @@ impl BackendDevice for CudaDevice {
     fn execute_trace(
         &self,
         trace: &crate::trace::Trace,
-        arrays: &[&Self::Array],
+        buffers: &[&Self::Buffer],
     ) -> backend::Result<()> {
         let mut asm = String::new();
         codegen::assemble_trace(&mut asm, &trace, "main", "global").unwrap();
@@ -54,7 +54,7 @@ impl BackendDevice for CudaDevice {
 
         let func = self.device.get_func("kernels", "main").unwrap();
 
-        let param_buffer = arrays
+        let param_buffer = buffers
             .iter()
             .map(|a| *a.buffer.device_ptr())
             .collect::<Vec<_>>();
@@ -77,7 +77,7 @@ impl BackendDevice for CudaDevice {
     }
 }
 
-impl BackendArray for CudaArray {
+impl BackendBuffer for CudaBuffer {
     type Device = CudaDevice;
 
     fn to_host(&self) -> backend::Result<Vec<u8>> {
