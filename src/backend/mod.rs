@@ -120,3 +120,7 @@ pub trait BackendArray {
     fn to_host(&self) -> Result<Vec<u8>>;
     fn size(&self) -> usize;
 }
+
+pub trait Texture {
+    type Device: BackendDevice;
+}
