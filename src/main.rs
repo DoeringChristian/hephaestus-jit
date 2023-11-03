@@ -12,7 +12,7 @@ use tracer as jit;
 
 fn main() {
     let device = Device::vulkan(0).unwrap();
-    let output = device.create_array(10, VarType::U32).unwrap();
+    let output = device.create_array::<u32>(10).unwrap();
 
     {
         let output = jit::array(&output);
@@ -23,5 +23,5 @@ fn main() {
 
     jit::launch(&device).unwrap();
 
-    dbg!(output.to_host::<u8>().unwrap());
+    dbg!(output.to_host::<u32>().unwrap());
 }

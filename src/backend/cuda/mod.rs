@@ -80,8 +80,14 @@ impl BackendDevice for CudaDevice {
 impl BackendBuffer for CudaBuffer {
     type Device = CudaDevice;
 
-    fn to_host(&self) -> backend::Result<Vec<u8>> {
-        Ok(self.device.device.dtoh_sync_copy(&self.buffer)?)
+    fn to_host<T: bytemuck::Pod>(&self) -> backend::Result<Vec<T>> {
+        let len = self.size() / std::mem::size_of::<T>();
+        let mut dst = Vec::<T>::with_capacity(len);
+        unsafe { dst.set_len(len) };
+        self.device
+            .device
+            .dtoh_sync_copy_into(&self.buffer, bytemuck::cast_slice_mut::<_, u8>(&mut dst));
+        Ok(dst)
     }
 
     fn size(&self) -> usize {

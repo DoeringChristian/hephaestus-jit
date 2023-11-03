@@ -6,7 +6,7 @@ use std::sync::Arc;
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice};
 
-use crate::trace::{Trace, VarType};
+use crate::trace::{AsVarType, Trace, VarType};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -29,7 +29,8 @@ impl Device {
     pub fn vulkan(id: usize) -> Result<Self> {
         Ok(Device::VulkanDevice(VulkanDevice::create(id)?))
     }
-    pub fn create_array(&self, len: usize, ty: VarType) -> Result<Array> {
+    pub fn create_array<T: AsVarType>(&self, len: usize) -> Result<Array> {
+        let ty = T::var_ty();
         let size = len * ty.size();
         let buffer = match self {
             Device::CudaDevice(device) => Buffer::CudaBuffer(device.create_buffer(size)?),
@@ -75,10 +76,10 @@ impl Buffer {
             Buffer::VulkanBuffer(buffer) => buffer.size(),
         }
     }
-    pub fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>> {
+    pub fn to_host<T: bytemuck::Pod + AsVarType>(&self) -> Result<Vec<T>> {
         match self {
-            Self::CudaBuffer(buffer) => Ok(bytemuck::cast_vec(buffer.to_host()?)),
-            Self::VulkanBuffer(buffer) => Ok(bytemuck::cast_vec(buffer.to_host()?)),
+            Self::CudaBuffer(buffer) => Ok(buffer.to_host()?),
+            Self::VulkanBuffer(buffer) => Ok(buffer.to_host()?),
         }
     }
 }
@@ -90,23 +91,30 @@ struct InternalArray {
 #[derive(Debug, Clone)]
 pub struct Array(Arc<InternalArray>);
 
-impl Deref for Array {
-    type Target = Buffer;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0.buffer
-    }
-}
+// impl Deref for Array {
+//     type Target = Buffer;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &self.0.buffer
+//     }
+// }
 
 impl Array {
     pub fn ty(&self) -> VarType {
         self.0.ty.clone()
+    }
+    pub fn size(&self) -> usize {
+        self.0.buffer.size()
     }
     pub fn len(&self) -> usize {
         self.size() / self.ty().size()
     }
     fn buffer(&self) -> &Buffer {
         &self.0.buffer
+    }
+    pub fn to_host<T: bytemuck::Pod + AsVarType>(&self) -> Result<Vec<T>> {
+        assert_eq!(T::var_ty(), self.ty(), "Types do not match!");
+        self.0.buffer.to_host()
     }
 }
 
@@ -118,7 +126,7 @@ pub trait BackendDevice: Clone {
 
 pub trait BackendBuffer {
     type Device: BackendDevice;
-    fn to_host(&self) -> Result<Vec<u8>>;
+    fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>>;
     fn size(&self) -> usize;
 }
 

@@ -165,7 +165,7 @@ pub struct VulkanBuffer {
 impl backend::BackendBuffer for VulkanBuffer {
     type Device = VulkanDevice;
 
-    fn to_host(&self) -> backend::Result<Vec<u8>> {
+    fn to_host<T: bytemuck::Pod>(&self) -> backend::Result<Vec<T>> {
         let size = self.size();
         let info = BufferInfo {
             size,
@@ -184,7 +184,7 @@ impl backend::BackendBuffer for VulkanBuffer {
             };
             device.cmd_copy_buffer(cb, self.buffer.buffer(), staging.buffer(), &[region]);
         });
-        Ok(staging.mapped_slice().to_vec())
+        Ok(bytemuck::cast_slice(staging.mapped_slice()).to_vec())
     }
 
     fn size(&self) -> usize {

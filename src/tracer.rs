@@ -123,7 +123,7 @@ mod test {
     #[test]
     fn index() {
         let device = Device::cuda(0).unwrap();
-        let output = device.create_array(10, VarType::U32).unwrap();
+        let output = device.create_array::<u32>(10).unwrap();
 
         {
             let output = jit::array(&output);
@@ -134,6 +134,6 @@ mod test {
 
         jit::launch(&device).unwrap();
 
-        dbg!(output.to_host::<u8>().unwrap());
+        dbg!(output.to_host::<u32>().unwrap());
     }
 }
