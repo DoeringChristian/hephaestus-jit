@@ -38,10 +38,6 @@ impl Device {
         Ok(Array(Arc::new(InternalArray { ty, buffer })))
     }
     pub fn execute_trace(&self, trace: &Trace, arrays: &[Array]) -> Result<()> {
-        // match self {
-        //     Self::CudaDevice(device) => device.execute_trace(trace, arrays),
-        //     Self::VulkanDevice(device) => device.execute_trace(trace, arrays),
-        // }
         match self {
             Self::CudaDevice(device) => {
                 let arrays = arrays
