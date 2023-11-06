@@ -15,7 +15,6 @@ pub struct Var {
 #[derive(Debug, Default)]
 pub struct IR {
     pub(crate) vars: Vec<Var>,
-    // pub(crate) size: usize,
     pub(crate) deps: Vec<VarId>,
     pub(crate) n_buffers: usize,
 }
