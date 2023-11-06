@@ -171,4 +171,22 @@ pub fn eval(trace: &mut Trace, schedule: impl IntoIterator<Item = trace::VarId>)
             .execute_ir(ir, group.size, &env.buffers)
             .unwrap();
     }
+
+    // After executing the kernels, the Ir is cleaned up.
+    // To do so, we first decrement the refcount and then set the ParamType to Input and op to
+    // Data
+    for id in schedule {
+        let var = trace.var_mut(id);
+
+        // Set op and type for next kernel:
+        var.op = Op::Buffer;
+        // var.dirty = false;
+
+        // Clear dependencies:
+        let deps = std::mem::take(&mut var.deps);
+
+        for dep in deps {
+            trace.dec_rc(dep);
+        }
+    }
 }
