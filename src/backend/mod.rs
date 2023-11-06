@@ -6,7 +6,8 @@ use std::sync::Arc;
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice};
 
-use crate::trace::{AsVarType, Trace, VarType};
+use crate::ir::IR;
+use crate::vartype::{AsVarType, VarType};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -38,7 +39,7 @@ impl Device {
         };
         Ok(Array(Arc::new(InternalArray { ty, buffer })))
     }
-    pub fn execute_trace(&self, trace: &Trace, arrays: &[Array]) -> Result<()> {
+    pub fn execute_trace(&self, trace: &IR, arrays: &[Array]) -> Result<()> {
         match self {
             Self::CudaDevice(device) => {
                 let buffers = arrays
@@ -121,7 +122,7 @@ impl Array {
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
-    fn execute_trace(&self, trace: &Trace, arrays: &[&Self::Buffer]) -> Result<()>;
+    fn execute_trace(&self, trace: &IR, arrays: &[&Self::Buffer]) -> Result<()>;
 }
 
 pub trait BackendBuffer {

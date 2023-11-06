@@ -40,7 +40,7 @@ impl BackendDevice for CudaDevice {
 
     fn execute_trace(
         &self,
-        trace: &crate::trace::Trace,
+        trace: &crate::ir::IR,
         buffers: &[&Self::Buffer],
     ) -> backend::Result<()> {
         let mut asm = String::new();

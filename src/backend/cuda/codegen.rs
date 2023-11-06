@@ -1,4 +1,6 @@
-use crate::trace::*;
+use crate::ir::*;
+use crate::op::Op;
+use crate::vartype::VarType;
 
 /// Offset for the special registers:
 ///
@@ -81,7 +83,7 @@ impl<'a> Reg<'a> {
     /// without having to use the trace.
     ///
     /// * `trace`: Trace to generate code for
-    pub fn constructor(trace: &'a Trace) -> impl Fn(VarId) -> Reg<'a> {
+    pub fn constructor(trace: &'a IR) -> impl Fn(VarId) -> Reg<'a> {
         move |id: VarId| Reg {
             reg: id.0 + REGISTER_OFFSET,
             ty: &trace.var_ty(id),
@@ -97,7 +99,7 @@ impl<'a> std::fmt::Display for Reg<'a> {
 
 pub fn assemble_trace(
     asm: &mut impl std::fmt::Write,
-    trace: &Trace,
+    trace: &IR,
     entry_point: &str,
     param_ty: &str,
     // param_layout: &ParamLayout,
@@ -191,12 +193,13 @@ pub fn assemble_trace(
 
 pub fn assemble_var(
     asm: &mut impl std::fmt::Write,
-    trace: &Trace,
+    trace: &IR,
     varid: VarId,
     param_ty: &str,
     param_layout: &ParamLayout,
 ) -> std::fmt::Result {
     let reg = Reg::constructor(trace);
+    let deps = trace.deps(varid);
 
     // Write out debug info:
     writeln!(asm, "")?;
@@ -205,22 +208,29 @@ pub fn assemble_var(
     writeln!(asm, "// {:?}:", op)?;
     match &op {
         Op::Nop => {}
-        Op::Add { lhs, rhs } => {
+        Op::Add => {
+            let lhs = deps[0];
+            let rhs = deps[1];
+
             writeln!(
                 asm,
                 "\tadd.{} {}, {}, {};",
                 tyname(trace.var_ty(varid)),
                 reg(varid),
-                reg(*lhs),
-                reg(*rhs)
+                reg(lhs),
+                reg(rhs)
             )?;
         }
-        Op::Scatter { dst, src, idx } => {
-            let dst_var = trace.var(*dst);
+        Op::Scatter => {
+            let dst = deps[0];
+            let src = deps[1];
+            let idx = deps[2];
+
+            let dst_var = trace.var(dst);
 
             // assert_eq!(dst_var.ty, VarType::Array);
 
-            let param_offset = param_layout.byte_offset(*dst);
+            let param_offset = param_layout.byte_offset(dst);
 
             writeln!(
                 asm,
@@ -228,12 +238,12 @@ pub fn assemble_var(
             )?;
 
             // Multiply idx with type size and add ptr
-            let ty = trace.var_ty(*src);
+            let ty = trace.var_ty(src);
             writeln!(
                 asm,
                 "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
-                ty = tyname(trace.var_ty(*idx)),
-                idx = reg(*idx),
+                ty = tyname(trace.var_ty(idx)),
+                idx = reg(idx),
                 ty_size = ty.size(),
             )?;
 
@@ -245,15 +255,18 @@ pub fn assemble_var(
                 op_type,
                 op,
                 tyname(ty),
-                reg(*src),
+                reg(src),
             )?;
         }
-        Op::Gather { src, idx } => {
-            let src_var = trace.var(*src);
+        Op::Gather => {
+            let src = deps[0];
+            let idx = deps[1];
+
+            let src_var = trace.var(src);
 
             // Load array ptr:
 
-            let param_offset = param_layout.byte_offset(*src);
+            let param_offset = param_layout.byte_offset(src);
 
             writeln!(
                 asm,
@@ -265,8 +278,8 @@ pub fn assemble_var(
             writeln!(
                 asm,
                 "\tmad.wide.{ty} %rd3, {idx}, {ty_size}, %rd0;",
-                ty = tyname(trace.var_ty(*idx)),
-                idx = reg(*idx),
+                ty = tyname(trace.var_ty(idx)),
+                idx = reg(idx),
                 ty_size = ty.size(),
             )?;
 
@@ -282,16 +295,17 @@ pub fn assemble_var(
             let ty = trace.var_ty(varid);
             writeln!(asm, "\tmov.{} {}, %r0;", tyname(ty), reg(varid))?;
         }
-        Op::Const { data } => {
-            let ty = trace.var_ty(varid);
-
-            writeln!(
-                asm,
-                "\tmov.{tyname} {dst}, 0x{data:x};\n",
-                tyname = tyname_bin(trace.var_ty(varid)),
-                dst = reg(varid),
-                data = data,
-            )?;
+        Op::Const => {
+            // let ty = trace.var_ty(varid);
+            //
+            // writeln!(
+            //     asm,
+            //     "\tmov.{tyname} {dst}, 0x{data:x};\n",
+            //     tyname = tyname_bin(trace.var_ty(varid)),
+            //     dst = reg(varid),
+            //     data = data,
+            // )?;
+            todo!()
         }
         Op::LoadArray => {}
     };

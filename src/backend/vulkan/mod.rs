@@ -49,7 +49,7 @@ impl backend::BackendDevice for VulkanDevice {
 
     fn execute_trace(
         &self,
-        trace: &crate::trace::Trace,
+        trace: &crate::ir::IR,
         buffers: &[&Self::Buffer],
     ) -> backend::Result<()> {
         let spirv = codegen::assemble_trace(trace, "main").unwrap();

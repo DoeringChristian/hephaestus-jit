@@ -1,138 +1,133 @@
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct VarId(pub(crate) usize);
+use std::cell::RefCell;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
-pub enum VarType {
-    // Primitive Types (might move out)
-    #[default]
-    Void,
-    Bool,
-    I8,
-    U8,
-    I16,
-    U16,
-    I32,
-    U32,
-    I64,
-    U64,
-    F32,
-    F64,
-    // Array,
-}
-impl VarType {
-    pub fn size(&self) -> usize {
-        match self {
-            VarType::Void => 0,
-            VarType::Bool => 1,
-            VarType::I8 => 1,
-            VarType::U8 => 1,
-            VarType::I16 => 2,
-            VarType::U16 => 2,
-            VarType::I32 => 4,
-            VarType::U32 => 4,
-            VarType::I64 => 8,
-            VarType::U64 => 8,
-            VarType::F32 => 4,
-            VarType::F64 => 8,
-            // VarType::Array => 0,
-        }
-    }
+use crate::backend::Array;
+use crate::op::Op;
+use crate::vartype::VarType;
+use slotmap::{DefaultKey, SlotMap};
+
+thread_local! {
+    static TRACE: RefCell<Trace> = RefCell::new(Default::default());
 }
 
-pub trait AsVarType {
-    fn var_ty() -> VarType;
+#[derive(Default, Debug)]
+struct Trace {
+    vars: SlotMap<DefaultKey, Var>,
 }
-macro_rules! as_var_type {
-    {$($src:ident => $dst:ident;)*} => {
-        $(as_var_type!($src => $dst);)*
-    };
-    ($src:ident => $dst:ident) => {
-        impl AsVarType for $src{
-            fn var_ty() -> VarType{
-                VarType::$dst
-            }
-        }
-    };
-}
-as_var_type! {
-    bool => Bool;
-    i8 => I8;
-    u8 => U8;
-    i16 => I16;
-    u16 => U16;
-    i32 => I32;
-    u32 => U32;
-    i64 => I64;
-    u64 => U64;
-    f32 => F32;
-    f64 => F64;
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct Var {
-    pub(crate) ty: VarType,
-    pub(crate) op: Op,
-    // pub(crate) deps: (usize, usize),
-}
-
-#[derive(Clone, Default, Debug)]
-pub enum Op {
-    #[default]
-    Nop,
-    LoadArray,
-    Add {
-        lhs: VarId,
-        rhs: VarId,
-    },
-    Scatter {
-        dst: VarId,
-        src: VarId,
-        idx: VarId,
-    },
-    Gather {
-        src: VarId,
-        idx: VarId,
-    },
-    Index,
-    Const {
-        data: u64,
-    },
-}
-
-#[derive(Debug, Default)]
-pub struct Trace {
-    pub(crate) arrays: Vec<VarId>,
-    pub(crate) vars: Vec<Var>,
-    pub(crate) size: usize,
-}
-
 impl Trace {
-    // pub fn push_var(&mut self, mut var: Var, size: usize, deps: &[VarId]) -> VarId {
-    pub fn push_var(&mut self, mut var: Var, size: usize) -> VarId {
-        let id = VarId(self.vars.len());
-        self.size = self.size.max(size);
-
-        // // Add dependencies
-        // let start = self.deps.len();
-        // self.deps.extend_from_slice(deps);
-        // let stop = self.deps.len();
-
-        // var.deps = (start, stop);
-        self.vars.push(var);
-        id
-    }
-    pub fn push_array(&mut self, var: Var) -> VarId {
-        let id = self.push_var(var, 0);
-        self.arrays.push(id);
-        id
-    }
     pub fn var(&self, id: VarId) -> &Var {
         &self.vars[id.0]
     }
-    pub fn var_ty(&self, id: VarId) -> &VarType {
-        &self.var(id).ty
+    pub fn var_mut(&mut self, id: VarId) -> &mut Var {
+        &mut self.vars[id.0]
     }
-    pub fn var_ids(&self) -> impl Iterator<Item = VarId> {
-        (0..self.vars.len()).map(|i| VarId(i))
+    pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
+        self.vars.get(id.0)
+    }
+    pub fn push_var(&mut self, mut v: Var) -> VarId {
+        for dep in v.deps.iter() {
+            self.inc_rc(*dep);
+        }
+        v.rc = 1;
+        let id = VarId(self.vars.insert(v));
+        id
+    }
+    pub fn inc_rc(&mut self, id: VarId) {
+        self.var_mut(id).rc += 1;
+    }
+    pub fn dec_rc(&mut self, id: VarId) {
+        let var = self.var_mut(id);
+        var.rc -= 1;
+        if var.rc == 0 {
+            for dep in var.deps.clone() {
+                self.dec_rc(dep);
+            }
+            let var = self.var_mut(id);
+            self.vars.remove(id.0);
+        }
+    }
+    pub fn var_info(&self, ids: &[VarId]) -> VarInfo {
+        let ty = self.var(*ids.first().unwrap()).ty.clone(); // TODO: Fix (first non void)
+
+        let size = ids
+            .iter()
+            .map(|id| self.var(*id).size)
+            .reduce(|s0, s1| s0.max(s1))
+            .unwrap()
+            .clone();
+        VarInfo { ty, size }
+    }
+}
+impl Drop for Trace {
+    fn drop(&mut self) {
+        assert_eq!(self.vars.len(), 0);
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct VarId(DefaultKey);
+
+#[derive(Debug)]
+pub struct VarRef(VarId);
+
+impl Clone for VarRef {
+    fn clone(&self) -> Self {
+        with_trace(|t| t.inc_rc(self.0));
+        Self(self.0)
+    }
+}
+impl Drop for VarRef {
+    fn drop(&mut self) {
+        with_trace(|t| t.dec_rc(self.0))
+    }
+}
+
+#[derive(Debug, Default)]
+struct Var {
+    pub op: Op, // Operation used to construct the variable
+    pub deps: Vec<VarId>,
+    pub ty: VarType, // Type of the variable
+    pub size: usize, // number of elements
+    pub rc: usize,
+
+    pub arrays: Option<Array>,
+    pub data: Option<u64>,
+}
+#[derive(Debug)]
+pub struct VarInfo {
+    pub ty: VarType,
+    pub size: usize,
+}
+
+fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
+    TRACE.with(|t| {
+        let mut t = t.borrow_mut();
+        f(&mut t)
+    })
+}
+fn push_var(v: Var) -> VarRef {
+    with_trace(|t| VarRef(t.push_var(v)))
+}
+
+// Trace Functions
+pub fn index(size: usize) -> VarRef {
+    push_var(Var {
+        op: Op::Index,
+        deps: vec![],
+        ty: VarType::U32,
+        size,
+        ..Default::default()
+    })
+}
+
+impl VarRef {
+    pub fn add(&self, other: &VarRef) -> VarRef {
+        let info = with_trace(|t| t.var_info(&[self.0, other.0]));
+        push_var(Var {
+            op: Op::Add,
+            deps: vec![self.0, other.0],
+            ty: info.ty,
+            size: info.size,
+            ..Default::default()
+        })
     }
 }
