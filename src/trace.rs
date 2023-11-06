@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 
+use crate::backend::Device;
+use crate::data::Data;
 use crate::op::Op;
 use crate::vartype::VarType;
 use slotmap::{DefaultKey, SlotMap};
@@ -11,6 +13,7 @@ thread_local! {
 #[derive(Default, Debug)]
 pub struct Trace {
     vars: SlotMap<DefaultKey, Var>,
+    pub device: Option<Device>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
@@ -89,7 +92,7 @@ pub struct Var {
     pub rc: usize,
 
     // pub arrays: Option<Array>,
-    pub data: Option<u64>,
+    pub data: Data,
 }
 #[derive(Debug)]
 pub struct VarInfo {

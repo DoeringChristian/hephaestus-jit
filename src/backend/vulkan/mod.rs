@@ -190,4 +190,7 @@ impl backend::BackendBuffer for VulkanBuffer {
     fn size(&self) -> usize {
         self.buffer.info().size
     }
+    fn device(&self) -> &Self::Device {
+        &self.device
+    }
 }

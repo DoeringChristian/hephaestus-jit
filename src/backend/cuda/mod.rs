@@ -93,4 +93,8 @@ impl BackendBuffer for CudaBuffer {
     fn size(&self) -> usize {
         self.size
     }
+
+    fn device(&self) -> &Self::Device {
+        &self.device
+    }
 }

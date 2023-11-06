@@ -30,9 +30,7 @@ impl Device {
     pub fn vulkan(id: usize) -> Result<Self> {
         Ok(Device::VulkanDevice(VulkanDevice::create(id)?))
     }
-    pub fn create_buffer<T: AsVarType>(&self, len: usize) -> Result<Buffer> {
-        let ty = T::var_ty();
-        let size = len * ty.size();
+    pub fn create_buffer(&self, size: usize) -> Result<Buffer> {
         let buffer = match self {
             Device::CudaDevice(device) => Buffer::CudaBuffer(Arc::new(device.create_buffer(size)?)),
             Device::VulkanDevice(device) => {
@@ -61,6 +59,12 @@ impl Buffer {
             Self::VulkanBuffer(buffer) => Ok(buffer.to_host()?),
         }
     }
+    pub fn device(&self) -> Device {
+        match self {
+            Buffer::CudaBuffer(buffer) => Device::CudaDevice(buffer.device().clone()),
+            Buffer::VulkanBuffer(buffer) => Device::VulkanDevice(buffer.device().clone()),
+        }
+    }
 }
 
 pub trait BackendDevice: Clone {
@@ -73,6 +77,7 @@ pub trait BackendBuffer {
     type Device: BackendDevice;
     fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>>;
     fn size(&self) -> usize;
+    fn device(&self) -> &Self::Device;
 }
 
 pub trait Texture {
