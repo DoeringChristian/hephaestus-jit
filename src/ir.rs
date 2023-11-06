@@ -9,13 +9,15 @@ pub struct Var {
     pub(crate) ty: VarType,
     pub(crate) op: Op,
     pub(crate) deps: (usize, usize),
+    pub(crate) data: usize,
 }
 
 #[derive(Debug, Default)]
 pub struct IR {
     pub(crate) vars: Vec<Var>,
-    pub(crate) size: usize,
+    // pub(crate) size: usize,
     pub(crate) deps: Vec<VarId>,
+    pub(crate) n_buffers: usize,
 }
 
 impl IR {

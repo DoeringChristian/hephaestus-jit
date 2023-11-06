@@ -38,13 +38,14 @@ impl BackendDevice for CudaDevice {
         })
     }
 
-    fn execute_trace(
+    fn execute_ir(
         &self,
-        trace: &crate::ir::IR,
+        ir: &crate::ir::IR,
+        num: usize,
         buffers: &[&Self::Buffer],
     ) -> backend::Result<()> {
         let mut asm = String::new();
-        codegen::assemble_trace(&mut asm, &trace, "main", "global").unwrap();
+        codegen::assemble_trace(&mut asm, &ir, "main", "global").unwrap();
 
         print!("{asm}");
         std::fs::write("/tmp/cuda.ptx", &asm).unwrap();
@@ -62,11 +63,11 @@ impl BackendDevice for CudaDevice {
 
         println!("{:#x?}", param_buffer.device_ptr());
 
-        let cfg = LaunchConfig::for_num_elems(trace.size as _);
+        let cfg = LaunchConfig::for_num_elems(num as _);
         dbg!(&cfg);
 
         unsafe {
-            func.launch(cfg, (trace.size as u64, *(param_buffer.device_ptr())))
+            func.launch(cfg, (num as u64, *(param_buffer.device_ptr())))
                 .unwrap()
         };
 

@@ -6,6 +6,7 @@ mod param_layout;
 use std::ffi::CStr;
 
 use crate::backend;
+use crate::ir::IR;
 use ash::vk::{self, CommandPoolCreateInfo};
 use buffer::{Buffer, BufferInfo};
 use device::Device;
@@ -47,14 +48,10 @@ impl backend::BackendDevice for VulkanDevice {
         })
     }
 
-    fn execute_trace(
-        &self,
-        trace: &crate::ir::IR,
-        buffers: &[&Self::Buffer],
-    ) -> backend::Result<()> {
-        let spirv = codegen::assemble_trace(trace, "main").unwrap();
+    fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> backend::Result<()> {
+        let spirv = codegen::assemble_trace(ir, "main").unwrap();
 
-        let num = trace.size;
+        let num = num;
 
         let num_buffers = buffers.len(); // TODO: get from trace
 

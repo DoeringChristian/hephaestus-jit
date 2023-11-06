@@ -1,6 +1,9 @@
+use crate::backend::Buffer;
 use crate::data::Data;
 use crate::ir::{self, IR};
+use crate::op::Op;
 use crate::trace::{self, Trace};
+use crate::vartype::VarType;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -11,12 +14,62 @@ struct ScheduleGroup {
 }
 
 #[derive(Debug, Default)]
+pub struct Env {
+    buffers: Vec<Buffer>,
+}
+impl Env {
+    pub fn push_buffer(&mut self, buffer: Buffer) -> usize {
+        let i = self.buffers.len();
+        self.buffers.push(buffer);
+        i
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct Scheduler {
     ir: IR,
+    env: Env,
     visited: HashMap<trace::VarId, ir::VarId>,
 }
 
 impl Scheduler {
+    pub fn collect_vars(&mut self, trace: &Trace, ids: &[trace::VarId]) {
+        for id in ids {
+            let src = self.collect(trace, *id);
+
+            let var = trace.var(*id);
+            if var.size == 0 {
+                continue;
+            }
+
+            let buffer_id = self.env.push_buffer(var.data.buffer().cloned().unwrap());
+            let dst = self.ir.push_var(
+                ir::Var {
+                    op: Op::Buffer,
+                    ty: var.ty.clone(),
+                    data: buffer_id,
+                    ..Default::default()
+                },
+                [],
+            );
+            let idx = self.ir.push_var(
+                ir::Var {
+                    op: Op::Index,
+                    ty: VarType::U32,
+                    ..Default::default()
+                },
+                [],
+            );
+            self.ir.push_var(
+                ir::Var {
+                    op: Op::Scatter,
+                    ty: VarType::Void,
+                    ..Default::default()
+                },
+                [dst, src, idx],
+            );
+        }
+    }
     pub fn collect(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
         if self.visited.contains_key(&id) {
             return self.visited[&id];
@@ -25,6 +78,18 @@ impl Scheduler {
         let var = trace.var(id);
 
         let id = match var.op {
+            Op::Buffer => {
+                let buffer_id = self.env.push_buffer(var.data.buffer().cloned().unwrap());
+                self.ir.push_var(
+                    ir::Var {
+                        op: var.op,
+                        ty: var.ty.clone(),
+                        data: buffer_id,
+                        ..Default::default()
+                    },
+                    [],
+                )
+            }
             _ => {
                 let deps = var
                     .deps
@@ -46,8 +111,8 @@ impl Scheduler {
     }
 }
 
-pub fn eval(trace: &mut Trace, refs: &[&trace::VarRef]) {
-    let mut schedule = refs.iter().map(|r| r.0).collect::<Vec<_>>();
+pub fn eval(trace: &mut Trace, schedule: &[trace::VarId]) {
+    let mut schedule = schedule.into_iter().cloned().collect::<Vec<_>>();
     // For every scheduled variable (destination) we have to create a new buffer (except if it
     // is void)
     for id in schedule.iter() {
@@ -87,5 +152,22 @@ pub fn eval(trace: &mut Trace, refs: &[&trace::VarRef]) {
         size: trace.var(schedule[current]).size,
         range: current..schedule.len(),
     });
-    dbg!(&schedule_groups);
+
+    let irs = schedule_groups
+        .iter()
+        .map(|group| {
+            let mut scheduler = Scheduler::default();
+            scheduler.collect_vars(trace, &schedule[group.range.clone()]);
+            (scheduler.ir, scheduler.env)
+        })
+        .collect::<Vec<_>>();
+
+    for ((ir, env), group) in irs.iter().zip(schedule_groups) {
+        trace
+            .device
+            .as_ref()
+            .unwrap()
+            .execute_ir(ir, group.size, &env.buffers)
+            .unwrap();
+    }
 }

@@ -2,7 +2,7 @@
 pub enum Op {
     #[default]
     Nop,
-    LoadArray,
+    Buffer,
     Add,
     Scatter,
     Gather,

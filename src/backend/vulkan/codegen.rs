@@ -62,8 +62,8 @@ impl SpirvBuilder {
         self.b.module()
     }
     pub fn assemble(&mut self, trace: &IR, entry_point: &str) -> Result<(), dr::Error> {
-        let param_layout = ParamLayout::generate(trace);
-        dbg!(&param_layout);
+        // let param_layout = ParamLayout::generate(trace);
+        // dbg!(&param_layout);
 
         self.id();
 
@@ -88,7 +88,7 @@ impl SpirvBuilder {
             [dr::Operand::BuiltIn(spirv::BuiltIn::GlobalInvocationId)],
         );
 
-        let storage_vars = self.assemble_storage_vars(trace, &param_layout);
+        let storage_vars = self.assemble_storage_vars(trace);
 
         let func = self.begin_function(
             void,
@@ -99,7 +99,7 @@ impl SpirvBuilder {
 
         self.begin_block(None)?;
 
-        self.assemble_vars(trace, &param_layout, global_invocation_id)?;
+        self.assemble_vars(trace, global_invocation_id)?;
 
         self.ret()?;
         self.end_function()?;
@@ -145,16 +145,15 @@ impl SpirvBuilder {
         }
     }
     // TODO: Spirv Builder
-    fn assemble_storage_vars(&mut self, trace: &IR, param_layout: &ParamLayout) -> Vec<u32> {
-        trace
-            .var_ids()
+    fn assemble_storage_vars(&mut self, ir: &IR) -> Vec<u32> {
+        ir.var_ids()
             .filter_map(|varid| {
-                let var = trace.var(varid);
+                let var = ir.var(varid);
                 match var.op {
-                    Op::LoadArray => {
+                    Op::Buffer => {
                         let ty = self.spirv_ty(&var.ty);
                         let u32_ty = self.type_int(32, 0);
-                        let array_len = self.constant_u32(u32_ty, param_layout.len() as _);
+                        let array_len = self.constant_u32(u32_ty, ir.n_buffers as _);
                         let rta_ty = self.type_runtime_array(ty);
                         let struct_ty = self.type_struct([rta_ty]);
                         let array_ty = self.type_array(struct_ty, array_len);
@@ -197,15 +196,10 @@ impl SpirvBuilder {
             .collect()
     }
 
-    fn assemble_vars(
-        &mut self,
-        trace: &IR,
-        param_layout: &ParamLayout,
-        global_invocation_id: u32,
-    ) -> Result<(), dr::Error> {
-        for varid in trace.var_ids() {
-            let var = trace.var(varid);
-            let deps = trace.deps(varid);
+    fn assemble_vars(&mut self, ir: &IR, global_invocation_id: u32) -> Result<(), dr::Error> {
+        for varid in ir.var_ids() {
+            let var = ir.var(varid);
+            let deps = ir.deps(varid);
             match var.op {
                 Op::Nop => {}
                 Op::Add => {
@@ -226,10 +220,12 @@ impl SpirvBuilder {
                     let src = deps[1];
                     let idx = deps[2];
 
+                    let buffer_idx = ir.var(dst).data;
+
                     let ty = self.spirv_ty(&var.ty);
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
                     let int_ty = self.type_int(32, 0);
-                    let buffer = self.constant_u32(int_ty, param_layout.buffer_idx(dst) as _);
+                    let buffer = self.constant_u32(int_ty, buffer_idx as _);
                     let elem = self.constant_u32(int_ty, 0);
 
                     let dst = self.get(dst);
@@ -242,11 +238,12 @@ impl SpirvBuilder {
                 Op::Gather => {
                     let src = deps[0];
                     let idx = deps[1];
+                    let buffer_idx = ir.var(src).data;
 
                     let ty = self.spirv_ty(&var.ty);
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
                     let int_ty = self.type_int(32, 0);
-                    let buffer = self.constant_u32(int_ty, param_layout.buffer_idx(src) as _);
+                    let buffer = self.constant_u32(int_ty, buffer_idx as _);
                     let elem = self.constant_u32(int_ty, 0);
 
                     let src = self.get(src);
@@ -267,7 +264,7 @@ impl SpirvBuilder {
                     self.load(u32_ty, Some(dst), ptr, None, None)?;
                 }
                 Op::Const => todo!(),
-                Op::LoadArray => {}
+                Op::Buffer => {}
             }
         }
         Ok(())

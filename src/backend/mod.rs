@@ -39,6 +39,30 @@ impl Device {
         };
         Ok(buffer)
     }
+    pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[Buffer]) -> Result<()> {
+        match self {
+            Device::CudaDevice(device) => {
+                let buffers = buffers
+                    .iter()
+                    .map(|b| match b {
+                        Buffer::CudaBuffer(buffer) => buffer.as_ref(),
+                        _ => todo!(),
+                    })
+                    .collect::<Vec<_>>();
+                device.execute_ir(ir, num, &buffers)
+            }
+            Device::VulkanDevice(device) => {
+                let buffers = buffers
+                    .iter()
+                    .map(|b| match b {
+                        Buffer::VulkanBuffer(buffer) => buffer.as_ref(),
+                        _ => todo!(),
+                    })
+                    .collect::<Vec<_>>();
+                device.execute_ir(ir, num, &buffers)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +94,7 @@ impl Buffer {
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
-    fn execute_trace(&self, trace: &IR, arrays: &[&Self::Buffer]) -> Result<()>;
+    fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
 }
 
 pub trait BackendBuffer {

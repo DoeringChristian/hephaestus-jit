@@ -307,7 +307,7 @@ pub fn assemble_var(
             // )?;
             todo!()
         }
-        Op::LoadArray => {}
+        Op::Buffer => {}
     };
     Ok(())
 }

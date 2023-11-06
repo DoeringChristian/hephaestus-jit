@@ -15,11 +15,13 @@ mod trace;
 mod vartype;
 
 fn main() {
+    with_trace(|t| t.device = Some(backend::Device::vulkan(0).unwrap()));
+
     let i = trace::index(10);
     let mut scheduler = Scheduler::default();
     with_trace(|t| {
         scheduler.collect(t, i.0);
     });
-    with_trace(|t| eval(t, &[&i]));
+    with_trace(|t| eval(t, &[i.0]));
     dbg!(&scheduler);
 }
