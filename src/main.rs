@@ -16,11 +16,6 @@ fn main() {
     with_trace(|t| t.device = Some(backend::Device::vulkan(0).unwrap()));
 
     let i = trace::index(10);
-    let mut scheduler = Scheduler::default();
-    with_trace(|t| {
-        scheduler.collect(t, i.0);
-    });
     trace::eval(&[&i]);
-    dbg!(&scheduler);
     dbg!(&i.data().buffer().unwrap().to_host::<u32>());
 }
