@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use crate::scheduler::eval;
-
 use self::backend::Device;
 use self::scheduler::Scheduler;
 use self::trace::with_trace;
@@ -22,6 +20,7 @@ fn main() {
     with_trace(|t| {
         scheduler.collect(t, i.0);
     });
-    with_trace(|t| eval(t, &[i.0]));
+    trace::eval(&[&i]);
     dbg!(&scheduler);
+    dbg!(&i.data().buffer().unwrap().to_host::<u32>());
 }

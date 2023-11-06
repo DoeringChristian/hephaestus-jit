@@ -31,7 +31,7 @@ impl IR {
         self.deps.extend(deps);
         let stop = self.deps.len();
 
-        // var.deps = (start, stop);
+        var.deps = (start, stop);
         self.vars.push(var);
         id
     }

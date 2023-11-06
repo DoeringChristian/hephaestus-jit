@@ -122,7 +122,6 @@ impl SpirvBuilder {
     }
     fn acquire_ids(&mut self, trace: &IR) {
         let vars = trace.vars.iter().map(|_| self.id()).collect::<Vec<_>>();
-        dbg!(&vars);
         self.spirv_vars = vars;
     }
     fn get(&self, id: VarId) -> u32 {
@@ -222,7 +221,7 @@ impl SpirvBuilder {
 
                     let buffer_idx = ir.var(dst).data;
 
-                    let ty = self.spirv_ty(&var.ty);
+                    let ty = self.spirv_ty(ir.var_ty(src));
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
                     let int_ty = self.type_int(32, 0);
                     let buffer = self.constant_u32(int_ty, buffer_idx as _);

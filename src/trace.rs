@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use crate::backend::Device;
 use crate::data::Data;
 use crate::op::Op;
+use crate::scheduler;
 use crate::vartype::VarType;
 use slotmap::{DefaultKey, SlotMap};
 
@@ -110,6 +111,12 @@ fn push_var(v: Var) -> VarRef {
     with_trace(|t| VarRef(t.push_var(v)))
 }
 
+pub fn eval(refs: &[&VarRef]) {
+    with_trace(|t| {
+        scheduler::eval(t, refs.iter().map(|r| r.0));
+    })
+}
+
 // Trace Functions
 pub fn index(size: usize) -> VarRef {
     push_var(Var {
@@ -131,5 +138,8 @@ impl VarRef {
             size: info.size,
             ..Default::default()
         })
+    }
+    pub fn data(&self) -> Data {
+        with_trace(|t| t.var(self.0).data.clone())
     }
 }

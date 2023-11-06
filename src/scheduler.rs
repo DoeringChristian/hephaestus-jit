@@ -69,6 +69,7 @@ impl Scheduler {
                 [dst, src, idx],
             );
         }
+        self.ir.n_buffers = self.env.buffers.len();
     }
     pub fn collect(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
         if self.visited.contains_key(&id) {
@@ -111,8 +112,8 @@ impl Scheduler {
     }
 }
 
-pub fn eval(trace: &mut Trace, schedule: &[trace::VarId]) {
-    let mut schedule = schedule.into_iter().cloned().collect::<Vec<_>>();
+pub fn eval(trace: &mut Trace, schedule: impl IntoIterator<Item = trace::VarId>) {
+    let mut schedule = schedule.into_iter().collect::<Vec<_>>();
     // For every scheduled variable (destination) we have to create a new buffer (except if it
     // is void)
     for id in schedule.iter() {
