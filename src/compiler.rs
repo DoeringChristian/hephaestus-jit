@@ -26,13 +26,13 @@ impl Env {
 }
 
 #[derive(Debug, Default)]
-pub struct Scheduler {
+pub struct Compiler {
     ir: IR,
     env: Env,
     visited: HashMap<trace::VarId, ir::VarId>,
 }
 
-impl Scheduler {
+impl Compiler {
     pub fn collect_vars(&mut self, trace: &Trace, ids: &[trace::VarId]) {
         for id in ids {
             let src = self.collect(trace, *id);
@@ -112,6 +112,11 @@ impl Scheduler {
     }
 }
 
+pub struct Kernel {
+    ir: IR,
+    buffers: Vec<trace::VarId>,
+}
+
 pub fn eval(trace: &mut Trace, schedule: impl IntoIterator<Item = trace::VarId>) {
     let mut schedule = schedule.into_iter().collect::<Vec<_>>();
     // For every scheduled variable (destination) we have to create a new buffer (except if it
@@ -157,7 +162,7 @@ pub fn eval(trace: &mut Trace, schedule: impl IntoIterator<Item = trace::VarId>)
     let irs = schedule_groups
         .iter()
         .map(|group| {
-            let mut scheduler = Scheduler::default();
+            let mut scheduler = Compiler::default();
             scheduler.collect_vars(trace, &schedule[group.range.clone()]);
             (scheduler.ir, scheduler.env)
         })

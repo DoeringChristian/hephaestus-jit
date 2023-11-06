@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use self::backend::Device;
-use self::scheduler::Scheduler;
+use self::compiler::Compiler;
 use self::trace::with_trace;
 
 pub mod backend;
+mod compiler;
 mod data;
 pub mod ir;
 mod op;
-mod scheduler;
 mod trace;
 mod vartype;
 

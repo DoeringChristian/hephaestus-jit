@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 
 use crate::backend::Device;
+use crate::compiler;
 use crate::data::Data;
 use crate::op::Op;
-use crate::scheduler;
 use crate::vartype::VarType;
 use slotmap::{DefaultKey, SlotMap};
 
@@ -113,7 +113,7 @@ fn push_var(v: Var) -> VarRef {
 
 pub fn eval(refs: &[&VarRef]) {
     with_trace(|t| {
-        scheduler::eval(t, refs.iter().map(|r| r.0));
+        compiler::eval(t, refs.iter().map(|r| r.0));
     })
 }
 
