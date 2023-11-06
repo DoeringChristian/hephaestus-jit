@@ -7,6 +7,7 @@ use self::trace::with_trace;
 pub mod backend;
 mod compiler;
 mod data;
+mod graph;
 pub mod ir;
 mod op;
 mod trace;

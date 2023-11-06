@@ -112,7 +112,9 @@ impl Compiler {
     }
 }
 
-pub struct Kernel {
+pub struct Graph {}
+
+pub struct Pass {
     ir: IR,
     buffers: Vec<trace::VarId>,
 }
@@ -168,6 +170,7 @@ pub fn eval(trace: &mut Trace, schedule: impl IntoIterator<Item = trace::VarId>)
         })
         .collect::<Vec<_>>();
 
+    // TODO: Instead of executing the kernels, emit kernels
     for ((ir, env), group) in irs.iter().zip(schedule_groups) {
         trace
             .device
