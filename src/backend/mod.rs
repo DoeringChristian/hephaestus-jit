@@ -7,7 +7,7 @@ use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice};
 
 use crate::ir::IR;
-use crate::vartype::{AsVarType, VarType};
+use crate::vartype::AsVarType;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -30,45 +30,23 @@ impl Device {
     pub fn vulkan(id: usize) -> Result<Self> {
         Ok(Device::VulkanDevice(VulkanDevice::create(id)?))
     }
-    pub fn create_array<T: AsVarType>(&self, len: usize) -> Result<Array> {
+    pub fn create_buffer<T: AsVarType>(&self, len: usize) -> Result<Buffer> {
         let ty = T::var_ty();
         let size = len * ty.size();
         let buffer = match self {
-            Device::CudaDevice(device) => Buffer::CudaBuffer(device.create_buffer(size)?),
-            Device::VulkanDevice(device) => Buffer::VulkanBuffer(device.create_buffer(size)?),
+            Device::CudaDevice(device) => Buffer::CudaBuffer(Arc::new(device.create_buffer(size)?)),
+            Device::VulkanDevice(device) => {
+                Buffer::VulkanBuffer(Arc::new(device.create_buffer(size)?))
+            }
         };
-        Ok(Array(Arc::new(InternalArray { ty, buffer })))
-    }
-    pub fn execute_trace(&self, trace: &IR, arrays: &[Array]) -> Result<()> {
-        match self {
-            Self::CudaDevice(device) => {
-                let buffers = arrays
-                    .iter()
-                    .map(|a| match a.buffer() {
-                        Buffer::CudaBuffer(buffer) => buffer,
-                        _ => todo!(),
-                    })
-                    .collect::<Vec<_>>();
-                device.execute_trace(trace, &buffers)
-            }
-            Self::VulkanDevice(device) => {
-                let buffers = arrays
-                    .iter()
-                    .map(|a| match a.buffer() {
-                        Buffer::VulkanBuffer(buffer) => buffer,
-                        _ => todo!(),
-                    })
-                    .collect::<Vec<_>>();
-                device.execute_trace(trace, &buffers)
-            }
-        }
+        Ok(buffer)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Buffer {
-    CudaBuffer(CudaBuffer),
-    VulkanBuffer(VulkanBuffer),
+    CudaBuffer(Arc<CudaBuffer>),
+    VulkanBuffer(Arc<VulkanBuffer>),
 }
 impl Buffer {
     pub fn size(&self) -> usize {
@@ -82,40 +60,6 @@ impl Buffer {
             Self::CudaBuffer(buffer) => Ok(buffer.to_host()?),
             Self::VulkanBuffer(buffer) => Ok(buffer.to_host()?),
         }
-    }
-}
-#[derive(Debug)]
-struct InternalArray {
-    ty: VarType,
-    buffer: Buffer,
-}
-#[derive(Debug, Clone)]
-pub struct Array(Arc<InternalArray>);
-
-// impl Deref for Array {
-//     type Target = Buffer;
-//
-//     fn deref(&self) -> &Self::Target {
-//         &self.0.buffer
-//     }
-// }
-
-impl Array {
-    pub fn ty(&self) -> VarType {
-        self.0.ty.clone()
-    }
-    pub fn size(&self) -> usize {
-        self.0.buffer.size()
-    }
-    pub fn len(&self) -> usize {
-        self.size() / self.ty().size()
-    }
-    fn buffer(&self) -> &Buffer {
-        &self.0.buffer
-    }
-    pub fn to_host<T: bytemuck::Pod + AsVarType>(&self) -> Result<Vec<T>> {
-        assert_eq!(T::var_ty(), self.ty(), "Types do not match!");
-        self.0.buffer.to_host()
     }
 }
 

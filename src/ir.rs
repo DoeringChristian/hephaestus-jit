@@ -20,12 +20,13 @@ pub struct IR {
 
 impl IR {
     // pub fn push_var(&mut self, mut var: Var, size: usize, deps: &[VarId]) -> VarId {
-    pub fn push_var(&mut self, mut var: Var, deps: &[VarId]) -> VarId {
+    pub fn push_var(&mut self, mut var: Var, deps: impl IntoIterator<Item = VarId>) -> VarId {
         let id = VarId(self.vars.len());
 
         // Add dependencies
         let start = self.deps.len();
-        self.deps.extend_from_slice(deps);
+        // self.deps.extend_from_slice(deps);
+        self.deps.extend(deps);
         let stop = self.deps.len();
 
         // var.deps = (start, stop);

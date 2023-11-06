@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 
-use crate::backend::Array;
 use crate::op::Op;
 use crate::vartype::VarType;
 use slotmap::{DefaultKey, SlotMap};
@@ -10,7 +9,7 @@ thread_local! {
 }
 
 #[derive(Default, Debug)]
-struct Trace {
+pub struct Trace {
     vars: SlotMap<DefaultKey, Var>,
 }
 impl Trace {
@@ -63,11 +62,11 @@ impl Drop for Trace {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(DefaultKey);
 
 #[derive(Debug)]
-pub struct VarRef(VarId);
+pub struct VarRef(pub VarId);
 
 impl Clone for VarRef {
     fn clone(&self) -> Self {
@@ -82,14 +81,14 @@ impl Drop for VarRef {
 }
 
 #[derive(Debug, Default)]
-struct Var {
+pub struct Var {
     pub op: Op, // Operation used to construct the variable
     pub deps: Vec<VarId>,
     pub ty: VarType, // Type of the variable
     pub size: usize, // number of elements
     pub rc: usize,
 
-    pub arrays: Option<Array>,
+    // pub arrays: Option<Array>,
     pub data: Option<u64>,
 }
 #[derive(Debug)]
@@ -98,7 +97,7 @@ pub struct VarInfo {
     pub size: usize,
 }
 
-fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
+pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     TRACE.with(|t| {
         let mut t = t.borrow_mut();
         f(&mut t)
