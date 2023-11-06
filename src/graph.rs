@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Default)]
 pub struct Env {
-    buffers: Vec<trace::VarId>,
+    buffers: Vec<trace::VarRef>,
 }
 
 #[derive(Default, Debug, Clone)]
