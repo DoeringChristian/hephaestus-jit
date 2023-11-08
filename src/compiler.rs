@@ -38,7 +38,7 @@ impl Compiler {
             let src = self.collect(trace, id);
 
             let var = trace.var(id);
-            if var.size == 0 {
+            if var.ty.size() == 0 {
                 continue;
             }
 
@@ -47,7 +47,7 @@ impl Compiler {
                 ir::Var {
                     op: Op::Buffer,
                     ty: var.ty.clone(),
-                    data: buffer_id,
+                    data: buffer_id as _,
                     ..Default::default()
                 },
                 [],
@@ -92,8 +92,10 @@ impl Compiler {
                 )
             }
             Op::Scatter => {
+                dbg!(trace.var(var.deps[0]));
+                dbg!(trace.var(var.deps[1]));
                 let dst = self.collect_data(trace, var.deps[0]);
-                let src = self.collect_data(trace, var.deps[1]);
+                let src = self.collect(trace, var.deps[1]);
                 let idx = self.collect(trace, var.deps[2]);
                 self.ir.push_var(
                     ir::Var {
@@ -104,6 +106,15 @@ impl Compiler {
                     [dst, src, idx],
                 )
             }
+            Op::Literal => self.ir.push_var(
+                ir::Var {
+                    op: Op::Literal,
+                    ty: var.ty.clone(),
+                    data: var.data.literal().unwrap(),
+                    ..Default::default()
+                },
+                [],
+            ),
             Op::Buffer => self.collect_data(trace, id),
             _ => {
                 let deps = var
@@ -135,7 +146,7 @@ impl Compiler {
             ir::Var {
                 op: Op::Buffer,
                 ty: var.ty.clone(),
-                data: buffer_id,
+                data: buffer_id as _,
                 ..Default::default()
             },
             [],

@@ -295,7 +295,7 @@ pub fn assemble_var(
             let ty = trace.var_ty(varid);
             writeln!(asm, "\tmov.{} {}, %r0;", tyname(ty), reg(varid))?;
         }
-        Op::Const => {
+        Op::Literal => {
             // let ty = trace.var_ty(varid);
             //
             // writeln!(

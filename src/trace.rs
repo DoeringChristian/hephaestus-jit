@@ -4,7 +4,7 @@ use std::thread::ThreadId;
 use crate::backend::Device;
 use crate::data::Data;
 use crate::op::Op;
-use crate::vartype::VarType;
+use crate::vartype::{AsVarType, VarType};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
@@ -159,6 +159,18 @@ pub fn index(size: usize) -> VarRef {
         ..Default::default()
     })
 }
+pub fn literal<T: AsVarType>(val: T) -> VarRef {
+    let ty = T::var_ty();
+    let mut data = 0;
+    unsafe { *(&mut data as *mut _ as *mut T) = val };
+    push_var(Var {
+        op: Op::Literal,
+        ty,
+        size: 0,
+        data: Data::Literal(data),
+        ..Default::default()
+    })
+}
 impl VarRef {
     pub fn same_trace(&self, other: &VarRef) -> bool {
         self._thread_id == other._thread_id
@@ -199,14 +211,17 @@ impl VarRef {
         })
     }
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
+        dst.schedule();
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
-        push_var(Var {
-            op: Op::Gather,
+        let res = push_var(Var {
+            op: Op::Scatter,
             deps: vec![dst.id(), self.id(), idx.id()],
-            ty: info.ty,
+            ty: VarType::Void,
             size: info.size,
             ..Default::default()
-        })
+        });
+        res.schedule(); // Auto schedule
+        res
     }
     pub fn ty(&self) -> VarType {
         with_trace(|t| t.var(self.id()).ty.clone())

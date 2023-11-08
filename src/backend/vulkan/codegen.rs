@@ -218,6 +218,8 @@ impl SpirvBuilder {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
+                    dbg!(&ir.var(src));
+                    dbg!(&ir.var(dst));
 
                     let buffer_idx = ir.var(dst).data;
 
@@ -262,7 +264,24 @@ impl SpirvBuilder {
 
                     self.load(u32_ty, Some(dst), ptr, None, None)?;
                 }
-                Op::Const => todo!(),
+                Op::Literal => {
+                    let ty = self.spirv_ty(&var.ty);
+                    let c = match &var.ty {
+                        VarType::Bool => {
+                            if var.data == 0 {
+                                self.constant_false(ty)
+                            } else {
+                                self.constant_true(ty)
+                            }
+                        }
+                        VarType::I32 | VarType::U32 => self.constant_u32(ty, var.data as _),
+                        VarType::I64 | VarType::U64 => self.constant_u64(ty, var.data),
+                        // VarType::F32 => self.constant_f32(ty, var.data),
+                        // VarType::F64 => self.constant_f64(ty, var.data),
+                        _ => todo!(),
+                    };
+                    self.spirv_vars[varid.0] = c;
+                }
                 Op::Buffer => {}
             }
         }

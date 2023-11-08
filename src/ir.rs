@@ -9,7 +9,7 @@ pub struct Var {
     pub(crate) ty: VarType,
     pub(crate) op: Op,
     pub(crate) deps: (usize, usize),
-    pub(crate) data: usize,
+    pub(crate) data: u64,
 }
 
 #[derive(Debug, Default)]

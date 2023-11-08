@@ -7,5 +7,5 @@ pub enum Op {
     Scatter,
     Gather,
     Index,
-    Const,
+    Literal,
 }

@@ -17,14 +17,12 @@ fn main() {
     let device = backend::Device::vulkan(0).unwrap();
 
     let i = trace::index(10);
-    let idx = trace::index(5);
+    let j = trace::index(5);
 
-    let j = i.gather(&idx);
+    j.add(&trace::literal(1u32)).scatter(&i, &j);
 
-    i.scatter(&j, &idx);
-
-    i.schedule();
-    j.schedule();
+    dbg!(&i);
+    dbg!(&j);
 
     let graph = trace::compile();
     dbg!(&graph);
