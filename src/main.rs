@@ -17,7 +17,9 @@ fn main() {
     let device = backend::Device::vulkan(0).unwrap();
 
     let i = trace::index(10);
-    let j = trace::index(10);
+    let idx = trace::index(5);
+
+    let j = i.gather(&idx);
 
     i.schedule();
     j.schedule();

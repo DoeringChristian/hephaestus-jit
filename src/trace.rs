@@ -187,6 +187,23 @@ impl VarRef {
             ..Default::default()
         })
     }
+    pub fn gather(&self, idx: &Self) -> Self {
+        let ty = self.ty();
+        let size = idx.size();
+        push_var(Var {
+            op: Op::Gather,
+            deps: vec![self.id(), idx.id()],
+            ty,
+            size,
+            ..Default::default()
+        })
+    }
+    pub fn ty(&self) -> VarType {
+        with_trace(|t| t.var(self.id()).ty.clone())
+    }
+    pub fn size(&self) -> usize {
+        with_trace(|t| t.var(self.id()).size)
+    }
     pub fn data(&self) -> Data {
         assert_eq!(self._thread_id, std::thread::current().id());
         with_trace(|t| t.var(self.id()).data.clone())
