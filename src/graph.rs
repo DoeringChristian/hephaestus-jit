@@ -144,6 +144,8 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     /// * `larger`: The variable appearing later in the ssa
     /// * `smaller`: The variable appearing earlier in the ssa
     /// TODO: improve performance by caching
+    /// FIX: Should return true if there is any path between larger, smaller that goes through a
+    /// `Ref`/`Opaque`
     fn broken_dep(trace: &trace::Trace, larger: trace::VarId, smaller: trace::VarId) -> bool {
         use crate::op::Op;
         let lvar = trace.var(larger);
