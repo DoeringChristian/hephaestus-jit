@@ -200,6 +200,7 @@ impl VarRef {
         })
     }
     pub fn gather(&self, idx: &Self) -> Self {
+        // It is important that dst is schedules
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
@@ -212,6 +213,7 @@ impl VarRef {
         })
     }
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
+        // It is important that dst is schedules
         dst.schedule();
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
         let dst_ref = dst.get_ref();
