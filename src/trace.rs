@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::thread::ThreadId;
 
 use crate::backend::Device;
 use crate::compiler;
@@ -70,12 +71,12 @@ impl Drop for Trace {
 pub struct VarId(DefaultKey);
 
 #[derive(Debug)]
-pub struct VarRef(pub VarId);
+pub struct VarRef(pub VarId, ThreadId);
 
 impl Clone for VarRef {
     fn clone(&self) -> Self {
         with_trace(|t| t.inc_rc(self.0));
-        Self(self.0)
+        Self(self.0, self.1)
     }
 }
 impl Drop for VarRef {
@@ -108,7 +109,7 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     })
 }
 fn push_var(v: Var) -> VarRef {
-    with_trace(|t| VarRef(t.push_var(v)))
+    with_trace(|t| VarRef(t.push_var(v), std::thread::current().id()))
 }
 
 pub fn eval(refs: &[&VarRef]) {
@@ -141,5 +142,8 @@ impl VarRef {
     }
     pub fn data(&self) -> Data {
         with_trace(|t| t.var(self.0).data.clone())
+    }
+    pub fn same_trace(&self, other: &VarRef) -> bool {
+        self.1 == other.1
     }
 }
