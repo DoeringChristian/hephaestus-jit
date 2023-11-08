@@ -80,31 +80,8 @@ impl Compiler {
         let var = trace.var(id);
 
         let id = match var.op {
-            Op::Gather => {
-                let src = self.collect_data(trace, var.deps[0]);
-                let idx = self.collect(trace, var.deps[1]);
-                self.ir.push_var(
-                    ir::Var {
-                        op: var.op,
-                        ty: var.ty.clone(),
-                        ..Default::default()
-                    },
-                    [src, idx],
-                )
-            }
-            Op::Scatter => {
-                let dst = self.collect_data(trace, var.deps[0]);
-                let src = self.collect(trace, var.deps[1]);
-                let idx = self.collect(trace, var.deps[2]);
-                self.ir.push_var(
-                    ir::Var {
-                        op: var.op,
-                        ty: var.ty.clone(),
-                        ..Default::default()
-                    },
-                    [dst, src, idx],
-                )
-            }
+            Op::Ref => self.collect_data(trace, var.deps[0]),
+            Op::Buffer => self.collect_data(trace, id),
             Op::Literal => self.ir.push_var(
                 ir::Var {
                     op: Op::Literal,
@@ -114,7 +91,7 @@ impl Compiler {
                 },
                 [],
             ),
-            Op::Buffer => self.collect_data(trace, id),
+            // Op::Buffer => self.collect_data(trace, id),
             _ => {
                 let deps = var
                     .deps

@@ -202,9 +202,10 @@ impl VarRef {
     pub fn gather(&self, idx: &Self) -> Self {
         let ty = self.ty();
         let size = idx.size();
+        let src_ref = self.get_ref();
         push_var(Var {
             op: Op::Gather,
-            deps: vec![self.id(), idx.id()],
+            deps: vec![src_ref.id(), idx.id()],
             ty,
             size,
             ..Default::default()
@@ -213,15 +214,26 @@ impl VarRef {
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
         dst.schedule();
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
+        let dst_ref = dst.get_ref();
         let res = push_var(Var {
             op: Op::Scatter,
-            deps: vec![dst.id(), self.id(), idx.id()],
+            deps: vec![dst_ref.id(), self.id(), idx.id()],
             ty: VarType::Void,
             size: info.size,
             ..Default::default()
         });
         res.schedule(); // Auto schedule
         res
+    }
+    pub fn get_ref(&self) -> Self {
+        let ty = self.ty();
+        push_var(Var {
+            op: Op::Ref,
+            deps: vec![self.id()],
+            ty,
+            size: 0,
+            ..Default::default()
+        })
     }
     pub fn ty(&self) -> VarType {
         with_trace(|t| t.var(self.id()).ty.clone())

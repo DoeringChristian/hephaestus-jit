@@ -308,6 +308,7 @@ pub fn assemble_var(
             todo!()
         }
         Op::Buffer => {}
+        _ => {}
     };
     Ok(())
 }

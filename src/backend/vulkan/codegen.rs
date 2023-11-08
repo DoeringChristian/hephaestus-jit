@@ -282,7 +282,7 @@ impl SpirvBuilder {
                     };
                     self.spirv_vars[varid.0] = c;
                 }
-                Op::Buffer => {}
+                _ => {}
             }
         }
         Ok(())
