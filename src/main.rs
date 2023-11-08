@@ -17,13 +17,16 @@ fn main() {
     let device = backend::Device::vulkan(0).unwrap();
 
     let i = trace::index(10);
-    let j = trace::index(20);
+    let j = trace::index(10);
 
     i.schedule();
+    j.schedule();
 
     let graph = trace::compile();
     graph.launch_slow(&device);
 
-    // trace::eval(&[&i]);
+    dbg!(graph.n_passes());
+
     dbg!(&i.data().buffer().unwrap().to_host::<u32>());
+    dbg!(&j.data().buffer().unwrap().to_host::<u32>());
 }

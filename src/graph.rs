@@ -47,6 +47,9 @@ impl Graph {
     pub fn buffer_desc(&self, buffer_id: BufferId) -> &BufferDesc {
         &self.buffers[buffer_id.0]
     }
+    pub fn n_passes(&self) -> usize {
+        self.passes.len()
+    }
     pub fn launch_slow(&self, device: &Device) {
         trace::with_trace(|t| {
             self._launch_slow(t, device);
