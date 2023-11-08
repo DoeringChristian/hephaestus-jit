@@ -9,8 +9,8 @@ use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
 thread_local! {
-    static TRACE: RefCell<Trace> = RefCell::new(Default::default());
-    static SCHEDULE: RefCell<Vec<VarRef>> = RefCell::new(Default::default());
+    pub static TRACE: RefCell<Trace> = RefCell::new(Default::default());
+    pub static SCHEDULE: RefCell<Vec<VarRef>> = RefCell::new(Default::default());
 }
 
 #[derive(Default, Debug)]
@@ -71,7 +71,7 @@ impl Trace {
 }
 impl Drop for Trace {
     fn drop(&mut self) {
-        assert_eq!(self.vars.len(), 0);
+        assert_eq!(self.vars.len(), 0, "{self:#?}");
     }
 }
 
@@ -186,5 +186,8 @@ impl VarRef {
             let mut s = s.borrow_mut();
             s.push(self.clone());
         })
+    }
+    pub fn rc(&self) -> usize {
+        with_trace(|t| t.var(self.id()).rc)
     }
 }

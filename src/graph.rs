@@ -10,10 +10,13 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn push_buffer(&mut self, r: trace::VarRef) -> BufferId {
-        *self.id2buffer.entry(r.id()).or_insert_with(|| {
+    pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
+        *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
-            self.buffers.push(BufferDesc { id: r, size: 0 });
+            self.buffers.push(BufferDesc {
+                id: trace.ref_borrow(id),
+                size: trace.var(id).size,
+            });
             buffer_id
         })
     }
@@ -147,10 +150,7 @@ pub fn compile(trace: &mut trace::Trace, mut schedule: Vec<trace::VarId>) -> Gra
             .env
             .buffers
             .iter()
-            .map(|id| {
-                trace.inc_rc(*id);
-                graph_builder.push_buffer(trace.ref_borrow(*id))
-            })
+            .map(|id| graph_builder.push_buffer(trace, *id))
             .collect::<Vec<_>>();
         let pass = Pass {
             buffers,
