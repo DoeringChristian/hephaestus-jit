@@ -12,11 +12,12 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn push_buffer(&mut self, trace: &trace::Trace, id: trace::VarId) -> BufferId {
+    pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
+        // TODO: use better method to get VarRef
         *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
             self.buffers.push(BufferDesc {
-                id,
+                var: trace.ref_borrow(id),
                 size: trace.var(id).size,
             });
             buffer_id
@@ -57,7 +58,7 @@ impl Graph {
     }
     fn _launch_slow(&self, trace: &mut trace::Trace, device: &Device) {
         for desc in self.buffers.iter() {
-            let var = trace.var_mut(desc.id);
+            let var = trace.var_mut(desc.var.id());
 
             let size = var.size;
             let ty_size = var.ty.size();
@@ -71,7 +72,7 @@ impl Graph {
                 .iter()
                 .map(|id| {
                     let desc = self.buffer_desc(*id);
-                    trace.var(desc.id).data.buffer().unwrap().clone()
+                    trace.var(desc.var.id()).data.buffer().unwrap().clone()
                 })
                 .collect::<Vec<_>>();
             match &pass.op {
@@ -107,7 +108,7 @@ pub enum Op {
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
     size: usize,
-    id: trace::VarId,
+    var: trace::VarRef,
 }
 
 /// Might not be the best but we keep references to `trace::VarRef`s arround to ensure the rc is
