@@ -11,7 +11,7 @@ pub struct GraphBuilder {
 
 impl GraphBuilder {
     pub fn push_buffer(&mut self, r: trace::VarRef) -> BufferId {
-        *self.id2buffer.entry(r.0).or_insert_with(|| {
+        *self.id2buffer.entry(r.id()).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
             self.buffers.push(BufferDesc { id: r, size: 0 });
             buffer_id
@@ -75,8 +75,8 @@ pub struct BufferDesc {
 ///
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
-pub fn compile(trace: &mut trace::Trace, refs: &[&trace::VarRef]) -> Graph {
-    let mut schedule = refs.iter().map(|r| r.0).collect::<Vec<_>>();
+pub fn compile(trace: &mut trace::Trace, mut schedule: Vec<trace::VarId>) -> Graph {
+    // let mut schedule = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
     /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
     /// there is a gather operation between them.
     ///
@@ -149,7 +149,7 @@ pub fn compile(trace: &mut trace::Trace, refs: &[&trace::VarRef]) -> Graph {
             .iter()
             .map(|id| {
                 trace.inc_rc(*id);
-                graph_builder.push_buffer(trace::VarRef(*id))
+                graph_builder.push_buffer(trace.ref_borrow(*id))
             })
             .collect::<Vec<_>>();
         let pass = Pass {

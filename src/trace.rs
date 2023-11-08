@@ -2,14 +2,15 @@ use std::cell::RefCell;
 use std::thread::ThreadId;
 
 use crate::backend::Device;
-use crate::compiler;
 use crate::data::Data;
 use crate::op::Op;
 use crate::vartype::VarType;
+use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
 thread_local! {
     static TRACE: RefCell<Trace> = RefCell::new(Default::default());
+    static SCHEDULE: RefCell<Vec<VarRef>> = RefCell::new(Default::default());
 }
 
 #[derive(Default, Debug)]
@@ -60,6 +61,13 @@ impl Trace {
             .clone();
         VarInfo { ty, size }
     }
+    pub fn ref_borrow(&mut self, id: VarId) -> VarRef {
+        self.inc_rc(id);
+        VarRef {
+            id,
+            _thread_id: std::thread::current().id(),
+        }
+    }
 }
 impl Drop for Trace {
     fn drop(&mut self) {
@@ -71,17 +79,29 @@ impl Drop for Trace {
 pub struct VarId(DefaultKey);
 
 #[derive(Debug)]
-pub struct VarRef(pub VarId, ThreadId);
+pub struct VarRef {
+    id: VarId,
+    _thread_id: ThreadId,
+}
+
+impl VarRef {
+    pub fn id(&self) -> VarId {
+        self.id
+    }
+}
 
 impl Clone for VarRef {
     fn clone(&self) -> Self {
-        with_trace(|t| t.inc_rc(self.0));
-        Self(self.0, self.1)
+        with_trace(|t| t.inc_rc(self.id()));
+        Self {
+            id: self.id,
+            _thread_id: self._thread_id,
+        }
     }
 }
 impl Drop for VarRef {
     fn drop(&mut self) {
-        with_trace(|t| t.dec_rc(self.0))
+        with_trace(|t| t.dec_rc(self.id()))
     }
 }
 
@@ -109,12 +129,24 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     })
 }
 fn push_var(v: Var) -> VarRef {
-    with_trace(|t| VarRef(t.push_var(v), std::thread::current().id()))
+    with_trace(|t| VarRef {
+        id: t.push_var(v),
+        _thread_id: std::thread::current().id(),
+    })
 }
 
 pub fn eval(refs: &[&VarRef]) {
     with_trace(|t| {
-        compiler::eval(t, refs.iter().map(|r| r.0));
+        compiler::eval(t, refs.iter().map(|r| r.id()));
+    })
+}
+pub fn compile() -> graph::Graph {
+    SCHEDULE.with(|s| {
+        let mut s = s.borrow_mut();
+        let schedule = s.iter().map(|r| r.id).collect::<Vec<_>>();
+        let graph = with_trace(|t| graph::compile(t, schedule));
+        s.clear();
+        graph
     })
 }
 
@@ -131,19 +163,28 @@ pub fn index(size: usize) -> VarRef {
 
 impl VarRef {
     pub fn add(&self, other: &VarRef) -> VarRef {
-        let info = with_trace(|t| t.var_info(&[self.0, other.0]));
+        assert_eq!(self._thread_id, std::thread::current().id());
+        assert_eq!(other._thread_id, std::thread::current().id());
+        let info = with_trace(|t| t.var_info(&[self.id(), other.id()]));
         push_var(Var {
             op: Op::Add,
-            deps: vec![self.0, other.0],
+            deps: vec![self.id(), other.id()],
             ty: info.ty,
             size: info.size,
             ..Default::default()
         })
     }
     pub fn data(&self) -> Data {
-        with_trace(|t| t.var(self.0).data.clone())
+        assert_eq!(self._thread_id, std::thread::current().id());
+        with_trace(|t| t.var(self.id()).data.clone())
     }
     pub fn same_trace(&self, other: &VarRef) -> bool {
-        self.1 == other.1
+        self._thread_id == other._thread_id
+    }
+    pub fn schedule(&self) {
+        SCHEDULE.with(|s| {
+            let mut s = s.borrow_mut();
+            s.push(self.clone());
+        })
     }
 }

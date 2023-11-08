@@ -19,7 +19,9 @@ fn main() {
     let i = trace::index(10);
     let j = trace::index(20);
 
-    let graph = with_trace(|trace| graph::compile(trace, &[&i, &j]));
+    i.schedule();
+
+    let graph = trace::compile();
 
     dbg!(&graph);
 
