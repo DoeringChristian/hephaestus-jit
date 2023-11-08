@@ -16,7 +16,7 @@ thread_local! {
 #[derive(Default, Debug)]
 pub struct Trace {
     vars: SlotMap<DefaultKey, Var>,
-    pub device: Option<Device>,
+    // pub device: Option<Device>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
@@ -135,11 +135,11 @@ fn push_var(v: Var) -> VarRef {
     })
 }
 
-pub fn eval(refs: &[&VarRef]) {
-    with_trace(|t| {
-        compiler::eval(t, refs.iter().map(|r| r.id()));
-    })
-}
+// pub fn eval(refs: &[&VarRef]) {
+//     with_trace(|t| {
+//         compiler::eval(t, refs.iter().map(|r| r.id()));
+//     })
+// }
 pub fn compile() -> graph::Graph {
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
@@ -159,6 +159,20 @@ pub fn index(size: usize) -> VarRef {
         ..Default::default()
     })
 }
+impl VarRef {
+    pub fn same_trace(&self, other: &VarRef) -> bool {
+        self._thread_id == other._thread_id
+    }
+    pub fn schedule(&self) {
+        SCHEDULE.with(|s| {
+            let mut s = s.borrow_mut();
+            s.push(self.clone());
+        })
+    }
+    pub fn rc(&self) -> usize {
+        with_trace(|t| t.var(self.id()).rc)
+    }
+}
 
 impl VarRef {
     pub fn add(&self, other: &VarRef) -> VarRef {
@@ -176,17 +190,5 @@ impl VarRef {
     pub fn data(&self) -> Data {
         assert_eq!(self._thread_id, std::thread::current().id());
         with_trace(|t| t.var(self.id()).data.clone())
-    }
-    pub fn same_trace(&self, other: &VarRef) -> bool {
-        self._thread_id == other._thread_id
-    }
-    pub fn schedule(&self) {
-        SCHEDULE.with(|s| {
-            let mut s = s.borrow_mut();
-            s.push(self.clone());
-        })
-    }
-    pub fn rc(&self) -> usize {
-        with_trace(|t| t.var(self.id()).rc)
     }
 }

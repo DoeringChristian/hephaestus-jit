@@ -15,7 +15,6 @@ mod vartype;
 
 fn main() {
     let device = backend::Device::vulkan(0).unwrap();
-    with_trace(|t| t.device = Some(device.clone()));
 
     let i = trace::index(10);
     let j = trace::index(20);
