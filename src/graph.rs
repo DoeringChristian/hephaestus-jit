@@ -82,6 +82,24 @@ impl Graph {
                 _ => todo!(),
             }
         }
+
+        // Clear Dependecies for schedule variables
+        for id in self.schedule.iter().map(|r| r.id()) {
+            use crate::op;
+
+            let var = trace.var_mut(id);
+
+            // Set op and type for next kernel:
+            var.op = op::Op::Buffer;
+            // var.dirty = false;
+
+            // Clear dependencies:
+            let deps = std::mem::take(&mut var.deps);
+
+            for dep in deps {
+                trace.dec_rc(dep);
+            }
+        }
     }
 }
 
