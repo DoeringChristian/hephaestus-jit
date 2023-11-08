@@ -17,6 +17,13 @@ fn main() {
     with_trace(|t| t.device = Some(backend::Device::vulkan(0).unwrap()));
 
     let i = trace::index(10);
+    let j = trace::index(20);
+
+    let graph = with_trace(|trace| graph::compile(trace, &[&i, &j]));
+
+    dbg!(&graph);
+
+    drop(i);
 
     // trace::eval(&[&i]);
     // dbg!(&i.data().buffer().unwrap().to_host::<u32>());

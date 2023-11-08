@@ -10,10 +10,10 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn push_buffer(&mut self, id: trace::VarId) -> BufferId {
-        *self.id2buffer.entry(id).or_insert_with(|| {
+    pub fn push_buffer(&mut self, r: trace::VarRef) -> BufferId {
+        *self.id2buffer.entry(r.0).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
-            self.buffers.push(BufferDesc { id, size: 0 });
+            self.buffers.push(BufferDesc { id: r, size: 0 });
             buffer_id
         })
     }
@@ -36,6 +36,14 @@ pub struct Graph {
     buffers: Vec<BufferDesc>,
 }
 
+impl Graph {
+    pub fn launch_slow(&self) {
+        // for desc in self.buffers{
+        //
+        // }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct PassId(usize);
 #[derive(Debug, Clone, Copy)]
@@ -56,13 +64,19 @@ pub enum Op {
         size: usize,
     },
 }
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct BufferDesc {
     size: usize,
-    id: trace::VarId,
+    id: trace::VarRef,
 }
 
-pub fn compile(trace: &trace::Trace, mut schedule: Vec<trace::VarId>) -> Graph {
+/// Might not be the best but we keep references to `trace::VarRef`s arround to ensure the rc is
+/// not 0.
+///
+/// * `trace`: Trace from which the variables come
+/// * `refs`: Variable references
+pub fn compile(trace: &mut trace::Trace, refs: &[&trace::VarRef]) -> Graph {
+    let mut schedule = refs.iter().map(|r| r.0).collect::<Vec<_>>();
     /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
     /// there is a gather operation between them.
     ///
@@ -133,7 +147,10 @@ pub fn compile(trace: &trace::Trace, mut schedule: Vec<trace::VarId>) -> Graph {
             .env
             .buffers
             .iter()
-            .map(|id| graph_builder.push_buffer(*id))
+            .map(|id| {
+                trace.inc_rc(*id);
+                graph_builder.push_buffer(trace::VarRef(*id))
+            })
             .collect::<Vec<_>>();
         let pass = Pass {
             buffers,
