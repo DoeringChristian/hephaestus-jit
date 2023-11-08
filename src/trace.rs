@@ -143,9 +143,8 @@ pub fn eval(refs: &[&VarRef]) {
 pub fn compile() -> graph::Graph {
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
-        let schedule = s.iter().map(|r| r.id).collect::<Vec<_>>();
+        let schedule = std::mem::take(s.as_mut());
         let graph = with_trace(|t| graph::compile(t, schedule));
-        s.clear();
         graph
     })
 }

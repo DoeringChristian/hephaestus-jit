@@ -1,3 +1,5 @@
+use crate::backend::Device;
+use crate::data::Data;
 use crate::{compiler, ir, trace};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,11 +12,11 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
+    pub fn push_buffer(&mut self, trace: &trace::Trace, id: trace::VarId) -> BufferId {
         *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
             self.buffers.push(BufferDesc {
-                id: trace.ref_borrow(id),
+                id,
                 size: trace.var(id).size,
             });
             buffer_id
@@ -29,6 +31,7 @@ impl GraphBuilder {
         Graph {
             passes: self.passes,
             buffers: self.buffers,
+            ..Default::default()
         }
     }
 }
@@ -37,13 +40,44 @@ impl GraphBuilder {
 pub struct Graph {
     passes: Vec<Pass>,
     buffers: Vec<BufferDesc>,
+    schedule: Vec<trace::VarRef>,
 }
 
 impl Graph {
-    pub fn launch_slow(&self) {
-        // for desc in self.buffers{
-        //
-        // }
+    pub fn buffer_desc(&self, buffer_id: BufferId) -> &BufferDesc {
+        &self.buffers[buffer_id.0]
+    }
+    pub fn launch_slow(&self, device: &Device) {
+        trace::with_trace(|t| {
+            self._launch_slow(t, device);
+        })
+    }
+    fn _launch_slow(&self, trace: &mut trace::Trace, device: &Device) {
+        for desc in self.buffers.iter() {
+            let var = trace.var_mut(desc.id);
+
+            let size = var.size;
+            let ty_size = var.ty.size();
+            if var.data.is_none() {
+                var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
+            }
+        }
+        for pass in self.passes.iter() {
+            let buffers = pass
+                .buffers
+                .iter()
+                .map(|id| {
+                    let desc = self.buffer_desc(*id);
+                    trace.var(desc.id).data.buffer().unwrap().clone()
+                })
+                .collect::<Vec<_>>();
+            match &pass.op {
+                Op::CompiledKernel { ir, size } => {
+                    device.execute_ir(ir, *size, &buffers).unwrap();
+                }
+                _ => todo!(),
+            }
+        }
     }
 }
 
@@ -70,7 +104,7 @@ pub enum Op {
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
     size: usize,
-    id: trace::VarRef,
+    id: trace::VarId,
 }
 
 /// Might not be the best but we keep references to `trace::VarRef`s arround to ensure the rc is
@@ -78,8 +112,8 @@ pub struct BufferDesc {
 ///
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
-pub fn compile(trace: &mut trace::Trace, mut schedule: Vec<trace::VarId>) -> Graph {
-    // let mut schedule = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
+pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
+    let mut schedule = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
     /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
     /// there is a gather operation between them.
     ///
@@ -162,5 +196,7 @@ pub fn compile(trace: &mut trace::Trace, mut schedule: Vec<trace::VarId>) -> Gra
         graph_builder.push_pass(pass);
     }
 
-    graph_builder.build()
+    let mut graph = graph_builder.build();
+    graph.schedule = refs;
+    graph
 }

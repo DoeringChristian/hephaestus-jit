@@ -14,20 +14,17 @@ mod trace;
 mod vartype;
 
 fn main() {
-    {
-        with_trace(|t| t.device = Some(backend::Device::vulkan(0).unwrap()));
+    let device = backend::Device::vulkan(0).unwrap();
+    with_trace(|t| t.device = Some(device.clone()));
 
-        let i = trace::index(10);
-        let j = trace::index(20);
+    let i = trace::index(10);
+    let j = trace::index(20);
 
-        i.schedule();
+    i.schedule();
 
-        let graph = trace::compile();
+    let graph = trace::compile();
+    graph.launch_slow(&device);
 
-        dbg!(&graph);
-
-        drop(i);
-    }
     // trace::eval(&[&i]);
-    // dbg!(&i.data().buffer().unwrap().to_host::<u32>());
+    dbg!(&i.data().buffer().unwrap().to_host::<u32>());
 }
