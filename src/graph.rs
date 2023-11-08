@@ -1,31 +1,39 @@
-use crate::{ir, trace};
+use crate::{compiler, ir, trace};
+use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(Debug, Default)]
-pub struct Env {
-    buffers: Vec<trace::VarRef>,
+#[derive(Default, Debug)]
+pub struct GraphBuilder {
+    buffers: Vec<BufferDesc>,
+    id2buffer: HashMap<trace::VarId, BufferId>,
+    passes: Vec<Pass>,
+}
+
+impl GraphBuilder {
+    pub fn push_buffer(&mut self, id: trace::VarId) -> BufferId {
+        *self.id2buffer.entry(id).or_insert_with(|| {
+            let buffer_id = BufferId(self.buffers.len());
+            self.buffers.push(BufferDesc { id, size: 0 });
+            buffer_id
+        })
+    }
+    pub fn push_pass(&mut self, pass: Pass) -> PassId {
+        let id = PassId(self.passes.len());
+        self.passes.push(pass);
+        id
+    }
+    pub fn build(self) -> Graph {
+        Graph {
+            passes: self.passes,
+            buffers: self.buffers,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct Graph {
     passes: Vec<Pass>,
     buffers: Vec<BufferDesc>,
-}
-
-impl Graph {
-    pub fn push_pass(&mut self, pass: Pass) -> PassId {
-        let id = PassId(self.passes.len());
-        self.passes.push(pass);
-        id
-    }
-    pub fn pass(&self, id: PassId) -> &Pass {
-        &self.passes[id.0]
-    }
-    pub fn push_buffer(&mut self, desc: BufferDesc) -> BufferId {
-        let id = BufferId(self.buffers.len());
-        self.buffers.push(desc);
-        id
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -35,7 +43,7 @@ pub struct BufferId(usize);
 
 #[derive(Default, Debug, Clone)]
 pub struct Pass {
-    access: Vec<BufferId>,
+    buffers: Vec<BufferId>,
     op: Op,
 }
 
@@ -51,4 +59,91 @@ pub enum Op {
 #[derive(Default, Debug, Clone)]
 pub struct BufferDesc {
     size: usize,
+    id: trace::VarId,
+}
+
+pub fn compile(trace: &trace::Trace, mut schedule: Vec<trace::VarId>) -> Graph {
+    /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
+    /// there is a gather operation between them.
+    ///
+    /// * `trace`: Trace
+    /// * `larger`: The variable appearing later in the ssa
+    /// * `smaller`: The variable appearing earlier in the ssa
+    /// TODO: improve performance by caching
+    fn broken_dep(trace: &trace::Trace, larger: trace::VarId, smaller: trace::VarId) -> bool {
+        use crate::op::Op;
+        let lvar = trace.var(larger);
+        let broken = match lvar.op {
+            Op::Gather => {
+                if lvar.deps[0] == smaller {
+                    true
+                } else {
+                    lvar.deps[1..]
+                        .iter()
+                        .map(|d| broken_dep(trace, *d, smaller))
+                        .fold(false, |a, b| a || b)
+                }
+            }
+            _ => lvar
+                .deps
+                .iter()
+                .map(|d| broken_dep(trace, *d, smaller))
+                .fold(false, |a, b| a || b),
+        };
+        broken
+    }
+
+    // Decides weather two variables can be merged into the same Kernel.
+    let mergable = |larger, smaller| {
+        let mergable = trace.var(smaller).size == trace.var(larger).size;
+        let mergable = mergable & !broken_dep(trace, larger, smaller);
+        mergable
+    };
+    let mut groups = vec![];
+    while !schedule.is_empty() {
+        let mut group = vec![schedule.pop().unwrap()];
+
+        // Add all mergable elements to group, taking them from the schedule
+        schedule.retain(|smaller| {
+            let mergable = group
+                .iter()
+                .map(|larger| mergable(*larger, *smaller))
+                .fold(true, |a, b| a && b);
+            if mergable {
+                group.push(*smaller);
+            }
+            !mergable
+        });
+        // We should now have a group of variables that can be compiled into the same kernel.
+        groups.push(group);
+    }
+
+    // We should now have variables grouped according to weather they can be launched in the same
+    // kernel
+    // They are sorted in reverse order, and have to be reversed.
+    groups.reverse();
+
+    // We can now insert the variables as well as the
+    let mut graph_builder = GraphBuilder::default();
+    for group in groups {
+        let mut compiler = compiler::Compiler::default();
+        compiler.collect_vars(trace, group.iter().cloned());
+
+        let buffers = compiler
+            .env
+            .buffers
+            .iter()
+            .map(|id| graph_builder.push_buffer(*id))
+            .collect::<Vec<_>>();
+        let pass = Pass {
+            buffers,
+            op: Op::CompiledKernel {
+                ir: Arc::new(compiler.ir),
+                size: trace.var(group[0]).size,
+            },
+        };
+        graph_builder.push_pass(pass);
+    }
+
+    graph_builder.build()
 }

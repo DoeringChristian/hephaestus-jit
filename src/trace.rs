@@ -66,7 +66,7 @@ impl Drop for Trace {
     }
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(DefaultKey);
 
 #[derive(Debug)]

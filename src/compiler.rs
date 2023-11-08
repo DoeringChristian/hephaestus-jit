@@ -15,35 +15,34 @@ struct ScheduleGroup {
 
 #[derive(Debug, Default)]
 pub struct Env {
-    // TODO: VarId
-    buffers: Vec<Buffer>,
+    pub buffers: Vec<trace::VarId>,
 }
 impl Env {
-    pub fn push_buffer(&mut self, buffer: Buffer) -> usize {
+    pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
         let i = self.buffers.len();
-        self.buffers.push(buffer);
+        self.buffers.push(id);
         i
     }
 }
 
 #[derive(Debug, Default)]
 pub struct Compiler {
-    ir: IR,
-    env: Env,
+    pub ir: IR,
+    pub env: Env,
     visited: HashMap<trace::VarId, ir::VarId>,
 }
 
 impl Compiler {
-    pub fn collect_vars(&mut self, trace: &Trace, ids: &[trace::VarId]) {
+    pub fn collect_vars(&mut self, trace: &Trace, ids: impl IntoIterator<Item = trace::VarId>) {
         for id in ids {
-            let src = self.collect(trace, *id);
+            let src = self.collect(trace, id);
 
-            let var = trace.var(*id);
+            let var = trace.var(id);
             if var.size == 0 {
                 continue;
             }
 
-            let buffer_id = self.env.push_buffer(var.data.buffer().cloned().unwrap());
+            let buffer_id = self.env.push_buffer(id);
             let dst = self.ir.push_var(
                 ir::Var {
                     op: Op::Buffer,
@@ -80,18 +79,19 @@ impl Compiler {
         let var = trace.var(id);
 
         let id = match var.op {
-            Op::Buffer => {
-                let buffer_id = self.env.push_buffer(var.data.buffer().cloned().unwrap());
+            Op::Gather => {
+                let src = self.collect_data(trace, var.deps[0]);
+                let idx = self.collect(trace, var.deps[1]);
                 self.ir.push_var(
                     ir::Var {
                         op: var.op,
                         ty: var.ty.clone(),
-                        data: buffer_id,
                         ..Default::default()
                     },
-                    [],
+                    [src, idx],
                 )
             }
+            Op::Buffer => self.collect_data(trace, id),
             _ => {
                 let deps = var
                     .deps
@@ -108,8 +108,25 @@ impl Compiler {
                 )
             }
         };
-
         id
+    }
+    pub fn collect_data(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
+        if self.visited.contains_key(&id) {
+            return self.visited[&id];
+        }
+
+        let var = trace.var(id);
+
+        let buffer_id = self.env.push_buffer(id);
+        self.ir.push_var(
+            ir::Var {
+                op: Op::Buffer,
+                ty: var.ty.clone(),
+                data: buffer_id,
+                ..Default::default()
+            },
+            [],
+        )
     }
 }
 
@@ -166,18 +183,23 @@ pub fn eval(trace: &mut Trace, schedule: impl IntoIterator<Item = trace::VarId>)
         .iter()
         .map(|group| {
             let mut scheduler = Compiler::default();
-            scheduler.collect_vars(trace, &schedule[group.range.clone()]);
+            scheduler.collect_vars(trace, schedule[group.range.clone()].iter().cloned());
             (scheduler.ir, scheduler.env)
         })
         .collect::<Vec<_>>();
 
     // TODO: Instead of executing the kernels, emit kernels
     for ((ir, env), group) in irs.iter().zip(schedule_groups) {
+        let buffers = env
+            .buffers
+            .iter()
+            .map(|id| trace.var(*id).data.buffer().unwrap().clone())
+            .collect::<Vec<_>>();
         trace
             .device
             .as_ref()
             .unwrap()
-            .execute_ir(ir, group.size, &env.buffers)
+            .execute_ir(ir, group.size, &buffers)
             .unwrap();
     }
 
