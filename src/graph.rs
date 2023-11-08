@@ -138,6 +138,16 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                         .fold(false, |a, b| a || b)
                 }
             }
+            Op::Scatter => {
+                if lvar.deps[0] == smaller {
+                    true
+                } else {
+                    lvar.deps[1..]
+                        .iter()
+                        .map(|d| broken_dep(trace, *d, smaller))
+                        .fold(false, |a, b| a || b)
+                }
+            }
             _ => lvar
                 .deps
                 .iter()

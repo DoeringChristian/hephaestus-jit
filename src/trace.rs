@@ -198,6 +198,16 @@ impl VarRef {
             ..Default::default()
         })
     }
+    pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
+        let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
+        push_var(Var {
+            op: Op::Gather,
+            deps: vec![dst.id(), self.id(), idx.id()],
+            ty: info.ty,
+            size: info.size,
+            ..Default::default()
+        })
+    }
     pub fn ty(&self) -> VarType {
         with_trace(|t| t.var(self.id()).ty.clone())
     }

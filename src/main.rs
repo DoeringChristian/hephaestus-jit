@@ -21,10 +21,13 @@ fn main() {
 
     let j = i.gather(&idx);
 
+    i.scatter(&j, &idx);
+
     i.schedule();
     j.schedule();
 
     let graph = trace::compile();
+    dbg!(&graph);
     graph.launch_slow(&device);
 
     dbg!(graph.n_passes());
