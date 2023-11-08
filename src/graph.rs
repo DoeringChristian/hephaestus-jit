@@ -135,7 +135,8 @@ pub struct BufferDesc {
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
 pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
-    let mut schedule = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
+    // Reverse the schedule, so that retain is in the right order
+    let mut schedule = refs.iter().rev().map(|r| r.id()).collect::<Vec<_>>();
     /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
     /// there is a gather operation between them.
     ///
@@ -176,21 +177,25 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         broken
     }
 
-    // Decides weather two variables can be merged into the same Kernel.
-    let mergable = |larger, smaller| {
-        let mergable = trace.var(smaller).size == trace.var(larger).size;
-        let mergable = mergable & !broken_dep(trace, larger, smaller);
-        mergable
-    };
     let mut groups = vec![];
     while !schedule.is_empty() {
-        let mut group = vec![schedule.pop().unwrap()];
+        // Take the first element of the schedule
+        let mut group = vec![schedule.remove(0)];
+        // Indicates if there exists a dependecy that splits kernels in two
+        // | a | b | c |
+        // Taking this schedule, if b -x-> c then a should not be mergable with c
+        let mut dependecy_broken = false;
 
         // Add all mergable elements to group, taking them from the schedule
+        // TODO: There are some bugs which need fixing here
         schedule.retain(|smaller| {
             let mergable = group
                 .iter()
-                .map(|larger| mergable(*larger, *smaller))
+                .map(|larger| {
+                    dependecy_broken |= broken_dep(trace, *larger, *smaller);
+                    let same_size = trace.var(*smaller).size == trace.var(*larger).size;
+                    same_size & !dependecy_broken
+                })
                 .fold(true, |a, b| a && b);
             if mergable {
                 group.push(*smaller);
