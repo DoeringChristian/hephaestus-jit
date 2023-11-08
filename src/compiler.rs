@@ -92,8 +92,6 @@ impl Compiler {
                 )
             }
             Op::Scatter => {
-                dbg!(trace.var(var.deps[0]));
-                dbg!(trace.var(var.deps[1]));
                 let dst = self.collect_data(trace, var.deps[0]);
                 let src = self.collect(trace, var.deps[1]);
                 let idx = self.collect(trace, var.deps[2]);
