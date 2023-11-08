@@ -28,8 +28,9 @@ impl Env {
 #[derive(Debug, Default)]
 pub struct Compiler {
     pub ir: IR,
-    pub env: Env,
     visited: HashMap<trace::VarId, ir::VarId>,
+    id2buffer: HashMap<trace::VarId, usize>,
+    pub buffers: Vec<trace::VarId>,
 }
 
 impl Compiler {
@@ -42,7 +43,7 @@ impl Compiler {
                 continue;
             }
 
-            let buffer_id = self.env.push_buffer(id);
+            let buffer_id = self.push_buffer(id);
             let dst = self.ir.push_var(
                 ir::Var {
                     op: Op::Buffer,
@@ -69,7 +70,7 @@ impl Compiler {
                 [dst, src, idx],
             );
         }
-        self.ir.n_buffers = self.env.buffers.len();
+        self.ir.n_buffers = self.buffers.len();
     }
     pub fn collect(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
         if self.visited.contains_key(&id) {
@@ -139,7 +140,7 @@ impl Compiler {
 
         let var = trace.var(id);
 
-        let buffer_id = self.env.push_buffer(id);
+        let buffer_id = self.push_buffer(id);
         self.ir.push_var(
             ir::Var {
                 op: Op::Buffer,
@@ -149,6 +150,13 @@ impl Compiler {
             },
             [],
         )
+    }
+    pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
+        *self.id2buffer.entry(id).or_insert_with(|| {
+            let buffer_id = self.buffers.len();
+            self.buffers.push(id);
+            buffer_id
+        })
     }
 }
 

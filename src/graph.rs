@@ -218,7 +218,6 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         compiler.collect_vars(trace, group.iter().cloned());
 
         let buffers = compiler
-            .env
             .buffers
             .iter()
             .map(|id| graph_builder.push_buffer(trace, *id))
