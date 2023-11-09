@@ -70,8 +70,18 @@ impl SpirvBuilder {
         self.acquire_ids(trace);
 
         self.set_version(1, 5);
+
         self.capability(spirv::Capability::Shader);
+        self.capability(spirv::Capability::Int8);
+        self.capability(spirv::Capability::Int16);
+        self.capability(spirv::Capability::Int64);
+        self.capability(spirv::Capability::Float16);
+        self.capability(spirv::Capability::Float64);
+
+        self.capability(spirv::Capability::StorageUniformBufferBlock16);
+
         self.glsl_ext = self.ext_inst_import("GLSL.std.450");
+        self.extension("SPV_KHR_16bit_storage");
         self.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
 
         let void = self.type_void();
@@ -272,12 +282,30 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        crate::op::Bop::Min => {
-                            glsl_ext!(self; dst: ty = SMin, lhs, rhs);
-                        }
-                        crate::op::Bop::Max => {
-                            glsl_ext!(self; dst: ty = SMax, lhs, rhs);
-                        }
+                        crate::op::Bop::Min => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                glsl_ext!(self; dst: ty = SMin, lhs, rhs);
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                glsl_ext!(self; dst: ty = UMin, lhs, rhs);
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self; dst: ty = FMin, lhs, rhs);
+                            }
+                            _ => todo!(),
+                        },
+                        crate::op::Bop::Max => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                glsl_ext!(self; dst: ty = SMax, lhs, rhs);
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                glsl_ext!(self; dst: ty = UMax, lhs, rhs);
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self; dst: ty = FMax, lhs, rhs);
+                            }
+                            _ => todo!(),
+                        },
                     }
                 }
                 Op::Scatter => {
