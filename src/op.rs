@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub enum Op {
     #[default]
     Nop,

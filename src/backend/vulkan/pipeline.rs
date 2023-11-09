@@ -7,6 +7,7 @@ use super::buffer::Buffer;
 use super::device::Device;
 use ash::vk;
 
+#[derive(Debug)]
 pub struct Pipeline {
     device: Device,
     desc_sets: Vec<vk::DescriptorSet>,
