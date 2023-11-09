@@ -47,6 +47,9 @@ impl Drop for Buffer {
 }
 
 impl Buffer {
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
     pub fn create(device: &Device, info: BufferInfo) -> Self {
         let device = device.clone();
         let queue_family_indices = [device.queue_family_index];

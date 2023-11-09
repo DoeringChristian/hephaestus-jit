@@ -7,8 +7,6 @@ use crate::vartype::VarType;
 use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
 
-use super::param_layout::ParamLayout;
-
 // fn ty(ty: &VarType) ->
 
 pub fn assemble_trace(trace: &IR, entry_point: &str) -> Result<Vec<u32>, dr::Error> {
