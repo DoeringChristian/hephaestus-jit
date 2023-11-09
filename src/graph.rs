@@ -1,6 +1,7 @@
 use crate::backend::Device;
 use crate::data::Data;
 use crate::{compiler, ir, trace};
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -117,6 +118,54 @@ pub struct BufferDesc {
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
 pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
+    // FIX: by topoligical ordering and splitting
+    //
+
+    // Step 1: Create topological ordering by DFS, making sure to keep order from schedule
+    let mut topo = vec![];
+    let mut visited = HashMap::<trace::VarId, ()>::default();
+
+    fn visit(
+        trace: &trace::Trace,
+        visited: &mut HashMap<trace::VarId, ()>,
+        topo: &mut Vec<trace::VarId>,
+        id: trace::VarId,
+    ) {
+        if visited.contains_key(&id) {
+            return;
+        } else {
+            for id in trace.var(id).deps.iter() {
+                topo.push(*id);
+                visited.insert(*id, ());
+                visit(trace, visited, topo, *id);
+            }
+        }
+    }
+    for id in refs.iter().map(|r| r.id()) {
+        visit(trace, &mut visited, &mut topo, id);
+    }
+
+    // Step 2: Group by splits (Ref and size)
+    let mut groups = vec![];
+    let mut group = vec![];
+
+    for id in topo.iter() {
+        if trace.var(*id).op != crate::op::Op::Ref {
+            group.push(*id);
+        } else {
+            group.push(*id);
+            groups.push(std::mem::take(&mut group));
+        }
+    }
+    groups.push(group);
+
+    // TODO:
+    // Step 3: in these groups reorder and group by size, while keeping order
+
+    // for group in groups.iter_mut() {
+    //     group.sort_by(|id1, id2| trace.var(*id1).size.cmp(&trace.var(*id2).size));
+    // }
+
     // Reverse the schedule, so that retain is in the right order
     let mut schedule = refs.iter().rev().map(|r| r.id()).collect::<Vec<_>>();
     /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
