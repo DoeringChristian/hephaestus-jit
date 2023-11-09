@@ -3,6 +3,7 @@ pub struct VarId(pub(crate) usize);
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 
 use crate::op::Op;
 
@@ -21,7 +22,7 @@ pub struct IR {
     pub(crate) vars: Vec<Var>,
     pub(crate) deps: Vec<VarId>,
     pub(crate) n_buffers: usize,
-    pub(crate) hash: Option<u64>,
+    pub(crate) hash: Mutex<Option<u64>>,
 }
 
 impl IR {
@@ -54,8 +55,8 @@ impl IR {
         let (deps_start, deps_end) = self.var(id).deps;
         &self.deps[deps_start..deps_end]
     }
-    pub fn hash(&mut self) -> u64 {
-        *self.hash.get_or_insert_with(|| {
+    pub fn hash(&self) -> u64 {
+        *self.hash.lock().unwrap().get_or_insert_with(|| {
             let mut hasher = DefaultHasher::default();
             self.vars.hash(&mut hasher);
             self.deps.hash(&mut hasher);
@@ -65,6 +66,6 @@ impl IR {
     }
     /// Invalidate Hash
     pub fn invalidate(&mut self) {
-        self.hash = None;
+        *self.hash.lock().unwrap() = None;
     }
 }

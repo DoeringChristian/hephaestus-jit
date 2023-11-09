@@ -21,7 +21,7 @@ pub struct InternalDevice {
     pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
 }
 impl InternalDevice {
-    fn get_pipeline(&self, ir: &mut IR) -> Arc<pipeline::Pipeline> {
+    fn get_pipeline(&self, ir: &IR) -> Arc<pipeline::Pipeline> {
         self.pipeline_cache
             .lock()
             .unwrap()
@@ -77,7 +77,7 @@ impl backend::BackendDevice for VulkanDevice {
     }
 
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> backend::Result<()> {
-        let pipeline = pipeline::Pipeline::from_ir(&self, ir);
+        let pipeline = self.get_pipeline(ir);
 
         pipeline.launch_fenced(num, buffers.iter().map(|b| &b.buffer));
 
