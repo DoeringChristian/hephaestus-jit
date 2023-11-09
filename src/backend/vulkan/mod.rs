@@ -14,6 +14,7 @@ use buffer::{Buffer, BufferInfo};
 use device::Device;
 use gpu_allocator::MemoryLocation;
 
+/// TODO: Find better way to chache pipelines
 #[derive(Debug)]
 pub struct InternalDevice {
     device: Device,
