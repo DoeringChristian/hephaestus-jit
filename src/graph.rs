@@ -153,6 +153,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
 
         // Add all mergable elements to group, taking them from the schedule
         // TODO: There are some bugs which need fixing here
+        // FIX: This has for sure bugs
         schedule.retain(|smaller| {
             let mergable = group
                 .iter()
