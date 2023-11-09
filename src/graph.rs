@@ -133,13 +133,13 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     ) {
         if visited.contains_key(&id) {
             return;
-        } else {
-            for id in trace.var(id).deps.iter() {
-                topo.push(*id);
-                visit(trace, visited, topo, *id);
-                visited.insert(*id, ());
-            }
         }
+
+        for id in trace.var(id).deps.iter() {
+            visit(trace, visited, topo, *id);
+        }
+        visited.insert(id, ());
+        topo.push(id);
     }
     for id in refs.iter().map(|r| r.id()) {
         visit(trace, &mut visited, &mut topo, id);
