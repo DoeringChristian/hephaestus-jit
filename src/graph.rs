@@ -197,7 +197,8 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         };
         graph_builder.push_pass(pass);
 
-        // Clear Dependecies for schedule variables
+        // Clear Dependecies for schedule variables, so that we don't collect to many in the next
+        // iteration
         for id in group {
             use crate::op;
 
