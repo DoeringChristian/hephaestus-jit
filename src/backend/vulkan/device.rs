@@ -181,10 +181,19 @@ impl InternalDevice {
 
             let device_extension_names = [vk::ExtDescriptorIndexingFn::name().as_ptr()];
 
-            let features = vk::PhysicalDeviceFeatures {
-                shader_storage_buffer_array_dynamic_indexing: vk::TRUE,
-                ..Default::default()
-            };
+            let vk::InstanceFnV1_1 {
+                get_physical_device_features2,
+                ..
+            } = instance.fp_v1_1();
+
+            let mut features_v1_1 = vk::PhysicalDeviceVulkan11Features::default();
+            let mut features_v1_2 = vk::PhysicalDeviceVulkan12Features::default();
+            let mut features = vk::PhysicalDeviceFeatures2::builder()
+                .push_next(&mut features_v1_1)
+                .push_next(&mut features_v1_2)
+                .build();
+
+            get_physical_device_features2(physical_device, &mut features);
 
             let priorities = [1.0];
 
@@ -195,7 +204,7 @@ impl InternalDevice {
             let device_create_info = vk::DeviceCreateInfo::builder()
                 .queue_create_infos(std::slice::from_ref(&queue_info))
                 .enabled_extension_names(&device_extension_names)
-                .enabled_features(&features);
+                .push_next(&mut features);
 
             let device = instance
                 .create_device(physical_device, &device_create_info, None)
