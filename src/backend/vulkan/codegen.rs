@@ -38,19 +38,6 @@ fn isint(ty: &VarType) -> bool {
     }
 }
 
-macro_rules! glsl_ext {
-    ($self:ident; $dst:ident : $ty:ident = $ext:ident, $($operand:expr),*) => {
-        let ext = $self.glsl_ext;
-        $self.ext_inst(
-            $ty,
-            Some($dst),
-            ext,
-            GLSL450Instruction::$ext as _,
-            [$(dr::Operand::IdRef($operand)),*],
-        )?;
-    };
-}
-
 #[derive(Default)]
 struct SpirvBuilder {
     b: dr::Builder,
@@ -210,6 +197,31 @@ impl SpirvBuilder {
     }
 
     fn assemble_vars(&mut self, ir: &IR, global_invocation_id: u32) -> Result<(), dr::Error> {
+        macro_rules! bop {
+            ($bop:ident: $int:ident, $float:ident) => {
+                crate::op::Bop::$bop => {
+                    if isint(&var.ty) {
+                        self.$int(ty, Some(dst), lhs, rhs)?;
+                    } else if isfloat(&var.ty) {
+                        self.$float(ty, Some(dst), lhs, rhs)?;
+                    } else {
+                        todo!()
+                    }
+                }
+            };
+        }
+        macro_rules! glsl_ext {
+            ($self:ident; $dst:ident : $ty:ident = $ext:ident, $($operand:expr),*) => {
+                let ext = $self.glsl_ext;
+                $self.ext_inst(
+                    $ty,
+                    Some($dst),
+                    ext,
+                    GLSL450Instruction::$ext as _,
+                    [$(dr::Operand::IdRef($operand)),*],
+                )?;
+            };
+        }
         for varid in ir.var_ids() {
             let var = ir.var(varid);
             let deps = ir.deps(varid);
@@ -220,19 +232,6 @@ impl SpirvBuilder {
                     let lhs = self.get(deps[0]);
                     let rhs = self.get(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
-                    macro_rules! bop {
-                        ($bop:ident: $int:ident, $float:ident) => {
-                            crate::op::Bop::$bop => {
-                                if isint(&var.ty) {
-                                    self.$int(ty, Some(dst), lhs, rhs)?;
-                                } else if isfloat(&var.ty) {
-                                    self.$float(ty, Some(dst), lhs, rhs)?;
-                                } else {
-                                    todo!()
-                                }
-                            }
-                        };
-                    }
                     match bop {
                         crate::op::Bop::Add => {
                             if isint(&var.ty) {
