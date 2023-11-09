@@ -136,8 +136,8 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         } else {
             for id in trace.var(id).deps.iter() {
                 topo.push(*id);
-                visited.insert(*id, ());
                 visit(trace, visited, topo, *id);
+                visited.insert(*id, ());
             }
         }
     }
@@ -145,26 +145,21 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         visit(trace, &mut visited, &mut topo, id);
     }
 
-    // Step 2: Group by splits (Ref and size)
+    // Step 2: Group by splits (Ref)
     let mut groups = vec![];
     let mut group = vec![];
 
-    for id in topo.iter() {
+    for (i, id) in topo.iter().enumerate() {
         if trace.var(*id).op != crate::op::Op::Ref {
-            group.push(*id);
+            group.push(i);
         } else {
-            group.push(*id);
+            group.push(i);
             groups.push(std::mem::take(&mut group));
         }
     }
     groups.push(group);
 
-    // TODO:
-    // Step 3: in these groups reorder and group by size, while keeping order
-
-    // for group in groups.iter_mut() {
-    //     group.sort_by(|id1, id2| trace.var(*id1).size.cmp(&trace.var(*id2).size));
-    // }
+    // TODO: Add spliting according to size
 
     // Reverse the schedule, so that retain is in the right order
     let mut schedule = refs.iter().rev().map(|r| r.id()).collect::<Vec<_>>();
