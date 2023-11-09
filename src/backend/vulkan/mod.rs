@@ -4,6 +4,7 @@ mod device;
 mod param_layout;
 
 use std::ffi::CStr;
+use std::fmt::Debug;
 
 use crate::backend;
 use crate::ir::IR;
@@ -153,10 +154,17 @@ impl backend::BackendDevice for VulkanDevice {
     }
 }
 
-#[derive(Debug)]
 pub struct VulkanBuffer {
     buffer: Buffer,
     device: VulkanDevice,
+}
+
+impl Debug for VulkanBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VulkanBuffer")
+            .field("size", &self.buffer.info().size)
+            .finish()
+    }
 }
 
 impl backend::BackendBuffer for VulkanBuffer {

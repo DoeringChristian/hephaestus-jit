@@ -21,6 +21,8 @@ fn main() {
 
     j.add(&trace::literal(1u32)).scatter(&i, &j);
 
+    j.schedule();
+
     dbg!(&i);
     dbg!(&j);
 
@@ -32,4 +34,7 @@ fn main() {
 
     dbg!(&i.data().buffer().unwrap().to_host::<u32>());
     dbg!(&j.data().buffer().unwrap().to_host::<u32>());
+    with_trace(|t| {
+        dbg!(&t);
+    });
 }
