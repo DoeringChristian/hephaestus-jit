@@ -27,3 +27,9 @@ gpu-allocator = "0.22"
 rspirv = "0.11.0"
 inline-spirv = "0.1.6"
 slotmap = "1.0.6"
+
+[dev-dependecies]
+rusty-hook = "^0.11.2"
+
+[hooks]
+pre-commit = "cargo test"
