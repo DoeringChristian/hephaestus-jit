@@ -31,7 +31,22 @@ impl VarType {
             VarType::U64 => 8,
             VarType::F32 => 4,
             VarType::F64 => 8,
-            // VarType::Array => 0,
+        }
+    }
+    pub fn alignment(&self) -> usize {
+        match self {
+            VarType::Void => 0,
+            VarType::Bool => 1,
+            VarType::I8 => 1,
+            VarType::U8 => 1,
+            VarType::I16 => 2,
+            VarType::U16 => 2,
+            VarType::I32 => 4,
+            VarType::U32 => 4,
+            VarType::I64 => 8,
+            VarType::U64 => 8,
+            VarType::F32 => 4,
+            VarType::F64 => 8,
         }
     }
 }

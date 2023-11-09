@@ -178,7 +178,7 @@ impl SpirvBuilder {
                         self.decorate(
                             rta_ty,
                             rspirv::spirv::Decoration::ArrayStride,
-                            [dr::Operand::LiteralInt32(4)],
+                            [dr::Operand::LiteralInt32(var.ty.alignment() as _)],
                         );
 
                         let ptr_ty =
@@ -368,10 +368,16 @@ impl SpirvBuilder {
                                 self.constant_true(ty)
                             }
                         }
-                        VarType::I32 | VarType::U32 => self.constant_u32(ty, var.data as _),
-                        VarType::I64 | VarType::U64 => self.constant_u64(ty, var.data),
-                        // VarType::F32 => self.constant_f32(ty, var.data),
-                        // VarType::F64 => self.constant_f64(ty, var.data),
+                        VarType::I8
+                        | VarType::U8
+                        | VarType::I16
+                        | VarType::U16
+                        | VarType::I32
+                        | VarType::U32
+                        | VarType::I64
+                        | VarType::U64
+                        | VarType::F32
+                        | VarType::F64 => self.constant_u32(ty, var.data as _),
                         _ => todo!(),
                     };
                     self.spirv_vars[varid.0] = c;

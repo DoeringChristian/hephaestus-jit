@@ -159,17 +159,20 @@ pub fn index(size: usize) -> VarRef {
         ..Default::default()
     })
 }
-pub fn literal<T: AsVarType>(val: T) -> VarRef {
+pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     let ty = T::var_ty();
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
     push_var(Var {
         op: Op::Literal,
         ty,
-        size: 0,
+        size,
         data: Data::Literal(data),
         ..Default::default()
     })
+}
+pub fn literal<T: AsVarType>(val: T) -> VarRef {
+    sized_literal(val, 0)
 }
 impl VarRef {
     pub fn same_trace(&self, other: &VarRef) -> bool {

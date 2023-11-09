@@ -62,7 +62,7 @@ impl Graph {
 
             let size = var.size;
             let ty_size = var.ty.size();
-            if var.data.is_none() {
+            if var.data.is_none() | var.data.is_literal() {
                 var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
             }
         }

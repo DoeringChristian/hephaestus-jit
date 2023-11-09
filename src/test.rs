@@ -27,3 +27,15 @@ fn simple() {
         vec![0, 1, 2, 3, 4]
     );
 }
+
+#[test]
+fn simple_u16() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let c = tr::sized_literal(1u16, 10);
+    c.schedule();
+
+    tr::compile().launch_slow(&device);
+
+    dbg!(&c.data().buffer().unwrap().to_host::<u16>().unwrap());
+}
