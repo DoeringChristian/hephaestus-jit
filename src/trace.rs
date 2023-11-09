@@ -3,7 +3,7 @@ use std::thread::ThreadId;
 
 use crate::backend::Device;
 use crate::data::Data;
-use crate::op::Op;
+use crate::op::{Bop, Op};
 use crate::vartype::{AsVarType, VarType};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
@@ -192,7 +192,7 @@ impl VarRef {
         assert_eq!(other._thread_id, std::thread::current().id());
         let info = with_trace(|t| t.var_info(&[self.id(), other.id()]));
         push_var(Var {
-            op: Op::Add,
+            op: Op::Bop(Bop::Add),
             deps: vec![self.id(), other.id()],
             ty: info.ty,
             size: info.size,

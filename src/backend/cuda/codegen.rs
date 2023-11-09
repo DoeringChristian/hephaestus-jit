@@ -208,18 +208,21 @@ pub fn assemble_var(
     writeln!(asm, "// {:?}:", op)?;
     match &op {
         Op::Nop => {}
-        Op::Add => {
+        Op::Bop(bop) => {
             let lhs = deps[0];
             let rhs = deps[1];
-
-            writeln!(
-                asm,
-                "\tadd.{} {}, {}, {};",
-                tyname(trace.var_ty(varid)),
-                reg(varid),
-                reg(lhs),
-                reg(rhs)
-            )?;
+            match bop {
+                crate::op::Bop::Add => {
+                    writeln!(
+                        asm,
+                        "\tadd.{} {}, {}, {};",
+                        tyname(trace.var_ty(varid)),
+                        reg(varid),
+                        reg(lhs),
+                        reg(rhs)
+                    )?;
+                }
+            }
         }
         Op::Scatter => {
             let dst = deps[0];

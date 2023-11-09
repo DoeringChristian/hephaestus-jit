@@ -1,3 +1,8 @@
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Bop {
+    Add,
+}
+
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub enum Op {
     #[default]
@@ -5,9 +10,10 @@ pub enum Op {
     // An opaque reference, causing a kernel split TODO: not sure if to call it `Opaque` or `Ref`
     Ref,
     Buffer,
-    Add,
     Scatter,
     Gather,
     Index,
     Literal,
+
+    Bop(Bop),
 }

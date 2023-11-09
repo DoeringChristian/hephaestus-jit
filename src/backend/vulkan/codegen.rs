@@ -199,17 +199,21 @@ impl SpirvBuilder {
             let deps = ir.deps(varid);
             match var.op {
                 Op::Nop => {}
-                Op::Add => {
+                Op::Bop(bop) => {
                     let dst = self.get(varid);
                     let lhs = self.get(deps[0]);
                     let rhs = self.get(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
-                    if isint(&var.ty) {
-                        self.i_add(ty, Some(dst), lhs, rhs)?;
-                    } else if isfloat(&var.ty) {
-                        self.f_add(ty, Some(dst), lhs, rhs)?;
-                    } else {
-                        todo!()
+                    match bop {
+                        crate::op::Bop::Add => {
+                            if isint(&var.ty) {
+                                self.i_add(ty, Some(dst), lhs, rhs)?;
+                            } else if isfloat(&var.ty) {
+                                self.f_add(ty, Some(dst), lhs, rhs)?;
+                            } else {
+                                todo!()
+                            }
+                        }
                     }
                 }
                 Op::Scatter => {
