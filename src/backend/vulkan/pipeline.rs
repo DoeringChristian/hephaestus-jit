@@ -9,7 +9,10 @@ use ash::vk;
 
 pub struct Pipeline {
     device: Device,
-    descriptor_sets: Vec<vk::DescriptorSet>,
+    desc_sets: Vec<vk::DescriptorSet>,
+    desc_set_layouts: Vec<vk::DescriptorSetLayout>,
+    desc_pool: vk::DescriptorPool,
+    // descriptor_pool: vk::DescriptorPool,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
 }
@@ -20,6 +23,11 @@ impl Drop for Pipeline {
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device.destroy_pipeline(self.pipeline, None);
+            self.device.destroy_descriptor_pool(self.desc_pool, None);
+            for desc_set_layout in self.desc_set_layouts.iter() {
+                self.device
+                    .destroy_descriptor_set_layout(*desc_set_layout, None);
+            }
         }
     }
 }
@@ -59,7 +67,7 @@ impl Pipeline {
             let desc_info =
                 vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
 
-            let desc_set_layouts = [device
+            let desc_set_layouts = vec![device
                 .create_descriptor_set_layout(&desc_info, None)
                 .unwrap()];
 
@@ -92,11 +100,18 @@ impl Pipeline {
             let compute_pipeline = device
                 .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info.build()], None)
                 .unwrap()[0];
+
+            // Destruct temporary elements
+            device.destroy_shader_module(shader, None);
+            device.destroy_pipeline_cache(pipeline_cache, None);
+
             Self {
                 device: device.clone(),
-                descriptor_sets: desc_sets,
+                desc_sets,
                 pipeline_layout,
                 pipeline: compute_pipeline,
+                desc_set_layouts,
+                desc_pool,
             }
         }
     }
@@ -109,7 +124,7 @@ impl Pipeline {
             })
             .collect::<Vec<_>>();
         let write_desc_sets = [vk::WriteDescriptorSet::builder()
-            .dst_set(self.descriptor_sets[0])
+            .dst_set(self.desc_sets[0])
             .buffer_info(&desc_buffer_infos)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .dst_binding(0)
@@ -125,7 +140,7 @@ impl Pipeline {
                     vk::PipelineBindPoint::COMPUTE,
                     self.pipeline_layout,
                     0,
-                    &self.descriptor_sets,
+                    &self.desc_sets,
                     &[],
                 );
                 device.cmd_dispatch(cb, num as _, 1, 1);

@@ -3,7 +3,6 @@ mod codegen;
 mod device;
 mod pipeline;
 
-use std::ffi::CStr;
 use std::fmt::Debug;
 
 use crate::backend;
@@ -50,7 +49,6 @@ impl backend::BackendDevice for VulkanDevice {
 
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> backend::Result<()> {
         let pipeline = pipeline::Pipeline::from_ir(&self, ir);
-        let spirv = codegen::assemble_trace(ir, "main").unwrap();
 
         pipeline.launch_fenced(num, buffers.iter().map(|b| &b.buffer));
 
