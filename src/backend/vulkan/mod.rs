@@ -1,6 +1,7 @@
 mod buffer;
 mod codegen;
 mod device;
+mod glslext;
 mod pipeline;
 
 use std::collections::HashMap;

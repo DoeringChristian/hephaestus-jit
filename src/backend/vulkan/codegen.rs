@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
+use crate::backend::vulkan::glslext::GLSL450Instruction;
 use crate::ir::{VarId, IR};
 use crate::op::Op;
 use crate::vartype::VarType;
@@ -37,10 +38,24 @@ fn isint(ty: &VarType) -> bool {
     }
 }
 
+macro_rules! glsl_ext {
+    ($self:ident; $dst:ident : $ty:ident = $ext:ident, $($operand:expr),*) => {
+        let ext = $self.glsl_ext;
+        $self.ext_inst(
+            $ty,
+            Some($dst),
+            ext,
+            GLSL450Instruction::$ext as _,
+            [$(dr::Operand::IdRef($operand)),*],
+        )?;
+    };
+}
+
 #[derive(Default)]
 struct SpirvBuilder {
     b: dr::Builder,
     spirv_vars: Vec<u32>,
+    glsl_ext: u32,
 }
 impl Deref for SpirvBuilder {
     type Target = dr::Builder;
@@ -69,6 +84,7 @@ impl SpirvBuilder {
 
         self.set_version(1, 5);
         self.capability(spirv::Capability::Shader);
+        self.glsl_ext = self.ext_inst_import("GLSL.std.450");
         self.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
 
         let void = self.type_void();
@@ -204,6 +220,19 @@ impl SpirvBuilder {
                     let lhs = self.get(deps[0]);
                     let rhs = self.get(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
+                    macro_rules! bop {
+                        ($bop:ident: $int:ident, $float:ident) => {
+                            crate::op::Bop::$bop => {
+                                if isint(&var.ty) {
+                                    self.$int(ty, Some(dst), lhs, rhs)?;
+                                } else if isfloat(&var.ty) {
+                                    self.$float(ty, Some(dst), lhs, rhs)?;
+                                } else {
+                                    todo!()
+                                }
+                            }
+                        };
+                    }
                     match bop {
                         crate::op::Bop::Add => {
                             if isint(&var.ty) {
@@ -213,6 +242,42 @@ impl SpirvBuilder {
                             } else {
                                 todo!()
                             }
+                        }
+                        crate::op::Bop::Sub => {
+                            if isint(&var.ty) {
+                                self.i_sub(ty, Some(dst), lhs, rhs)?;
+                            } else if isfloat(&var.ty) {
+                                self.f_sub(ty, Some(dst), lhs, rhs)?;
+                            } else {
+                                todo!()
+                            }
+                        }
+                        crate::op::Bop::Mul => {
+                            if isint(&var.ty) {
+                                self.i_mul(ty, Some(dst), lhs, rhs)?;
+                            } else if isfloat(&var.ty) {
+                                self.f_mul(ty, Some(dst), lhs, rhs)?;
+                            } else {
+                                todo!()
+                            }
+                        }
+                        crate::op::Bop::Div => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.s_div(ty, Some(dst), lhs, rhs)?;
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                self.u_div(ty, Some(dst), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_div(ty, Some(dst), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        crate::op::Bop::Min => {
+                            glsl_ext!(self; dst: ty = SMin, lhs, rhs);
+                        }
+                        crate::op::Bop::Max => {
+                            glsl_ext!(self; dst: ty = SMax, lhs, rhs);
                         }
                     }
                 }

@@ -222,6 +222,11 @@ pub fn assemble_var(
                         reg(rhs)
                     )?;
                 }
+                crate::op::Bop::Sub => todo!(),
+                crate::op::Bop::Mul => todo!(),
+                crate::op::Bop::Div => todo!(),
+                crate::op::Bop::Min => todo!(),
+                crate::op::Bop::Max => todo!(),
             }
         }
         Op::Scatter => {

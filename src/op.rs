@@ -1,6 +1,11 @@
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Bop {
     Add,
+    Sub,
+    Mul,
+    Div,
+    Min,
+    Max,
 }
 
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
