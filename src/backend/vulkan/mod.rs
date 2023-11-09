@@ -16,11 +16,11 @@ use gpu_allocator::MemoryLocation;
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
-pub struct InternalDevice {
+pub struct InternalVkDevice {
     device: Device,
     pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
 }
-impl InternalDevice {
+impl InternalVkDevice {
     fn get_pipeline(&self, ir: &IR) -> Arc<pipeline::Pipeline> {
         self.pipeline_cache
             .lock()
@@ -30,7 +30,7 @@ impl InternalDevice {
             .clone()
     }
 }
-impl std::ops::Deref for InternalDevice {
+impl std::ops::Deref for InternalVkDevice {
     type Target = Device;
 
     fn deref(&self) -> &Self::Target {
@@ -39,10 +39,10 @@ impl std::ops::Deref for InternalDevice {
 }
 
 #[derive(Clone, Debug)]
-pub struct VulkanDevice(Arc<InternalDevice>);
+pub struct VulkanDevice(Arc<InternalVkDevice>);
 impl VulkanDevice {
     pub fn create(id: usize) -> backend::Result<Self> {
-        Ok(Self(Arc::new(InternalDevice {
+        Ok(Self(Arc::new(InternalVkDevice {
             device: Device::create(id),
             pipeline_cache: Default::default(),
         })))
@@ -50,7 +50,7 @@ impl VulkanDevice {
 }
 
 impl std::ops::Deref for VulkanDevice {
-    type Target = InternalDevice;
+    type Target = InternalVkDevice;
 
     fn deref(&self) -> &Self::Target {
         &self.0
