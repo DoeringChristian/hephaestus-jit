@@ -39,3 +39,19 @@ fn simple_u16() {
 
     dbg!(&c.data().buffer().unwrap().to_host::<u16>().unwrap());
 }
+
+#[test]
+fn scatter_chain() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let b0 = tr::sized_literal(0, 10);
+
+    tr::literal(1).scatter(&b0, &tr::index(5));
+
+    let b1 = b0.add(&tr::literal(1));
+    b1.schedule();
+
+    tr::compile().launch_slow(&device);
+
+    dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
+}

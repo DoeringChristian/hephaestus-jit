@@ -2,7 +2,7 @@ use crate::backend::Device;
 use crate::data::Data;
 use crate::{compiler, ir, trace};
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Default, Debug)]
@@ -120,14 +120,15 @@ pub struct BufferDesc {
 pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     // FIX: by topoligical ordering and splitting
     //
+    //
 
     // Step 1: Create topological ordering by DFS, making sure to keep order from schedule
     let mut topo = vec![];
-    let mut visited = HashMap::<trace::VarId, ()>::default();
+    let mut visited = HashMap::<trace::VarId, usize>::default();
 
     fn visit(
         trace: &trace::Trace,
-        visited: &mut HashMap<trace::VarId, ()>,
+        visited: &mut HashMap<trace::VarId, usize>,
         topo: &mut Vec<trace::VarId>,
         id: trace::VarId,
     ) {
@@ -138,88 +139,48 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         for id in trace.var(id).deps.iter() {
             visit(trace, visited, topo, *id);
         }
-        visited.insert(id, ());
+        visited.insert(id, topo.len());
         topo.push(id);
     }
     for id in refs.iter().map(|r| r.id()) {
         visit(trace, &mut visited, &mut topo, id);
     }
 
-    // Step 2: Group by splits (Ref)
+    // Step 2: Put scheduled variables that are groupable into a group:
+    let schedule_set = refs.iter().map(|r| r.id()).collect::<HashSet<_>>();
+
     let mut groups = vec![];
     let mut group = vec![];
 
-    for (i, id) in topo.iter().enumerate() {
-        if trace.var(*id).op != crate::op::Op::Ref {
-            group.push(i);
-        } else {
-            group.push(i);
+    for id in topo.iter() {
+        let var = trace.var(*id);
+        if var.op == crate::op::Op::Ref {
             groups.push(std::mem::take(&mut group));
+        } else if schedule_set.contains(id) {
+            group.push(*id);
+        } else {
         }
     }
-    groups.push(group);
-
-    // TODO: Add spliting according to size
-
-    // Reverse the schedule, so that retain is in the right order
-    let mut schedule = refs.iter().rev().map(|r| r.id()).collect::<Vec<_>>();
-    /// Test if `larger` depends on `smaller` and the connection between them is broken i.e. the
-    /// there is a gather operation between them.
-    ///
-    /// * `trace`: Trace
-    /// * `larger`: The variable appearing later in the ssa
-    /// * `smaller`: The variable appearing earlier in the ssa
-    /// TODO: improve performance by caching
-    /// FIX: Should return true if there is any path between larger, smaller that goes through a
-    /// `Ref`/`Opaque`
-    fn broken_dep(trace: &trace::Trace, larger: trace::VarId, smaller: trace::VarId) -> bool {
-        use crate::op::Op;
-        let lvar = trace.var(larger);
-        let broken = match lvar.op {
-            Op::Ref => lvar.deps[0] == smaller,
-            _ => lvar
-                .deps
-                .iter()
-                .map(|d| broken_dep(trace, *d, smaller))
-                .fold(false, |a, b| a || b),
-        };
-        broken
-    }
-
-    let mut groups = vec![];
-    while !schedule.is_empty() {
-        // Take the first element of the schedule
-        let mut group = vec![schedule.remove(0)];
-        // Indicates if there exists a dependecy that splits kernels in two
-        // | a | b | c |
-        // Taking this schedule, if b -x-> c then a should not be mergable with c
-        let mut dependecy_broken = false;
-
-        // Add all mergable elements to group, taking them from the schedule
-        // TODO: There are some bugs which need fixing here
-        // FIX: This has for sure bugs
-        schedule.retain(|smaller| {
-            let mergable = group
-                .iter()
-                .map(|larger| {
-                    dependecy_broken |= broken_dep(trace, *larger, *smaller);
-                    let same_size = trace.var(*smaller).size == trace.var(*larger).size;
-                    same_size & !dependecy_broken
-                })
-                .fold(true, |a, b| a && b);
-            if mergable {
-                group.push(*smaller);
-            }
-            !mergable
-        });
-        // We should now have a group of variables that can be compiled into the same kernel.
+    if !group.is_empty() {
         groups.push(group);
     }
 
-    // We should now have variables grouped according to weather they can be launched in the same
-    // kernel
-    // They are sorted in reverse order, and have to be reversed.
-    groups.reverse();
+    // Step 3: subdivide groups by size:
+
+    let groups = groups
+        .iter_mut()
+        .flat_map(|group| {
+            group.sort_by(|id0, id1| trace.var(*id0).size.cmp(&trace.var(*id1).size));
+            let groups_iter = group
+                .iter()
+                .cloned()
+                .group_by(|id| trace.var(*id).size.clone());
+            groups_iter
+                .into_iter()
+                .map(|(_, group)| group.collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();
