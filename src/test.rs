@@ -66,10 +66,14 @@ fn scatter_ssa() {
 
     tr::with_trace(|trace| {
         dbg!(&trace);
+        dbg!(&b0.id());
+        dbg!(&trace.var(b0.id()).deps);
     });
 
     b0.schedule();
-    tr::compile().launch_slow(&device);
+    let graph = tr::compile();
+    dbg!(&graph);
+    graph.launch_slow(&device);
 
     dbg!(&b0.data().buffer().unwrap().to_host::<i32>().unwrap());
 }

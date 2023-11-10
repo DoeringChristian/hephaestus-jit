@@ -136,7 +136,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             return;
         }
 
-        for id in trace.var(id).deps.iter() {
+        for id in trace.var(id).deps.iter().rev() {
             visit(trace, visited, topo, *id);
         }
         visited.insert(id, topo.len());
@@ -146,8 +146,16 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
         visit(trace, &mut visited, &mut topo, id);
     }
 
+    // Collect all variables that have to be evaluated
+    let mut schedule_set = refs.iter().map(|r| r.id()).collect::<HashSet<_>>();
+    for id in topo.iter() {
+        let var = trace.var(*id);
+        if var.op == crate::op::Op::Ref {
+            schedule_set.insert(var.deps[0]);
+        }
+    }
+
     // Step 2: Put scheduled variables that are groupable into a group:
-    let schedule_set = refs.iter().map(|r| r.id()).collect::<HashSet<_>>();
 
     let mut groups = vec![];
     let mut group = vec![];
