@@ -55,3 +55,21 @@ fn scatter_chain() {
 
     dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
 }
+
+#[test]
+fn scatter_ssa() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let b0 = tr::sized_literal(0, 10);
+
+    tr::literal(1).scatter(&b0, &tr::index(5));
+
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+
+    b0.schedule();
+    tr::compile().launch_slow(&device);
+
+    dbg!(&b0.data().buffer().unwrap().to_host::<i32>().unwrap());
+}

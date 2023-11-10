@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::thread::ThreadId;
 
-use crate::backend::Device;
+use crate::backend::{self, Device};
 use crate::data::Data;
 use crate::op::{Bop, Op};
 use crate::vartype::{AsVarType, VarType};
@@ -16,7 +16,7 @@ thread_local! {
 #[derive(Default, Debug)]
 pub struct Trace {
     vars: SlotMap<DefaultKey, Var>,
-    // pub device: Option<Device>,
+    // buffers: SlotMap<DefaultKey, Buffer>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
@@ -25,6 +25,15 @@ impl Trace {
     pub fn var_mut(&mut self, id: VarId) -> &mut Var {
         &mut self.vars[id.0]
     }
+    // pub fn buffer(&self, id: BufferId) -> &Buffer {
+    //     &self.buffers[id.0]
+    // }
+    // pub fn buffer_mut(&mut self, id: VarId) -> &mut Buffer {
+    //     &mut self.buffers[id.0]
+    // }
+    // pub fn push_buffer(&mut self, buffer: Buffer) -> BufferId{
+    //
+    // }
     pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
         self.vars.get(id.0)
     }
@@ -74,6 +83,14 @@ impl Drop for Trace {
         assert_eq!(self.vars.len(), 0, "{self:#?}");
     }
 }
+
+// #[derive(Debug, Default)]
+// pub struct Buffer {
+//     buffer: Option<backend::Buffer>,
+// }
+//
+// #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+// pub struct BufferId(DefaultKey);
 
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(DefaultKey);
@@ -187,6 +204,9 @@ impl VarRef {
     pub fn rc(&self) -> usize {
         with_trace(|t| t.var(self.id()).rc)
     }
+    pub fn forget(self) {
+        with_trace(|t| t.inc_rc(self.id()));
+    }
 }
 
 impl VarRef {
@@ -216,18 +236,41 @@ impl VarRef {
         })
     }
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
-        // It is important that dst is schedules
-        dst.schedule();
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
-        let dst_ref = dst.get_ref();
+        // let dst_ref = dst.get_ref();
+
         let res = push_var(Var {
             op: Op::Scatter,
-            deps: vec![dst_ref.id(), self.id(), idx.id()],
+            deps: vec![self.id(), idx.id()],
             ty: VarType::Void,
             size: info.size,
             ..Default::default()
         });
-        res.schedule(); // Auto schedule
+
+        // Sneakily swap out buffer with new version
+        let ty = dst.ty().clone();
+        let size = dst.size();
+        let rc = dst.rc();
+        let mut new = Var {
+            op: Op::Buffer,
+            deps: vec![res.id()],
+            ty,
+            size,
+            rc,
+            ..Default::default()
+        };
+        // Forget ref to result to keep alive
+        res.clone().forget();
+        with_trace(|t| {
+            let dst_var = t.var_mut(dst.id());
+            std::mem::swap(&mut new, dst_var);
+        });
+        let old = push_var(new);
+        let buffer_ref = old.get_ref();
+        with_trace(|t| {
+            t.var_mut(res.id()).deps.insert(0, buffer_ref.id());
+        });
+        buffer_ref.forget();
         res
     }
     pub fn get_ref(&self) -> Self {
