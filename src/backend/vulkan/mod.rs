@@ -84,6 +84,58 @@ impl backend::BackendDevice for VulkanDevice {
 
         Ok(())
     }
+
+    fn execute_graph(
+        &self,
+        trace: &crate::tr::Trace,
+        graph: &crate::graph::Graph,
+    ) -> backend::Result<()> {
+        use crate::graph::Op;
+        self.submit_global(|device, cb| {
+            for pass in graph.passes.iter() {
+                let buffers = pass
+                    .buffers
+                    .iter()
+                    .map(|id| {
+                        let desc = graph.buffer_desc(*id);
+                        let buffer = trace.var(desc.var.id()).data.buffer().unwrap().clone();
+                        match buffer {
+                            backend::Buffer::VulkanBuffer(buffer) => buffer,
+                            _ => todo!(),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                match &pass.op {
+                    Op::CompiledKernel { ir, size } => {
+                        let pipeline = self.get_pipeline(ir);
+
+                        // TODO: look at barriers
+                        let barrier = vk::MemoryBarrier2KHR {
+                            src_stage_mask: vk::PipelineStageFlags2::COMPUTE_SHADER_KHR,
+                            src_access_mask: vk::AccessFlags2::SHADER_WRITE,
+                            dst_stage_mask: vk::PipelineStageFlags2::COMPUTE_SHADER_KHR,
+                            dst_access_mask: vk::AccessFlags2::SHADER_WRITE,
+                            ..Default::default()
+                        };
+                        let info = vk::DependencyInfoKHR::builder()
+                            .memory_barriers(&[barrier])
+                            .build();
+                        unsafe {
+                            device.cmd_pipeline_barrier2(cb, &info);
+                        }
+                        pipeline.submit_to_cbuffer(
+                            cb,
+                            device,
+                            *size,
+                            buffers.iter().map(|b| &b.buffer),
+                        );
+                    }
+                    _ => todo!(),
+                }
+            }
+        });
+        Ok(())
+    }
 }
 
 pub struct VulkanBuffer {

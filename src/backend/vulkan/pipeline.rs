@@ -116,7 +116,13 @@ impl Pipeline {
             }
         }
     }
-    pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
+    pub fn submit_to_cbuffer<'a>(
+        &'a self,
+        cb: vk::CommandBuffer,
+        device: &Device,
+        num: usize,
+        buffers: impl Iterator<Item = &'a Buffer>,
+    ) {
         let desc_buffer_infos = buffers
             .map(|buffer| vk::DescriptorBufferInfo {
                 buffer: buffer.buffer(),
@@ -134,18 +140,21 @@ impl Pipeline {
         unsafe {
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
 
-            self.device.submit_global(|device, cb| {
-                device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
-                device.cmd_bind_descriptor_sets(
-                    cb,
-                    vk::PipelineBindPoint::COMPUTE,
-                    self.pipeline_layout,
-                    0,
-                    &self.desc_sets,
-                    &[],
-                );
-                device.cmd_dispatch(cb, num as _, 1, 1);
-            });
+            device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            device.cmd_bind_descriptor_sets(
+                cb,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                0,
+                &self.desc_sets,
+                &[],
+            );
+            device.cmd_dispatch(cb, num as _, 1, 1);
         }
+    }
+    pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
+        self.device.submit_global(|device, cb| {
+            self.submit_to_cbuffer(cb, device, num, buffers);
+        })
     }
 }

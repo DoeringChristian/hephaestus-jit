@@ -6,7 +6,10 @@ use std::sync::Arc;
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice};
 
+use crate::graph::Graph;
 use crate::ir::IR;
+use crate::tr;
+use crate::trace;
 use crate::vartype::AsVarType;
 
 #[derive(thiserror::Error, Debug)]
@@ -38,6 +41,12 @@ impl Device {
             }
         };
         Ok(buffer)
+    }
+    pub fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
+        match self {
+            Device::CudaDevice(_) => todo!(),
+            Device::VulkanDevice(device) => device.execute_graph(trace, graph),
+        }
     }
     pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[Buffer]) -> Result<()> {
         match self {
@@ -95,6 +104,9 @@ pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
+    fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
+        todo!()
+    }
 }
 
 pub trait BackendBuffer {
@@ -102,6 +114,15 @@ pub trait BackendBuffer {
     fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>>;
     fn size(&self) -> usize;
     fn device(&self) -> &Self::Device;
+}
+
+impl AsRef<CudaBuffer> for Buffer {
+    fn as_ref(&self) -> &CudaBuffer {
+        match self {
+            Buffer::CudaBuffer(buffer) => buffer,
+            _ => todo!(),
+        }
+    }
 }
 
 pub trait Texture {

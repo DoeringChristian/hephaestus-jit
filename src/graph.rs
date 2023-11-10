@@ -40,9 +40,9 @@ impl GraphBuilder {
 
 #[derive(Default, Debug, Clone)]
 pub struct Graph {
-    passes: Vec<Pass>,
-    buffers: Vec<BufferDesc>,
-    schedule: Vec<trace::VarRef>,
+    pub passes: Vec<Pass>,
+    pub buffers: Vec<BufferDesc>,
+    pub schedule: Vec<trace::VarRef>,
 }
 
 impl Graph {
@@ -84,6 +84,20 @@ impl Graph {
             }
         }
     }
+    pub fn launch(&self, device: &Device) {
+        trace::with_trace(|trace| {
+            for desc in self.buffers.iter() {
+                let var = trace.var_mut(desc.var.id());
+
+                let size = var.size;
+                let ty_size = var.ty.size();
+                if var.data.is_none() | var.data.is_literal() {
+                    var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
+                }
+            }
+            device.execute_graph(trace, self).unwrap();
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -93,8 +107,8 @@ pub struct BufferId(usize);
 
 #[derive(Default, Debug, Clone)]
 pub struct Pass {
-    buffers: Vec<BufferId>,
-    op: Op,
+    pub buffers: Vec<BufferId>,
+    pub op: Op,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -108,8 +122,8 @@ pub enum Op {
 }
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
-    size: usize,
-    var: trace::VarRef,
+    pub size: usize,
+    pub var: trace::VarRef,
 }
 
 /// Might not be the best but we keep references to `trace::VarRef`s arround to ensure the rc is

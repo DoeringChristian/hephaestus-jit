@@ -12,7 +12,7 @@ fn simple() {
     j.schedule();
 
     let graph = tr::compile();
-    graph.launch_slow(&device);
+    graph.launch(&device);
 
     dbg!(graph.n_passes());
 
@@ -35,7 +35,7 @@ fn simple_u16() {
     let c = tr::sized_literal(1u16, 10);
     c.schedule();
 
-    tr::compile().launch_slow(&device);
+    tr::compile().launch(&device);
 
     dbg!(&c.data().buffer().unwrap().to_host::<u16>().unwrap());
 }
@@ -51,7 +51,7 @@ fn scatter_chain() {
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
 
-    tr::compile().launch_slow(&device);
+    tr::compile().launch(&device);
 
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
     assert_eq!(
