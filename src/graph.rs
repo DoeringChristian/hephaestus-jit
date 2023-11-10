@@ -118,10 +118,6 @@ pub struct BufferDesc {
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
 pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
-    // FIX: by topoligical ordering and splitting
-    //
-    //
-
     // Step 1: Create topological ordering by DFS, making sure to keep order from schedule
     let mut topo = vec![];
     let mut visited = HashMap::<trace::VarId, usize>::default();
@@ -170,6 +166,8 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     let groups = groups
         .iter_mut()
         .flat_map(|group| {
+            // FIX: There exist an issue, where reordering might change the access order for a
+            // buffer
             group.sort_by(|id0, id1| trace.var(*id0).size.cmp(&trace.var(*id1).size));
             let groups_iter = group
                 .iter()
