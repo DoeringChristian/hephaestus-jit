@@ -44,9 +44,9 @@ fn simple_u16() {
 fn scatter_chain() {
     let device = backend::Device::vulkan(0).unwrap();
 
-    let b0 = tr::sized_literal(0, 10);
+    let b0 = tr::sized_literal(0, 5);
 
-    tr::literal(1).scatter(&b0, &tr::index(5));
+    tr::literal(1).scatter(&b0, &tr::index(10));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
