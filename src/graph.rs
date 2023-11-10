@@ -154,6 +154,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             schedule_set.insert(var.deps[0]);
         }
     }
+    dbg!(&schedule_set);
 
     // Step 2: Put scheduled variables that are groupable into a group:
 
@@ -172,6 +173,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     if !group.is_empty() {
         groups.push(group);
     }
+    dbg!(&groups);
 
     // Step 3: subdivide groups by size:
 
