@@ -80,8 +80,30 @@ impl Compiler {
         let var = trace.var(id);
 
         let id = match var.op {
-            Op::Ref => self.collect_data(trace, var.deps[0]),
-            Op::Buffer => self.collect_data(trace, id),
+            Op::Ref => {
+                // When we hit a ref, we just load it as a ref
+                self.collect_data(trace, var.deps[0])
+            }
+            Op::Buffer => {
+                // When we hit a buffer directly we want to access the elements directly
+                let data = self.collect_data(trace, id);
+                let idx = self.ir.push_var(
+                    ir::Var {
+                        op: Op::Index,
+                        ty: VarType::U32,
+                        ..Default::default()
+                    },
+                    [],
+                );
+                self.ir.push_var(
+                    ir::Var {
+                        op: Op::Gather,
+                        ty: var.ty.clone(),
+                        ..Default::default()
+                    },
+                    [data, idx],
+                )
+            }
             Op::Literal => self.ir.push_var(
                 ir::Var {
                     op: Op::Literal,
