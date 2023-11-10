@@ -182,8 +182,6 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     let groups = groups
         .iter_mut()
         .flat_map(|group| {
-            // FIX: There exist an issue, where reordering might change the access order for a
-            // buffer
             group.sort_by(|id0, id1| trace.var(*id0).size.cmp(&trace.var(*id1).size));
             let groups_iter = group
                 .iter()
