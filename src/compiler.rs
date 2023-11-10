@@ -80,7 +80,7 @@ impl Compiler {
         let var = trace.var(id);
 
         let id = match var.op {
-            Op::Ref => {
+            Op::Ref { .. } => {
                 // When we hit a ref, we just load it as a ref
                 self.collect_data(trace, var.deps[0])
             }

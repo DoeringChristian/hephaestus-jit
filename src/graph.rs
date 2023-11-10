@@ -148,11 +148,27 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     let mut groups = vec![];
     let mut group = vec![];
 
+    // This is a bit of a cheat, but Mitsuba does somethig similar
+    let mut dirty = HashSet::new();
+
     for id in topo.iter() {
         let var = trace.var(*id);
-        if var.op == crate::op::Op::Ref {
+        if let crate::op::Op::Ref { mutable: write } = var.op {
+            // Split if ref
             groups.push(std::mem::take(&mut group));
-        } else if schedule_set.contains(id) {
+            if write {
+                dirty.insert(var.deps[0]);
+            }
+        } else if var.deps.iter().any(|id| {
+            let is_dirty = dirty.contains(id);
+            dirty.remove(id);
+            is_dirty
+        }) {
+            // Split if trying to access dirty
+            groups.push(std::mem::take(&mut group));
+        }
+
+        if schedule_set.contains(id) {
             group.push(*id);
         } else {
         }

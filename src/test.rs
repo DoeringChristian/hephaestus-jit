@@ -53,5 +53,9 @@ fn scatter_chain() {
 
     tr::compile().launch_slow(&device);
 
-    dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
+    // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
+    assert_eq!(
+        b1.data().buffer().unwrap().to_host::<i32>().unwrap(),
+        vec![2, 2, 2, 2, 2]
+    );
 }

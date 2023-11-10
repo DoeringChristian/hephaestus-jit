@@ -219,7 +219,7 @@ impl VarRef {
         // It is important that dst is schedules
         dst.schedule();
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
-        let dst_ref = dst.get_ref();
+        let dst_ref = dst.get_mut();
         let res = push_var(Var {
             op: Op::Scatter,
             deps: vec![dst_ref.id(), self.id(), idx.id()],
@@ -231,9 +231,15 @@ impl VarRef {
         res
     }
     pub fn get_ref(&self) -> Self {
+        self._get_ref(false)
+    }
+    pub fn get_mut(&self) -> Self {
+        self._get_ref(true)
+    }
+    fn _get_ref(&self, mutable: bool) -> Self {
         let ty = self.ty();
         push_var(Var {
-            op: Op::Ref,
+            op: Op::Ref { mutable },
             deps: vec![self.id()],
             ty,
             size: 0,

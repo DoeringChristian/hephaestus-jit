@@ -13,7 +13,10 @@ pub enum Op {
     #[default]
     Nop,
     // An opaque reference, causing a kernel split TODO: not sure if to call it `Opaque` or `Ref`
-    Ref,
+    // TODO: maybe split into Ref and RefMut
+    Ref {
+        mutable: bool,
+    },
     Buffer,
     Scatter,
     Gather,
