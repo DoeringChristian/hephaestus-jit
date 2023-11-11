@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum VarType {
     // Primitive Types (might move out)
@@ -14,7 +16,11 @@ pub enum VarType {
     U64,
     F32,
     F64,
-    // Array,
+    Vec {
+        ty: Arc<VarType>,
+        num: usize,
+    },
+    // Struct(&'static [VarType]),
 }
 impl VarType {
     pub fn size(&self) -> usize {
@@ -31,8 +37,10 @@ impl VarType {
             VarType::U64 => 8,
             VarType::F32 => 4,
             VarType::F64 => 8,
+            VarType::Vec { ty, num } => ty.size() * num,
         }
     }
+    // TODO: Fix allignment
     pub fn alignment(&self) -> usize {
         match self {
             VarType::Void => 0,
@@ -47,6 +55,7 @@ impl VarType {
             VarType::U64 => 8,
             VarType::F32 => 4,
             VarType::F64 => 8,
+            VarType::Vec { ty, num } => ty.size() * num,
         }
     }
 }

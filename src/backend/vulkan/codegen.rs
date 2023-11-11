@@ -152,6 +152,10 @@ impl SpirvBuilder {
             VarType::U64 => self.type_int(64, 0),
             VarType::F32 => self.type_float(32),
             VarType::F64 => self.type_float(64),
+            VarType::Vec { ty, num } => {
+                let ty = self.spirv_ty(&ty);
+                self.type_vector(ty, *num as _)
+            }
         }
     }
     // TODO: Spirv Builder
@@ -178,7 +182,7 @@ impl SpirvBuilder {
                         self.decorate(
                             rta_ty,
                             rspirv::spirv::Decoration::ArrayStride,
-                            [dr::Operand::LiteralInt32(var.ty.alignment() as _)],
+                            [dr::Operand::LiteralInt32(var.ty.size() as _)],
                         );
 
                         let ptr_ty =
@@ -307,6 +311,33 @@ impl SpirvBuilder {
                             _ => todo!(),
                         },
                     }
+                }
+                Op::Construct => {
+                    let dst = self.get(varid);
+                    let ty = self.spirv_ty(&var.ty);
+                    let deps = deps.iter().map(|id| self.get(*id)).collect::<Vec<_>>();
+                    self.composite_construct(ty, Some(dst), deps)?;
+                }
+                Op::Extract(elem) => {
+                    // Store into temporary variable
+                    let src_ty = &ir.var(deps[0]).ty;
+                    let src_ty = self.spirv_ty(src_ty);
+                    let src_ptr_ty = self.type_pointer(None, spirv::StorageClass::Function, src_ty);
+                    let src_var =
+                        self.variable(src_ptr_ty, None, spirv::StorageClass::Function, None);
+
+                    let src = self.get(deps[0]);
+                    self.store(src_var, src, None, None)?;
+
+                    // Use Access chain to get element
+
+                    let dst = self.get(varid);
+                    let ty = self.spirv_ty(ir.var_ty(varid));
+                    let ty_ptr = self.type_pointer(None, spirv::StorageClass::Function, ty);
+                    let u32_ty = self.type_int(32, 0);
+                    let elem = self.constant_u32(u32_ty, elem as _);
+                    let ptr = self.access_chain(ty_ptr, None, src_var, [elem])?;
+                    self.load(ty, Some(dst), ptr, None, None)?;
                 }
                 Op::Scatter => {
                     let dst = deps[0];

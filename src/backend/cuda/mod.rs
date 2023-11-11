@@ -87,7 +87,7 @@ impl BackendBuffer for CudaBuffer {
         unsafe { dst.set_len(len) };
         self.device
             .device
-            .dtoh_sync_copy_into(&self.buffer, bytemuck::cast_slice_mut::<_, u8>(&mut dst));
+            .dtoh_sync_copy_into(&self.buffer, bytemuck::cast_slice_mut::<_, u8>(&mut dst))?;
         Ok(dst)
     }
 

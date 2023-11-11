@@ -59,3 +59,25 @@ fn scatter_chain() {
         vec![2, 2, 2, 2, 2]
     );
 }
+#[test]
+fn extract() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let a = tr::sized_literal(1f32, 10);
+    let b = tr::sized_literal(2f32, 10);
+
+    let v = tr::vec(&[&a, &b]);
+
+    let a = v.extract(0);
+    let b = v.extract(1);
+
+    v.schedule();
+    a.schedule();
+    b.schedule();
+
+    tr::compile().launch(&device);
+
+    dbg!(v.to_vec::<f32>());
+    dbg!(a.to_vec::<f32>());
+    dbg!(b.to_vec::<f32>());
+}

@@ -23,5 +23,8 @@ pub enum Op {
     Index,
     Literal,
 
+    Extract(usize),
+    Construct,
+
     Bop(Bop),
 }

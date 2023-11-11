@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::sync::Arc;
 use std::thread::ThreadId;
 
 use crate::backend::Device;
@@ -174,6 +175,25 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
 pub fn literal<T: AsVarType>(val: T) -> VarRef {
     sized_literal(val, 0)
 }
+pub fn vec(r: &[&VarRef]) -> VarRef {
+    // TODO: validate
+    //
+    let ty = r[0].ty();
+    let size = r[0].size();
+
+    let ty = VarType::Vec {
+        ty: Arc::new(ty),
+        num: r.len(),
+    };
+    let deps = r.iter().map(|r| r.id()).collect::<Vec<_>>();
+    push_var(Var {
+        op: Op::Construct,
+        deps,
+        ty,
+        size,
+        ..Default::default()
+    })
+}
 impl VarRef {
     pub fn same_trace(&self, other: &VarRef) -> bool {
         self._thread_id == other._thread_id
@@ -255,5 +275,23 @@ impl VarRef {
     pub fn data(&self) -> Data {
         assert_eq!(self._thread_id, std::thread::current().id());
         with_trace(|t| t.var(self.id()).data.clone())
+    }
+    pub fn to_vec<T: AsVarType + bytemuck::Pod>(&self) -> Vec<T> {
+        self.data().buffer().unwrap().to_host::<T>().unwrap()
+    }
+    pub fn extract(&self, elem: usize) -> Self {
+        let size = self.size();
+        let ty = self.ty();
+        let ty = match ty {
+            VarType::Vec { ty, .. } => ty.as_ref().clone(),
+            _ => todo!(),
+        };
+        push_var(Var {
+            op: Op::Extract(elem),
+            deps: vec![self.id()],
+            ty,
+            size,
+            ..Default::default()
+        })
     }
 }
