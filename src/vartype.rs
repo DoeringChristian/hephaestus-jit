@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+const fn align_up(v: usize, base: usize) -> usize {
+    ((v + base - 1) / base) * base
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum VarType {
     // Primitive Types (might move out)
@@ -17,12 +21,15 @@ pub enum VarType {
     F32,
     F64,
     Vec {
-        ty: Arc<VarType>,
+        ty: Box<VarType>,
         num: usize,
     },
-    // Struct(&'static [VarType]),
+    Struct {
+        tys: Vec<VarType>,
+    },
 }
 impl VarType {
+    // TODO: Check that alignment calculations are correct
     pub fn size(&self) -> usize {
         match self {
             VarType::Void => 0,
@@ -38,6 +45,30 @@ impl VarType {
             VarType::F32 => 4,
             VarType::F64 => 8,
             VarType::Vec { ty, num } => ty.size() * num,
+            VarType::Struct { tys } => {
+                let mut offset = 0;
+                for i in 0..tys.len() - 1 {
+                    offset += tys[i].size();
+                    offset = align_up(offset, tys[i + 1].alignment());
+                }
+                return align_up(offset + tys.last().unwrap().size(), self.alignment());
+            }
+        }
+    }
+    pub fn offset(&self, elem: usize) -> usize {
+        match self {
+            VarType::Struct { tys } => {
+                let mut offset = 0;
+                if elem == 0 {
+                    return 0;
+                }
+                for i in 0..elem - 1 {
+                    offset += tys[i].size();
+                    offset = align_up(offset, tys[i + 1].alignment());
+                }
+                offset
+            }
+            _ => todo!(),
         }
     }
     // TODO: Fix allignment
@@ -56,6 +87,7 @@ impl VarType {
             VarType::F32 => 4,
             VarType::F64 => 8,
             VarType::Vec { ty, num } => ty.size() * num,
+            VarType::Struct { tys } => tys.iter().map(|ty| ty.alignment()).max().unwrap(),
         }
     }
 }

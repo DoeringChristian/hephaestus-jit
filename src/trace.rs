@@ -175,17 +175,34 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
 pub fn literal<T: AsVarType>(val: T) -> VarRef {
     sized_literal(val, 0)
 }
-pub fn vec(r: &[&VarRef]) -> VarRef {
+fn max_size<'a>(refs: impl Iterator<Item = &'a VarRef>) -> usize {
+    refs.map(|r| r.size()).reduce(|s0, s1| s0.max(s1)).unwrap()
+}
+pub fn composite(refs: &[&VarRef]) -> VarRef {
+    let ty = VarType::Struct {
+        tys: refs.iter().map(|r| r.ty()).collect(),
+    };
+    let size = max_size(refs.iter().map(|r| *r));
+    let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
+    push_var(Var {
+        op: Op::Construct,
+        deps,
+        ty,
+        size,
+        ..Default::default()
+    })
+}
+pub fn vec(refs: &[&VarRef]) -> VarRef {
     // TODO: validate
     //
-    let ty = r[0].ty();
-    let size = r[0].size();
+    let ty = refs[0].ty();
+    let size = max_size(refs.iter().map(|r| *r));
 
     let ty = VarType::Vec {
-        ty: Arc::new(ty),
-        num: r.len(),
+        ty: Box::new(ty),
+        num: refs.len(),
     };
-    let deps = r.iter().map(|r| r.id()).collect::<Vec<_>>();
+    let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
     push_var(Var {
         op: Op::Construct,
         deps,
@@ -284,6 +301,7 @@ impl VarRef {
         let ty = self.ty();
         let ty = match ty {
             VarType::Vec { ty, .. } => ty.as_ref().clone(),
+            VarType::Struct { tys } => tys[elem].clone(),
             _ => todo!(),
         };
         push_var(Var {

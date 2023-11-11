@@ -81,3 +81,25 @@ fn extract() {
     dbg!(a.to_vec::<f32>());
     dbg!(b.to_vec::<f32>());
 }
+#[test]
+fn test_struct() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let a = tr::sized_literal(1u8, 10);
+    let b = tr::sized_literal(2u32, 10);
+
+    let s = tr::composite(&[&a, &b]);
+
+    let a = s.extract(0);
+    let b = s.extract(1);
+
+    s.schedule();
+    a.schedule();
+    b.schedule();
+
+    tr::compile().launch(&device);
+
+    dbg!(s.to_vec::<u8>());
+    dbg!(a.to_vec::<u8>());
+    dbg!(b.to_vec::<u32>());
+}

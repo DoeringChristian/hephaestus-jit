@@ -156,6 +156,20 @@ impl SpirvBuilder {
                 let ty = self.spirv_ty(&ty);
                 self.type_vector(ty, *num as _)
             }
+            VarType::Struct { tys } => {
+                let spv_tys = tys.iter().map(|ty| self.spirv_ty(ty)).collect::<Vec<_>>();
+                let struct_ty = self.type_struct(spv_tys);
+                for i in 0..tys.len() {
+                    let offset = ty.offset(i);
+                    self.member_decorate(
+                        struct_ty,
+                        offset as _,
+                        spirv::Decoration::Offset,
+                        [dr::Operand::LiteralInt32(offset as _)],
+                    );
+                }
+                struct_ty
+            }
         }
     }
     // TODO: Spirv Builder
