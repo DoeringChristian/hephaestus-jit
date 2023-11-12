@@ -218,7 +218,8 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             let var = trace.var(*id);
             match var.op {
                 op::Op::DeviceOp(dop) => todo!(),
-                _ => compiler.collect_vars(trace, Some(*id)),
+                op::Op::KernelOp(_) => compiler.collect_vars(trace, Some(*id)),
+                _ => todo!(),
             }
         }
 
