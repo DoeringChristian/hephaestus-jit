@@ -51,13 +51,36 @@ fn scatter_chain() {
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
 
-    tr::compile().launch(&device);
+    let graph = tr::compile();
+    dbg!(&graph);
+    graph.launch(&device);
 
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
     assert_eq!(
         b1.data().buffer().unwrap().to_host::<i32>().unwrap(),
         vec![2, 2, 2, 2, 2]
     );
+}
+#[test]
+fn scatter_chain2() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let a = tr::sized_literal(0, 5);
+    let b = a.add(&tr::literal(1));
+    tr::literal(1).scatter(&a, &tr::index(5));
+
+    b.schedule();
+
+    let graph = tr::compile();
+    dbg!(&graph);
+    graph.launch(&device);
+
+    dbg!(b.to_vec::<i32>());
+    // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
+    // assert_eq!(
+    //     b1.data().buffer().unwrap().to_host::<i32>().unwrap(),
+    //     vec![2, 2, 2, 2, 2]
+    // );
 }
 #[test]
 fn extract() {

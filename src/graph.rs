@@ -1,6 +1,6 @@
 use crate::backend::Device;
 use crate::data::Data;
-use crate::{compiler, ir, trace};
+use crate::{compiler, ir, op, trace};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -77,7 +77,7 @@ impl Graph {
                 })
                 .collect::<Vec<_>>();
             match &pass.op {
-                Op::CompiledKernel { ir, size } => {
+                Op::Kernel { ir, size } => {
                     device.execute_ir(ir, *size, &buffers).unwrap();
                 }
                 _ => todo!(),
@@ -115,10 +115,11 @@ pub struct Pass {
 pub enum Op {
     #[default]
     None,
-    CompiledKernel {
+    Kernel {
         ir: Arc<ir::IR>,
         size: usize,
     },
+    DeviceOp(op::DeviceOp),
 }
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
@@ -212,7 +213,14 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     let mut graph_builder = GraphBuilder::default();
     for group in groups {
         let mut compiler = compiler::Compiler::default();
-        compiler.collect_vars(trace, group.iter().cloned());
+
+        for id in group.iter() {
+            let var = trace.var(*id);
+            match var.op {
+                op::Op::DeviceOp(dop) => todo!(),
+                _ => compiler.collect_vars(trace, Some(*id)),
+            }
+        }
 
         let buffers = compiler
             .buffers
@@ -221,7 +229,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             .collect::<Vec<_>>();
         let pass = Pass {
             buffers,
-            op: Op::CompiledKernel {
+            op: Op::Kernel {
                 ir: Arc::new(compiler.ir),
                 size: trace.var(group[0]).size,
             },

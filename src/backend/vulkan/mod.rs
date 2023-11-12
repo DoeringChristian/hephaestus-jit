@@ -106,7 +106,7 @@ impl backend::BackendDevice for VulkanDevice {
                     })
                     .collect::<Vec<_>>();
                 match &pass.op {
-                    Op::CompiledKernel { ir, size } => {
+                    Op::Kernel { ir, size } => {
                         let pipeline = self.get_pipeline(ir);
 
                         // TODO: look at barriers

@@ -8,6 +8,15 @@ pub enum Bop {
     Max,
 }
 
+/// TODO: Find better name for this kind of operation
+/// Operations like creating textures and reduction operations,
+/// that need their own kernels
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum DeviceOp {
+    Max,
+}
+impl DeviceOp {}
+
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub enum Op {
     #[default]
@@ -27,4 +36,14 @@ pub enum Op {
     Construct,
 
     Bop(Bop),
+
+    DeviceOp(DeviceOp),
+}
+impl Op {
+    pub fn is_device_op(&self) -> bool {
+        match self {
+            Op::DeviceOp(_) => true,
+            _ => false,
+        }
+    }
 }
