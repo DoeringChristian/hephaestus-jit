@@ -1,7 +1,7 @@
 use crate::backend::Buffer;
 use crate::data::Data;
 use crate::ir::{self, IR};
-use crate::op::Op;
+use crate::op::{KernelOp, Op};
 use crate::trace::{self, Trace};
 use crate::vartype::VarType;
 use std::collections::HashMap;
@@ -46,7 +46,7 @@ impl Compiler {
             let buffer_id = self.push_buffer(id);
             let dst = self.ir.push_var(
                 ir::Var {
-                    op: Op::Buffer,
+                    op: KernelOp::BufferRef,
                     ty: var.ty.clone(),
                     data: buffer_id as _,
                     ..Default::default()
@@ -55,7 +55,7 @@ impl Compiler {
             );
             let idx = self.ir.push_var(
                 ir::Var {
-                    op: Op::Index,
+                    op: KernelOp::Index,
                     ty: VarType::U32,
                     ..Default::default()
                 },
@@ -63,7 +63,7 @@ impl Compiler {
             );
             self.ir.push_var(
                 ir::Var {
-                    op: Op::Scatter,
+                    op: KernelOp::Scatter,
                     ty: VarType::Void,
                     ..Default::default()
                 },
@@ -89,7 +89,7 @@ impl Compiler {
                 let data = self.collect_data(trace, id);
                 let idx = self.ir.push_var(
                     ir::Var {
-                        op: Op::Index,
+                        op: KernelOp::Index,
                         ty: VarType::U32,
                         ..Default::default()
                     },
@@ -97,38 +97,40 @@ impl Compiler {
                 );
                 self.ir.push_var(
                     ir::Var {
-                        op: Op::Gather,
+                        op: KernelOp::Gather,
                         ty: var.ty.clone(),
                         ..Default::default()
                     },
                     [data, idx],
                 )
             }
-            Op::Literal => self.ir.push_var(
-                ir::Var {
-                    op: Op::Literal,
-                    ty: var.ty.clone(),
-                    data: var.data.literal().unwrap(),
-                    ..Default::default()
-                },
-                [],
-            ),
-            // Op::Buffer => self.collect_data(trace, id),
-            _ => {
-                let deps = var
-                    .deps
-                    .iter()
-                    .map(|id| self.collect(trace, *id))
-                    .collect::<Vec<_>>();
-                self.ir.push_var(
+            Op::KernelOp(kop) => match kop {
+                KernelOp::Literal => self.ir.push_var(
                     ir::Var {
-                        op: var.op,
+                        op: KernelOp::Literal,
                         ty: var.ty.clone(),
+                        data: var.data.literal().unwrap(),
                         ..Default::default()
                     },
-                    deps,
-                )
-            }
+                    [],
+                ),
+                _ => {
+                    let deps = var
+                        .deps
+                        .iter()
+                        .map(|id| self.collect(trace, *id))
+                        .collect::<Vec<_>>();
+                    self.ir.push_var(
+                        ir::Var {
+                            op: kop,
+                            ty: var.ty.clone(),
+                            ..Default::default()
+                        },
+                        deps,
+                    )
+                }
+            },
+            _ => todo!(), // Op::Buffer => self.collect_data(trace, id),
         };
         id
     }
@@ -142,7 +144,7 @@ impl Compiler {
         let buffer_id = self.push_buffer(id);
         self.ir.push_var(
             ir::Var {
-                op: Op::Buffer,
+                op: KernelOp::BufferRef,
                 ty: var.ty.clone(),
                 data: buffer_id as _,
                 ..Default::default()

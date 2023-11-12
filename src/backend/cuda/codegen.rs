@@ -1,5 +1,5 @@
 use crate::ir::*;
-use crate::op::Op;
+use crate::op::{KernelOp, Op};
 use crate::vartype::VarType;
 
 /// Offset for the special registers:
@@ -207,8 +207,8 @@ pub fn assemble_var(
     let op = &trace.var(varid).op;
     writeln!(asm, "// {:?}:", op)?;
     match &op {
-        Op::Nop => {}
-        Op::Bop(bop) => {
+        KernelOp::Nop => {}
+        KernelOp::Bop(bop) => {
             let lhs = deps[0];
             let rhs = deps[1];
             match bop {
@@ -229,7 +229,7 @@ pub fn assemble_var(
                 crate::op::Bop::Max => todo!(),
             }
         }
-        Op::Scatter => {
+        KernelOp::Scatter => {
             let dst = deps[0];
             let src = deps[1];
             let idx = deps[2];
@@ -266,7 +266,7 @@ pub fn assemble_var(
                 reg(src),
             )?;
         }
-        Op::Gather => {
+        KernelOp::Gather => {
             let src = deps[0];
             let idx = deps[1];
 
@@ -299,11 +299,11 @@ pub fn assemble_var(
                 ptr = reg(varid),
             )?;
         }
-        Op::Index => {
+        KernelOp::Index => {
             let ty = trace.var_ty(varid);
             writeln!(asm, "\tmov.{} {}, %r0;", tyname(ty), reg(varid))?;
         }
-        Op::Literal => {
+        KernelOp::Literal => {
             // let ty = trace.var_ty(varid);
             //
             // writeln!(
@@ -315,7 +315,6 @@ pub fn assemble_var(
             // )?;
             todo!()
         }
-        Op::Buffer => {}
         _ => {}
     };
     Ok(())

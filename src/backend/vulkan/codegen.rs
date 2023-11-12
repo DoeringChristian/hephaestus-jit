@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::backend::vulkan::glslext::GLSL450Instruction;
 use crate::ir::{VarId, IR};
-use crate::op::Op;
+use crate::op::{KernelOp, Op};
 use crate::vartype::VarType;
 use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
@@ -178,7 +178,7 @@ impl SpirvBuilder {
             .filter_map(|varid| {
                 let var = ir.var(varid);
                 match var.op {
-                    Op::Buffer => {
+                    KernelOp::BufferRef => {
                         let ty = self.spirv_ty(&var.ty);
                         let u32_ty = self.type_int(32, 0);
                         let array_len = self.constant_u32(u32_ty, ir.n_buffers as _);
@@ -254,8 +254,8 @@ impl SpirvBuilder {
             let var = ir.var(varid);
             let deps = ir.deps(varid);
             match var.op {
-                Op::Nop => {}
-                Op::Bop(bop) => {
+                KernelOp::Nop => {}
+                KernelOp::Bop(bop) => {
                     let dst = self.get(varid);
                     let lhs = self.get(deps[0]);
                     let rhs = self.get(deps[1]);
@@ -326,13 +326,13 @@ impl SpirvBuilder {
                         },
                     }
                 }
-                Op::Construct => {
+                KernelOp::Construct => {
                     let dst = self.get(varid);
                     let ty = self.spirv_ty(&var.ty);
                     let deps = deps.iter().map(|id| self.get(*id)).collect::<Vec<_>>();
                     self.composite_construct(ty, Some(dst), deps)?;
                 }
-                Op::Extract(elem) => {
+                KernelOp::Extract(elem) => {
                     // Store into temporary variable
                     let src_ty = &ir.var(deps[0]).ty;
                     let src_ty = self.spirv_ty(src_ty);
@@ -353,7 +353,7 @@ impl SpirvBuilder {
                     let ptr = self.access_chain(ty_ptr, None, src_var, [elem])?;
                     self.load(ty, Some(dst), ptr, None, None)?;
                 }
-                Op::Scatter => {
+                KernelOp::Scatter => {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
@@ -375,7 +375,7 @@ impl SpirvBuilder {
                     let ptr = self.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
                     self.store(ptr, src, None, None)?;
                 }
-                Op::Gather => {
+                KernelOp::Gather => {
                     let src = deps[0];
                     let idx = deps[1];
                     let buffer_idx = ir.var(src).data;
@@ -393,7 +393,7 @@ impl SpirvBuilder {
                     let ptr = self.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
                     self.load(ty, Some(dst), ptr, None, None)?;
                 }
-                Op::Index => {
+                KernelOp::Index => {
                     let u32_ty = self.type_int(32, 0);
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::Input, u32_ty);
                     let u32_0 = self.constant_u32(u32_ty, 0);
@@ -403,7 +403,7 @@ impl SpirvBuilder {
 
                     self.load(u32_ty, Some(dst), ptr, None, None)?;
                 }
-                Op::Literal => {
+                KernelOp::Literal => {
                     let ty = self.spirv_ty(&var.ty);
                     let c = match &var.ty {
                         VarType::Bool => {

@@ -18,15 +18,10 @@ pub enum DeviceOp {
 impl DeviceOp {}
 
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
-pub enum Op {
+pub enum KernelOp {
     #[default]
     Nop,
-    // An opaque reference, causing a kernel split TODO: not sure if to call it `Opaque` or `Ref`
-    // TODO: maybe split into Ref and RefMut
-    Ref {
-        mutable: bool,
-    },
-    Buffer,
+
     Scatter,
     Gather,
     Index,
@@ -37,7 +32,21 @@ pub enum Op {
 
     Bop(Bop),
 
+    BufferRef,
+}
+
+#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
+pub enum Op {
+    #[default]
+    Nop,
+    // An opaque reference, causing a kernel split TODO: not sure if to call it `Opaque` or `Ref`
+    // TODO: maybe split into Ref and RefMut
+    Ref {
+        mutable: bool,
+    },
+    Buffer,
     DeviceOp(DeviceOp),
+    KernelOp(KernelOp),
 }
 impl Op {
     pub fn is_device_op(&self) -> bool {

@@ -4,7 +4,7 @@ use std::thread::ThreadId;
 
 use crate::backend::Device;
 use crate::data::Data;
-use crate::op::{Bop, Op};
+use crate::op::{Bop, KernelOp, Op};
 use crate::vartype::{AsVarType, VarType};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
@@ -153,7 +153,7 @@ pub fn compile() -> graph::Graph {
 // Trace Functions
 pub fn index(size: usize) -> VarRef {
     push_var(Var {
-        op: Op::Index,
+        op: Op::KernelOp(KernelOp::Index),
         deps: vec![],
         ty: VarType::U32,
         size,
@@ -165,7 +165,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
     push_var(Var {
-        op: Op::Literal,
+        op: Op::KernelOp(KernelOp::Literal),
         ty,
         size,
         data: Data::Literal(data),
@@ -185,7 +185,7 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
     let size = max_size(refs.iter().map(|r| *r));
     let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
     push_var(Var {
-        op: Op::Construct,
+        op: Op::KernelOp(KernelOp::Construct),
         deps,
         ty,
         size,
@@ -204,7 +204,7 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
     };
     let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
     push_var(Var {
-        op: Op::Construct,
+        op: Op::KernelOp(KernelOp::Construct),
         deps,
         ty,
         size,
@@ -232,7 +232,7 @@ impl VarRef {
         assert_eq!(other._thread_id, std::thread::current().id());
         let info = with_trace(|t| t.var_info(&[self.id(), other.id()]));
         push_var(Var {
-            op: Op::Bop(Bop::Add),
+            op: Op::KernelOp(KernelOp::Bop(Bop::Add)),
             deps: vec![self.id(), other.id()],
             ty: info.ty,
             size: info.size,
@@ -245,7 +245,7 @@ impl VarRef {
         let size = idx.size();
         let src_ref = self.get_ref();
         push_var(Var {
-            op: Op::Gather,
+            op: Op::KernelOp(KernelOp::Gather),
             deps: vec![src_ref.id(), idx.id()],
             ty,
             size,
@@ -258,7 +258,7 @@ impl VarRef {
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
         let dst_ref = dst.get_mut();
         let res = push_var(Var {
-            op: Op::Scatter,
+            op: Op::KernelOp(KernelOp::Scatter),
             deps: vec![dst_ref.id(), self.id(), idx.id()],
             ty: VarType::Void,
             size: info.size,
@@ -305,7 +305,7 @@ impl VarRef {
             _ => todo!(),
         };
         push_var(Var {
-            op: Op::Extract(elem),
+            op: Op::KernelOp(KernelOp::Extract(elem)),
             deps: vec![self.id()],
             ty,
             size,
