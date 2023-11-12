@@ -90,7 +90,7 @@ impl backend::BackendDevice for VulkanDevice {
         trace: &crate::tr::Trace,
         graph: &crate::graph::Graph,
     ) -> backend::Result<()> {
-        use crate::graph::Op;
+        use crate::graph::PassOp;
         self.submit_global(|device, cb| {
             for pass in graph.passes.iter() {
                 let buffers = pass
@@ -106,7 +106,7 @@ impl backend::BackendDevice for VulkanDevice {
                     })
                     .collect::<Vec<_>>();
                 match &pass.op {
-                    Op::Kernel { ir, size } => {
+                    PassOp::Kernel { ir, size } => {
                         let pipeline = self.get_pipeline(ir);
 
                         // TODO: look at barriers

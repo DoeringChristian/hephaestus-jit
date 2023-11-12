@@ -77,7 +77,7 @@ impl Graph {
                 })
                 .collect::<Vec<_>>();
             match &pass.op {
-                Op::Kernel { ir, size } => {
+                PassOp::Kernel { ir, size } => {
                     device.execute_ir(ir, *size, &buffers).unwrap();
                 }
                 _ => todo!(),
@@ -108,11 +108,11 @@ pub struct BufferId(usize);
 #[derive(Default, Debug, Clone)]
 pub struct Pass {
     pub buffers: Vec<BufferId>,
-    pub op: Op,
+    pub op: PassOp,
 }
 
 #[derive(Default, Debug, Clone)]
-pub enum Op {
+pub enum PassOp {
     #[default]
     None,
     Kernel {
@@ -229,7 +229,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             .collect::<Vec<_>>();
         let pass = Pass {
             buffers,
-            op: Op::Kernel {
+            op: PassOp::Kernel {
                 ir: Arc::new(compiler.ir),
                 size: trace.var(group[0]).size,
             },

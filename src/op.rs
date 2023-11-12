@@ -22,11 +22,3 @@ pub enum Op {
     DeviceOp(DeviceOp),
     KernelOp(ir::Op),
 }
-impl Op {
-    pub fn is_device_op(&self) -> bool {
-        match self {
-            Op::DeviceOp(_) => true,
-            _ => false,
-        }
-    }
-}
