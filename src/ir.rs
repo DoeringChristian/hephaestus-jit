@@ -5,16 +5,44 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
-use crate::op::{KernelOp, Op};
-
 use crate::vartype::VarType;
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Var {
     pub(crate) ty: VarType,
-    pub(crate) op: KernelOp,
+    pub(crate) op: Op,
     pub(crate) deps: (usize, usize),
     pub(crate) data: u64,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Bop {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Min,
+    Max,
+}
+
+/// Intermediary Representation Specific Operations
+#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
+pub enum Op {
+    #[default]
+    Nop,
+
+    Scatter,
+    Gather,
+    Index,
+    Literal,
+
+    Extract(usize),
+    Construct,
+
+    Bop(Bop),
+
+    // Operations that are only available in IR
+    BufferRef,
 }
 
 #[derive(Debug, Default)]

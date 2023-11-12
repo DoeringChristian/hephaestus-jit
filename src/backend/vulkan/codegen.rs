@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
 use crate::backend::vulkan::glslext::GLSL450Instruction;
-use crate::ir::{VarId, IR};
-use crate::op::{KernelOp, Op};
+use crate::ir::{Bop, Op, VarId, IR};
 use crate::vartype::VarType;
 use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
@@ -178,7 +177,7 @@ impl SpirvBuilder {
             .filter_map(|varid| {
                 let var = ir.var(varid);
                 match var.op {
-                    KernelOp::BufferRef => {
+                    Op::BufferRef => {
                         let ty = self.spirv_ty(&var.ty);
                         let u32_ty = self.type_int(32, 0);
                         let array_len = self.constant_u32(u32_ty, ir.n_buffers as _);
@@ -254,14 +253,14 @@ impl SpirvBuilder {
             let var = ir.var(varid);
             let deps = ir.deps(varid);
             match var.op {
-                KernelOp::Nop => {}
-                KernelOp::Bop(bop) => {
+                Op::Nop => {}
+                Op::Bop(bop) => {
                     let dst = self.get(varid);
                     let lhs = self.get(deps[0]);
                     let rhs = self.get(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
                     match bop {
-                        crate::op::Bop::Add => {
+                        Bop::Add => {
                             if isint(&var.ty) {
                                 self.i_add(ty, Some(dst), lhs, rhs)?;
                             } else if isfloat(&var.ty) {
@@ -270,7 +269,7 @@ impl SpirvBuilder {
                                 todo!()
                             }
                         }
-                        crate::op::Bop::Sub => {
+                        Bop::Sub => {
                             if isint(&var.ty) {
                                 self.i_sub(ty, Some(dst), lhs, rhs)?;
                             } else if isfloat(&var.ty) {
@@ -279,7 +278,7 @@ impl SpirvBuilder {
                                 todo!()
                             }
                         }
-                        crate::op::Bop::Mul => {
+                        Bop::Mul => {
                             if isint(&var.ty) {
                                 self.i_mul(ty, Some(dst), lhs, rhs)?;
                             } else if isfloat(&var.ty) {
@@ -288,7 +287,7 @@ impl SpirvBuilder {
                                 todo!()
                             }
                         }
-                        crate::op::Bop::Div => match var.ty {
+                        Bop::Div => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.s_div(ty, Some(dst), lhs, rhs)?;
                             }
@@ -300,7 +299,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        crate::op::Bop::Min => match var.ty {
+                        Bop::Min => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 glsl_ext!(self; dst: ty = SMin, lhs, rhs);
                             }
@@ -312,7 +311,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        crate::op::Bop::Max => match var.ty {
+                        Bop::Max => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 glsl_ext!(self; dst: ty = SMax, lhs, rhs);
                             }
@@ -326,13 +325,13 @@ impl SpirvBuilder {
                         },
                     }
                 }
-                KernelOp::Construct => {
+                Op::Construct => {
                     let dst = self.get(varid);
                     let ty = self.spirv_ty(&var.ty);
                     let deps = deps.iter().map(|id| self.get(*id)).collect::<Vec<_>>();
                     self.composite_construct(ty, Some(dst), deps)?;
                 }
-                KernelOp::Extract(elem) => {
+                Op::Extract(elem) => {
                     // Store into temporary variable
                     let src_ty = &ir.var(deps[0]).ty;
                     let src_ty = self.spirv_ty(src_ty);
@@ -353,7 +352,7 @@ impl SpirvBuilder {
                     let ptr = self.access_chain(ty_ptr, None, src_var, [elem])?;
                     self.load(ty, Some(dst), ptr, None, None)?;
                 }
-                KernelOp::Scatter => {
+                Op::Scatter => {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
@@ -375,7 +374,7 @@ impl SpirvBuilder {
                     let ptr = self.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
                     self.store(ptr, src, None, None)?;
                 }
-                KernelOp::Gather => {
+                Op::Gather => {
                     let src = deps[0];
                     let idx = deps[1];
                     let buffer_idx = ir.var(src).data;
@@ -393,7 +392,7 @@ impl SpirvBuilder {
                     let ptr = self.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
                     self.load(ty, Some(dst), ptr, None, None)?;
                 }
-                KernelOp::Index => {
+                Op::Index => {
                     let u32_ty = self.type_int(32, 0);
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::Input, u32_ty);
                     let u32_0 = self.constant_u32(u32_ty, 0);
@@ -403,7 +402,7 @@ impl SpirvBuilder {
 
                     self.load(u32_ty, Some(dst), ptr, None, None)?;
                 }
-                KernelOp::Literal => {
+                Op::Literal => {
                     let ty = self.spirv_ty(&var.ty);
                     let c = match &var.ty {
                         VarType::Bool => {
