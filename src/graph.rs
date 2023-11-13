@@ -156,15 +156,20 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     for id in refs.iter().map(|r| r.id()) {
         visit(trace, &mut visited, &mut topo, id);
     }
+    // TODO: Instruction Reordering to acheive better kernel splitting
 
     // Step 2: Put scheduled variables that are groupable into a group:
     let schedule_set = refs.iter().map(|r| r.id()).collect::<HashSet<_>>();
 
+    // TODO: Might be optimizable by using Vec<Range<usize>> instead of Vec<Vec<VarId>>, pointing
+    // into `topo`
     let mut groups = vec![];
     let mut group = vec![];
 
-    // This is a bit of a cheat, but Mitsuba does somethig similar
-    let mut dirty = HashSet::new();
+    // HashMap, tracking the last write (usually scatter) operation to some variable
+    // Mitsuba keeps track using a "dirty" flag in the variable
+    // We might want to do some other tests (same size and inserting sync calls in kernel), which
+    // could reduce the number of kernels generated
     let mut last_write = HashMap::new();
 
     for id in topo.iter() {
@@ -174,39 +179,17 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             groups.push(std::mem::take(&mut group));
             if write {
                 last_write.insert(var.deps[0], *id);
-                dirty.insert(var.deps[0]);
             }
         } else if var.deps.iter().any(|dep_id| {
-            let last_write_id = last_write.get(dep_id);
-            let split_group = if let Some(last_write_id) = last_write_id {
-                true
-                // TODO: Add posibility to insert sync instructions in kernels
-                // This only works if the compiler can inserty sync instrcuctions:
-                // We should be able to write/read from/to the same buffer if we insert a sync
-                // instruction inbetween the two operations in the kernel.
-                // Threfore we can group read/writes with the same (kernel instructions) into the
-                // same group.
-                //
-                // let last_write = trace.var(*last_write_id);
-                // if last_write.size != var.size
-                //     || last_write.op.is_device_op()
-                //     || var.op.is_device_op()
-                // {
-                //     true
-                // } else {
-                //     false
-                // }
-            } else {
-                false
-            };
+            // Split when the accessed variable has a write operation pending
+            let split_group = last_write.contains_key(dep_id);
             last_write.remove(dep_id);
-            split_group
 
-            // let is_dirty = dirty.contains(dep_id);
-            // dirty.remove(dep_id);
-            // is_dirty
+            //Split when The accessed variable is a device operation
+            let split_group = split_group | trace.var(*dep_id).op.is_device_op();
+            split_group
         }) {
-            // Split if trying to access dirty
+            // Split if trying to access variable, that has been written to
             groups.push(std::mem::take(&mut group));
         }
 
