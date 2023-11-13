@@ -162,7 +162,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     let schedule_set = refs.iter().map(|r| r.id()).collect::<HashSet<_>>();
 
     // TODO: Might be optimizable by using Vec<Range<usize>> instead of Vec<Vec<VarId>>, pointing
-    // into `topo`
+    // into `schedule`
     let mut groups = vec![];
     let mut group = vec![];
 
