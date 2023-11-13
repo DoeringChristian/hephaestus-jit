@@ -258,7 +258,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                 continue;
             }
             // Set op and type for next kernel:
-            var.op = op::Op::Buffer;
+            var.op = var.op.resulting_op();
             // var.dirty = false;
 
             // Clear dependencies:
