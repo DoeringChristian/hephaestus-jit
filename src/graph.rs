@@ -165,6 +165,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
 
     // This is a bit of a cheat, but Mitsuba does somethig similar
     let mut dirty = HashSet::new();
+    let mut last_write = HashMap::new();
 
     for id in topo.iter() {
         let var = trace.var(*id);
@@ -172,12 +173,38 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             // Split if ref
             groups.push(std::mem::take(&mut group));
             if write {
+                last_write.insert(var.deps[0], *id);
                 dirty.insert(var.deps[0]);
             }
-        } else if var.deps.iter().any(|id| {
-            let is_dirty = dirty.contains(id);
-            dirty.remove(id);
-            is_dirty
+        } else if var.deps.iter().any(|dep_id| {
+            let last_write_id = last_write.get(dep_id);
+            let split_group = if let Some(last_write_id) = last_write_id {
+                true
+                // TODO: Add posibility to insert sync instructions in kernels
+                // This only works if the compiler can inserty sync instrcuctions:
+                // We should be able to write/read from/to the same buffer if we insert a sync
+                // instruction inbetween the two operations in the kernel.
+                // Threfore we can group read/writes with the same (kernel instructions) into the
+                // same group.
+                //
+                // let last_write = trace.var(*last_write_id);
+                // if last_write.size != var.size
+                //     || last_write.op.is_device_op()
+                //     || var.op.is_device_op()
+                // {
+                //     true
+                // } else {
+                //     false
+                // }
+            } else {
+                false
+            };
+            last_write.remove(dep_id);
+            split_group
+
+            // let is_dirty = dirty.contains(dep_id);
+            // dirty.remove(dep_id);
+            // is_dirty
         }) {
             // Split if trying to access dirty
             groups.push(std::mem::take(&mut group));
