@@ -16,16 +16,10 @@ fn simple() {
 
     dbg!(graph.n_passes());
 
-    dbg!(&i.data().buffer().unwrap().to_host::<u32>());
-    dbg!(&j.data().buffer().unwrap().to_host::<u32>());
-    assert_eq!(
-        i.data().buffer().unwrap().to_host::<u32>().unwrap(),
-        vec![1, 2, 3, 4, 5, 5, 6, 7, 8, 9]
-    );
-    assert_eq!(
-        j.data().buffer().unwrap().to_host::<u32>().unwrap(),
-        vec![0, 1, 2, 3, 4]
-    );
+    dbg!(i.to_vec::<u32>());
+    dbg!(j.to_vec::<u32>());
+    assert_eq!(i.to_vec::<u32>(), vec![1, 2, 3, 4, 5, 5, 6, 7, 8, 9]);
+    assert_eq!(j.to_vec::<u32>(), vec![0, 1, 2, 3, 4]);
 }
 
 #[test]
@@ -37,7 +31,7 @@ fn simple_u16() {
 
     tr::compile().launch(&device);
 
-    dbg!(&c.data().buffer().unwrap().to_host::<u16>().unwrap());
+    dbg!(c.to_vec::<u16>());
 }
 
 #[test]
@@ -56,10 +50,7 @@ fn scatter_chain() {
     graph.launch(&device);
 
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
-    assert_eq!(
-        b1.data().buffer().unwrap().to_host::<i32>().unwrap(),
-        vec![2, 2, 2, 2, 2]
-    );
+    assert_eq!(b1.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
 }
 #[test]
 fn scatter_chain2() {

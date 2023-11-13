@@ -78,7 +78,7 @@ impl Graph {
                 .collect::<Vec<_>>();
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
-                    device.execute_ir(ir, *size, &buffers).unwrap();
+                    device.execute_ir(ir, *size, buffers.as_slice()).unwrap();
                 }
                 _ => todo!(),
             }

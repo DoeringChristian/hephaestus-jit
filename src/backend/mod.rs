@@ -35,10 +35,8 @@ impl Device {
     }
     pub fn create_buffer(&self, size: usize) -> Result<Buffer> {
         let buffer = match self {
-            Device::CudaDevice(device) => Buffer::CudaBuffer(Arc::new(device.create_buffer(size)?)),
-            Device::VulkanDevice(device) => {
-                Buffer::VulkanBuffer(Arc::new(device.create_buffer(size)?))
-            }
+            Device::CudaDevice(device) => Buffer::CudaBuffer(device.create_buffer(size)?),
+            Device::VulkanDevice(device) => Buffer::VulkanBuffer(device.create_buffer(size)?),
         };
         Ok(buffer)
     }
@@ -56,13 +54,13 @@ impl Device {
             Device::VulkanDevice(device) => device.execute_graph(trace, graph),
         }
     }
-    pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[Buffer]) -> Result<()> {
+    pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Buffer]) -> Result<()> {
         match self {
             Device::CudaDevice(device) => {
                 let buffers = buffers
                     .iter()
                     .map(|b| match b {
-                        Buffer::CudaBuffer(buffer) => buffer.as_ref(),
+                        Buffer::CudaBuffer(buffer) => buffer,
                         _ => todo!(),
                     })
                     .collect::<Vec<_>>();
@@ -72,7 +70,7 @@ impl Device {
                 let buffers = buffers
                     .iter()
                     .map(|b| match b {
-                        Buffer::VulkanBuffer(buffer) => buffer.as_ref(),
+                        Buffer::VulkanBuffer(buffer) => buffer,
                         _ => todo!(),
                     })
                     .collect::<Vec<_>>();
@@ -83,10 +81,10 @@ impl Device {
 }
 
 // TODO: we might not need it to be cloneable
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Buffer {
-    CudaBuffer(Arc<CudaBuffer>),
-    VulkanBuffer(Arc<VulkanBuffer>),
+    CudaBuffer(CudaBuffer),
+    VulkanBuffer(VulkanBuffer),
 }
 impl Buffer {
     pub fn size(&self) -> usize {

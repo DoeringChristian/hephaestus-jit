@@ -3,7 +3,7 @@ use crate::backend::Buffer;
 ///
 /// A variable can hold data directly i.e. literals, buffers, textures or acceleration structures.
 ///
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub enum Data {
     #[default]
     None,

@@ -288,12 +288,9 @@ impl VarRef {
     pub fn size(&self) -> usize {
         with_trace(|t| t.var(self.id()).size)
     }
-    pub fn data(&self) -> Data {
-        assert_eq!(self._thread_id, std::thread::current().id());
-        with_trace(|t| t.var(self.id()).data.clone())
-    }
     pub fn to_vec<T: AsVarType + bytemuck::Pod>(&self) -> Vec<T> {
-        self.data().buffer().unwrap().to_host::<T>().unwrap()
+        assert_eq!(self._thread_id, std::thread::current().id());
+        with_trace(|t| t.var(self.id()).data.buffer().unwrap().to_host().unwrap())
     }
     pub fn extract(&self, elem: usize) -> Self {
         let size = self.size();
