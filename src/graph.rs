@@ -174,28 +174,31 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
 
     for id in topo.iter() {
         let var = trace.var(*id);
-        if let crate::op::Op::Ref { mutable: write } = var.op {
-            // Split if ref
+        if var.op.is_device_op() {
+            // Always split on device op (TODO: find more efficient way)
             groups.push(std::mem::take(&mut group));
-            if write {
-                last_write.insert(var.deps[0], *id);
-            }
-        } else if var.deps.iter().any(|dep_id| {
-            // Split when the accessed variable has a write operation pending
-            let split_group = last_write.contains_key(dep_id);
-            last_write.remove(dep_id);
-
-            //Split when The accessed variable is a device operation
-            let split_group = split_group | trace.var(*dep_id).op.is_device_op();
-            split_group
-        }) {
-            // Split if trying to access variable, that has been written to
-            groups.push(std::mem::take(&mut group));
-        }
-
-        if schedule_set.contains(id) {
-            group.push(*id);
+            groups.push(vec![*id]);
         } else {
+            if let crate::op::Op::Ref { mutable: write } = var.op {
+                // Split if ref
+                groups.push(std::mem::take(&mut group));
+                if write {
+                    last_write.insert(var.deps[0], *id);
+                }
+            } else if var.deps.iter().any(|dep_id| {
+                // Split when the accessed variable has a write operation pending
+                let split_group = last_write.contains_key(dep_id);
+                last_write.remove(dep_id);
+
+                split_group
+            }) {
+                // Split if trying to access variable, that has been written to
+                groups.push(std::mem::take(&mut group));
+            }
+
+            if schedule_set.contains(id) {
+                group.push(*id);
+            }
         }
     }
     if !group.is_empty() {
@@ -222,36 +225,32 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();
     for group in groups {
-        let mut compiler = compiler::Compiler::default();
+        if trace.var(group[0]).op.is_device_op() {
+            // Handle Device Ops
+        } else {
+            // Handle Kernel Ops (compile)
+            let mut compiler = compiler::Compiler::default();
 
-        for id in group.iter() {
-            let var = trace.var(*id);
-            match var.op {
-                op::Op::DeviceOp(dop) => todo!(),
-                op::Op::KernelOp(_) => compiler.collect_vars(trace, Some(*id)),
-                _ => todo!(),
-            }
+            compiler.collect_vars(trace, group.iter().cloned());
+
+            let buffers = compiler
+                .buffers
+                .iter()
+                .map(|id| graph_builder.push_buffer(trace, *id))
+                .collect::<Vec<_>>();
+            let pass = Pass {
+                buffers,
+                op: PassOp::Kernel {
+                    ir: Arc::new(compiler.ir),
+                    size: trace.var(group[0]).size,
+                },
+            };
+            graph_builder.push_pass(pass);
         }
-
-        let buffers = compiler
-            .buffers
-            .iter()
-            .map(|id| graph_builder.push_buffer(trace, *id))
-            .collect::<Vec<_>>();
-        let pass = Pass {
-            buffers,
-            op: PassOp::Kernel {
-                ir: Arc::new(compiler.ir),
-                size: trace.var(group[0]).size,
-            },
-        };
-        graph_builder.push_pass(pass);
 
         // Clear Dependecies for schedule variables, so that we don't collect to many in the next
         // iteration
         for id in group {
-            use crate::op;
-
             let var = trace.var_mut(id);
 
             if var.data.is_buffer() {
