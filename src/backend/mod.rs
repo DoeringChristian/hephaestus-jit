@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use cuda::{CudaBuffer, CudaDevice};
-use vulkan::{VulkanBuffer, VulkanDevice};
+use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
 
 use crate::graph::Graph;
 use crate::ir::IR;
@@ -74,6 +74,7 @@ impl Device {
     }
 }
 
+// TODO: we might not need it to be cloneable
 #[derive(Debug, Clone)]
 pub enum Buffer {
     CudaBuffer(Arc<CudaBuffer>),
@@ -100,9 +101,15 @@ impl Buffer {
     }
 }
 
+pub enum Texture {
+    VulkanTexture(Arc<VulkanTexture>),
+}
+
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
+    type Texture: BackendTexture;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
+    fn create_texture(&self, shape: &[usize], channels: usize) -> Result<Self::Texture>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
     fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
         todo!()
@@ -125,6 +132,6 @@ impl AsRef<CudaBuffer> for Buffer {
     }
 }
 
-pub trait Texture {
+pub trait BackendTexture {
     type Device: BackendDevice;
 }

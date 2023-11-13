@@ -28,6 +28,7 @@ pub struct CudaBuffer {
 }
 
 impl BackendDevice for CudaDevice {
+    type Texture = CudaTexture;
     type Buffer = CudaBuffer;
 
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
@@ -76,6 +77,10 @@ impl BackendDevice for CudaDevice {
 
         Ok(())
     }
+
+    fn create_texture(&self, shape: &[usize], channels: usize) -> backend::Result<Self::Texture> {
+        todo!()
+    }
 }
 
 impl BackendBuffer for CudaBuffer {
@@ -98,4 +103,10 @@ impl BackendBuffer for CudaBuffer {
     fn device(&self) -> &Self::Device {
         &self.device
     }
+}
+
+pub struct CudaTexture;
+
+impl backend::BackendTexture for CudaTexture {
+    type Device = CudaDevice;
 }

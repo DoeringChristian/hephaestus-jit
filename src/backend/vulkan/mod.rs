@@ -2,6 +2,7 @@ mod buffer;
 mod codegen;
 mod device;
 mod glslext;
+mod image;
 mod pipeline;
 
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ use ash::vk;
 use buffer::{Buffer, BufferInfo};
 use device::Device;
 use gpu_allocator::MemoryLocation;
+use image::{Image, ImageInfo};
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
@@ -60,6 +62,7 @@ impl std::ops::Deref for VulkanDevice {
 
 impl backend::BackendDevice for VulkanDevice {
     type Buffer = VulkanBuffer;
+    type Texture = VulkanTexture;
 
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
         let info = BufferInfo {
@@ -136,6 +139,10 @@ impl backend::BackendDevice for VulkanDevice {
         });
         Ok(())
     }
+
+    fn create_texture(&self, shape: &[usize], channels: usize) -> backend::Result<Self::Texture> {
+        todo!()
+    }
 }
 
 pub struct VulkanBuffer {
@@ -182,4 +189,13 @@ impl backend::BackendBuffer for VulkanBuffer {
     fn device(&self) -> &Self::Device {
         &self.device
     }
+}
+
+pub struct VulkanTexture {
+    image: Image,
+    device: VulkanDevice,
+}
+
+impl backend::BackendTexture for VulkanTexture {
+    type Device = VulkanDevice;
 }
