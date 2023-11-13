@@ -94,8 +94,8 @@ impl Drop for Image {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ImageInfo {
-    ty: vk::ImageType,
-    width: u32,
-    height: u32,
-    depth: u32,
+    pub ty: vk::ImageType,
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
 }

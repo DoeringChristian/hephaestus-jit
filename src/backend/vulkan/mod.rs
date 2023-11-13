@@ -4,6 +4,8 @@ mod device;
 mod glslext;
 mod image;
 mod pipeline;
+#[cfg(test)]
+mod test;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -141,7 +143,46 @@ impl backend::BackendDevice for VulkanDevice {
     }
 
     fn create_texture(&self, shape: &[usize], channels: usize) -> backend::Result<Self::Texture> {
-        todo!()
+        assert!(
+            shape.len() >= 1 && shape.len() <= 3,
+            "{dim} dimensional textures are not supported.
+                Only 1, 2 and 3 dimensional textures are supported!",
+            dim = shape.len()
+        );
+
+        let images = (0..channels)
+            .step_by(4)
+            .map(|i| {
+                let width = shape.get(0).cloned().unwrap_or(1) as _;
+                let height = shape.get(1).cloned().unwrap_or(1) as _;
+                let depth = shape.get(2).cloned().unwrap_or(1) as _;
+
+                let ty = match shape.len() {
+                    1 => vk::ImageType::TYPE_1D,
+                    2 => vk::ImageType::TYPE_2D,
+                    3 => vk::ImageType::TYPE_3D,
+                    _ => todo!(),
+                };
+
+                let image = Image::create(
+                    self,
+                    &ImageInfo {
+                        ty,
+                        width,
+                        height,
+                        depth,
+                    },
+                );
+
+                image
+            })
+            .collect::<Vec<_>>();
+        Ok(Self::Texture {
+            images,
+            device: self.clone(),
+            shape: Vec::from(shape),
+            channels,
+        })
     }
 }
 
@@ -192,8 +233,10 @@ impl backend::BackendBuffer for VulkanBuffer {
 }
 
 pub struct VulkanTexture {
-    image: Image,
+    images: Vec<Image>,
     device: VulkanDevice,
+    shape: Vec<usize>,
+    channels: usize,
 }
 
 impl backend::BackendTexture for VulkanTexture {

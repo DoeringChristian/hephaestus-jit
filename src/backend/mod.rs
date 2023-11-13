@@ -42,6 +42,14 @@ impl Device {
         };
         Ok(buffer)
     }
+    fn create_texture(&self, shape: &[usize], channels: usize) -> Result<Texture> {
+        match self {
+            Device::CudaDevice(_) => todo!(),
+            Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(Arc::new(
+                device.create_texture(shape, channels)?,
+            ))),
+        }
+    }
     pub fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
         match self {
             Device::CudaDevice(_) => todo!(),
