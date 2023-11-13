@@ -1,7 +1,6 @@
 mod cuda;
 mod vulkan;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::fmt::Debug;
 
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
@@ -43,9 +42,9 @@ impl Device {
     fn create_texture(&self, shape: &[usize], channels: usize) -> Result<Texture> {
         match self {
             Device::CudaDevice(_) => todo!(),
-            Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(Arc::new(
+            Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(
                 device.create_texture(shape, channels)?,
-            ))),
+            )),
         }
     }
     pub fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
@@ -107,8 +106,9 @@ impl Buffer {
     }
 }
 
+#[derive(Debug)]
 pub enum Texture {
-    VulkanTexture(Arc<VulkanTexture>),
+    VulkanTexture(VulkanTexture),
 }
 
 pub trait BackendDevice: Clone {
@@ -138,6 +138,6 @@ impl AsRef<CudaBuffer> for Buffer {
     }
 }
 
-pub trait BackendTexture {
+pub trait BackendTexture: Debug {
     type Device: BackendDevice;
 }

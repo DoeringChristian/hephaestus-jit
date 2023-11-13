@@ -232,6 +232,7 @@ impl backend::BackendBuffer for VulkanBuffer {
     }
 }
 
+#[derive(Debug)]
 pub struct VulkanTexture {
     images: Vec<Image>,
     device: VulkanDevice,

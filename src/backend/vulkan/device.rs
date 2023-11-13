@@ -39,7 +39,7 @@ unsafe extern "system" fn vulkan_debug_callback(
     vk::FALSE
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Device(Arc<InternalDevice>);
 impl Device {
     pub fn create(index: usize) -> Self {
@@ -73,6 +73,11 @@ impl Deref for Device {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+impl Debug for Device {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Device")
     }
 }
 

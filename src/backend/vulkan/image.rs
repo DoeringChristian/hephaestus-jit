@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 
 use ash::vk;
@@ -6,7 +7,6 @@ pub use gpu_allocator::MemoryLocation;
 
 use super::device::Device;
 
-#[derive(Debug)]
 pub struct Image {
     allocation: Option<Allocation>,
     device: Device,
@@ -70,6 +70,12 @@ impl Deref for Image {
 
     fn deref(&self) -> &Self::Target {
         &self.image
+    }
+}
+
+impl Debug for Image {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.image)
     }
 }
 

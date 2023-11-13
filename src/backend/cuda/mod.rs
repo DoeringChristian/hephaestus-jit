@@ -105,6 +105,7 @@ impl BackendBuffer for CudaBuffer {
     }
 }
 
+#[derive(Debug)]
 pub struct CudaTexture;
 
 impl backend::BackendTexture for CudaTexture {
