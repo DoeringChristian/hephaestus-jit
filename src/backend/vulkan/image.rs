@@ -19,6 +19,7 @@ pub struct Image {
 impl Image {
     pub fn create(device: &Device, info: &ImageInfo) -> Self {
         log::trace!("Creating Image with {info:?}");
+        let queue_family_indices = [device.queue_family_index];
         let create_info = vk::ImageCreateInfo::builder()
             .image_type(info.ty)
             .format(vk::Format::R8G8B8A8_SRGB)
@@ -29,6 +30,7 @@ impl Image {
             })
             .mip_levels(1)
             .array_layers(1)
+            .queue_family_indices(&queue_family_indices)
             .tiling(vk::ImageTiling::OPTIMAL)
             .usage(vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST)
             .sharing_mode(vk::SharingMode::CONCURRENT)
