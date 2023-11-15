@@ -6,6 +6,7 @@ use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
 use super::device::Device;
+use super::VulkanDevice;
 
 pub struct Image {
     allocation: Option<Allocation>,
@@ -99,7 +100,15 @@ impl Drop for Image {
 }
 
 impl Image {
-    pub fn from_buffer(&self, cb: vk::CommandBuffer, device: &Device) {
+    pub fn from_buffer(&self, cb: vk::CommandBuffer, device: &VulkanDevice) {
+        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+        #[repr(C)]
+        struct Copy2D {
+            width: u32,
+            height: u32,
+            src_pitch: u32,
+            dst_pitch: u32,
+        }
         todo!()
     }
 }
