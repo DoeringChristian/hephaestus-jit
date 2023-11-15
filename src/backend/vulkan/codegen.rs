@@ -60,13 +60,13 @@ impl SpirvBuilder {
     pub fn module(self) -> dr::Module {
         self.b.module()
     }
-    pub fn assemble(&mut self, trace: &IR, entry_point: &str) -> Result<(), dr::Error> {
+    pub fn assemble(&mut self, ir: &IR, entry_point: &str) -> Result<(), dr::Error> {
         // let param_layout = ParamLayout::generate(trace);
         // dbg!(&param_layout);
 
         self.id();
 
-        self.acquire_ids(trace);
+        self.acquire_ids(ir);
 
         self.set_version(1, 5);
 
@@ -98,7 +98,8 @@ impl SpirvBuilder {
             [dr::Operand::BuiltIn(spirv::BuiltIn::GlobalInvocationId)],
         );
 
-        let storage_vars = self.assemble_storage_vars(trace);
+        let storage_vars = self.assemble_storage_vars(ir);
+        let samplers = self.assemble_samplers(ir);
 
         let func = self.begin_function(
             void,
@@ -109,7 +110,7 @@ impl SpirvBuilder {
 
         self.begin_block(None)?;
 
-        self.assemble_vars(trace, global_invocation_id)?;
+        self.assemble_vars(ir, global_invocation_id)?;
 
         self.ret()?;
         self.end_function()?;
@@ -117,6 +118,7 @@ impl SpirvBuilder {
         let interface = [global_invocation_id]
             .into_iter()
             .chain(storage_vars.into_iter())
+            .chain(samplers.into_iter())
             .collect::<Vec<_>>();
 
         self.entry_point(
@@ -170,6 +172,56 @@ impl SpirvBuilder {
                 struct_ty
             }
         }
+    }
+    fn assemble_samplers(&mut self, ir: &IR) -> Vec<u32> {
+        ir.var_ids()
+            .filter_map(|varid| {
+                let var = ir.var(varid);
+                match var.op {
+                    Op::TextureRef => {
+                        let dst = self.get(varid);
+
+                        let ty = self.spirv_ty(&var.ty);
+                        let ty_image = self.type_image(
+                            ty,
+                            spirv::Dim::Dim2D,
+                            0,
+                            0,
+                            0,
+                            1,
+                            spirv::ImageFormat::Unknown,
+                            None,
+                        );
+                        let ty_sampled_image = self.type_sampled_image(ty_image);
+
+                        let ty_array = self.type_array(ty_sampled_image, ir.n_textures as _);
+                        let ty_ptr =
+                            self.type_pointer(None, spirv::StorageClass::UniformConstant, ty_array);
+
+                        self.variable(
+                            ty_ptr,
+                            Some(dst),
+                            spirv::StorageClass::UniformConstant,
+                            None,
+                        );
+
+                        self.decorate(
+                            dst,
+                            spirv::Decoration::DescriptorSet,
+                            [dr::Operand::LiteralInt32(0)],
+                        );
+                        self.decorate(
+                            dst,
+                            spirv::Decoration::Binding,
+                            [dr::Operand::LiteralInt32(1)],
+                        );
+
+                        Some(dst)
+                    }
+                    _ => None,
+                }
+            })
+            .collect()
     }
     // TODO: Spirv Builder
     fn assemble_storage_vars(&mut self, ir: &IR) -> Vec<u32> {
@@ -336,6 +388,56 @@ impl SpirvBuilder {
                     let dst = self.get(varid);
                     let src = self.get(deps[0]);
                     self.composite_extract(ty, Some(dst), src, [elem as u32])?;
+                }
+                Op::TexLookup => {
+                    let img = deps[0];
+
+                    let img_idx = ir.var(img).data;
+
+                    let ty = self.spirv_ty(&var.ty);
+                    let ty_image = self.type_image(
+                        ty,
+                        spirv::Dim::Dim2D,
+                        0,
+                        0,
+                        0,
+                        1,
+                        spirv::ImageFormat::Unknown,
+                        None,
+                    );
+                    let ty_sampled_image = self.type_sampled_image(ty_image);
+                    let ptr_ty = self.type_pointer(
+                        None,
+                        spirv::StorageClass::UniformConstant,
+                        ty_sampled_image,
+                    );
+
+                    let int_ty = self.type_int(32, 0);
+                    let img_idx = self.constant_u32(int_ty, img_idx as _);
+
+                    let img = self.get(img);
+                    let ptr = self.access_chain(ptr_ty, None, img, [img_idx])?;
+
+                    let img_ty = 0;
+                    let coord = 0;
+
+                    let ty_v4 = self.type_vector(ty, 4);
+
+                    let float_ty = self.type_float(32);
+                    let float_0 = self.constant_f32(float_ty, 0.);
+
+                    let img = self.load(img_ty, None, ptr, None, None)?;
+
+                    let dst = self.get(varid);
+                    let sample = self.image_sample_explicit_lod(
+                        ty_v4,
+                        // None,
+                        Some(dst),
+                        img,
+                        coord,
+                        spirv::ImageOperands::LOD,
+                        [dr::Operand::IdRef(float_0)],
+                    )?;
                 }
                 Op::Scatter => {
                     let dst = deps[0];

@@ -308,6 +308,33 @@ impl VarRef {
             ..Default::default()
         })
     }
+    pub fn tex_lookup(&self, pos: &[&VarRef]) -> Self {
+        assert!(pos.len() >= 1 && pos.len() <= 3);
+        let size = max_size(pos.iter().cloned());
+
+        let ty = self.ty();
+        let src_ref = self.get_ref();
+
+        let deps = [src_ref.id()]
+            .into_iter()
+            .chain(pos.iter().map(|r| r.id()))
+            .collect::<Vec<_>>();
+
+        let composite = push_var(Var {
+            op: Op::KernelOp(ir::Op::TexLookup),
+            deps,
+            ty,
+            size,
+            ..Default::default()
+        });
+        composite
+    }
+    pub fn shape_channels(&self) -> ([usize; 3], usize) {
+        with_trace(|trace| match trace.var(self.id()).op.resulting_op() {
+            Op::Texture { shape, channels } => (shape, channels),
+            _ => todo!(),
+        })
+    }
 }
 
 // Device Ops

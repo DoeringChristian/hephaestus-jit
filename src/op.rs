@@ -46,6 +46,7 @@ impl Op {
     pub fn resulting_op(self) -> Self {
         match self {
             Op::Buffer => Op::Buffer,
+            Op::Texture { .. } => self.clone(),
             Op::KernelOp(_) => Op::Buffer,
             Op::DeviceOp(dop) => dop.resulting_op(),
             _ => todo!(),

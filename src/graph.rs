@@ -17,6 +17,7 @@ pub struct GraphBuilder {
 
 impl GraphBuilder {
     pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
+        assert_eq!(trace.var(id).op.resulting_op(), op::Op::Buffer);
         // TODO: use better method to get VarRef
         *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
@@ -27,13 +28,11 @@ impl GraphBuilder {
             buffer_id
         })
     }
-    pub fn push_texture(
-        &mut self,
-        trace: &mut trace::Trace,
-        id: trace::VarId,
-        shape: [usize; 3],
-        channels: usize,
-    ) -> TextureId {
+    pub fn push_texture(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> TextureId {
+        let (shape, channels) = match trace.var(id).op.resulting_op() {
+            op::Op::Texture { shape, channels } => (shape, channels),
+            _ => todo!(),
+        };
         // TODO: use better method to get VarRef
         *self.id2texture.entry(id).or_insert_with(|| {
             let texture_id = TextureId(self.textures.len());
@@ -139,10 +138,13 @@ impl Graph {
     pub fn launch(&self, device: &Device) {
         trace::with_trace(|trace| {
             for desc in self.buffers.iter() {
+                log::trace!("{:#?}", trace);
                 let var = trace.var_mut(desc.var.id());
+                log::trace!("{var:#?}");
 
                 let size = var.size;
                 let ty_size = var.ty.size();
+                log::trace!("Creating Buffer for {desc:?} {size:?} {ty_size:?}");
                 if !var.data.is_storage() {
                     var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
                 }
@@ -311,7 +313,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                         // TODO: Generalize
                         let src = trace.var(id).deps[0];
                         let src = graph_builder.push_buffer(trace, src);
-                        let dst = graph_builder.push_texture(trace, id, shape, channels);
+                        let dst = graph_builder.push_texture(trace, id);
                         graph_builder.push_pass(Pass {
                             buffers: vec![src],
                             textures: vec![dst],
@@ -332,9 +334,14 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                 .iter()
                 .map(|id| graph_builder.push_buffer(trace, *id))
                 .collect::<Vec<_>>();
+            let textures = compiler
+                .textures
+                .iter()
+                .map(|id| graph_builder.push_texture(trace, *id))
+                .collect::<Vec<_>>();
             let pass = Pass {
                 buffers,
-                textures: vec![],
+                textures,
                 op: PassOp::Kernel {
                     ir: Arc::new(compiler.ir),
                     size: trace.var(group[0]).size,

@@ -31,6 +31,8 @@ pub struct Compiler {
     visited: HashMap<trace::VarId, ir::VarId>,
     id2buffer: HashMap<trace::VarId, usize>,
     pub buffers: Vec<trace::VarId>,
+    id2texture: HashMap<trace::VarId, usize>,
+    pub textures: Vec<trace::VarId>,
 }
 
 impl Compiler {
@@ -71,6 +73,7 @@ impl Compiler {
             );
         }
         self.ir.n_buffers = self.buffers.len();
+        self.ir.n_textures = self.textures.len();
     }
     pub fn collect(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
         if self.visited.contains_key(&id) {
@@ -141,22 +144,46 @@ impl Compiler {
 
         let var = trace.var(id);
 
-        let buffer_id = self.push_buffer(id);
-        self.ir.push_var(
-            ir::Var {
-                op: ir::Op::BufferRef,
-                ty: var.ty.clone(),
-                data: buffer_id as _,
-                ..Default::default()
-            },
-            [],
-        )
+        match trace.var(id).op.resulting_op() {
+            Op::Buffer => {
+                let buffer_id = self.push_buffer(id);
+                self.ir.push_var(
+                    ir::Var {
+                        op: ir::Op::BufferRef,
+                        ty: var.ty.clone(),
+                        data: buffer_id as _,
+                        ..Default::default()
+                    },
+                    [],
+                )
+            }
+            Op::Texture { .. } => {
+                let texture_id = self.push_texture(id);
+                self.ir.push_var(
+                    ir::Var {
+                        op: ir::Op::TextureRef,
+                        ty: var.ty.clone(),
+                        data: texture_id as _,
+                        ..Default::default()
+                    },
+                    [],
+                )
+            }
+            _ => todo!(),
+        }
     }
     pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
         *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = self.buffers.len();
             self.buffers.push(id);
             buffer_id
+        })
+    }
+    pub fn push_texture(&mut self, id: trace::VarId) -> usize {
+        *self.id2texture.entry(id).or_insert_with(|| {
+            let texture_id = self.textures.len();
+            self.textures.push(id);
+            texture_id
         })
     }
 }

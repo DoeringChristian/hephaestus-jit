@@ -39,10 +39,13 @@ pub enum Op {
     Extract(usize),
     Construct,
 
+    TexLookup,
+
     Bop(Bop),
 
     // Operations that are only available in IR
     BufferRef,
+    TextureRef,
 }
 
 #[derive(Debug, Default)]
@@ -50,6 +53,7 @@ pub struct IR {
     pub(crate) vars: Vec<Var>,
     pub(crate) deps: Vec<VarId>,
     pub(crate) n_buffers: usize,
+    pub(crate) n_textures: usize,
     pub(crate) hash: Mutex<Option<u64>>,
 }
 
@@ -89,6 +93,7 @@ impl IR {
             self.vars.hash(&mut hasher);
             self.deps.hash(&mut hasher);
             self.n_buffers.hash(&mut hasher);
+            self.n_textures.hash(&mut hasher);
             hasher.finish()
         })
     }

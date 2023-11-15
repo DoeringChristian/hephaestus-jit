@@ -123,15 +123,22 @@ fn texture() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
-    let b = tr::sized_literal(1f32, 10 * 10 * 10 * 10);
+    let b = tr::sized_literal(1f32, 10 * 10 * 10 * 4);
 
-    let tex = b.texture([10, 10, 10], 10);
+    let tex = b.texture([10, 10, 10], 4);
 
-    tex.schedule();
+    let x = tr::sized_literal(0.5f32, 2);
+    let y = tr::sized_literal(0.5f32, 2);
+    let z = tr::sized_literal(0.5f32, 2);
+
+    let v = tex.tex_lookup(&[&x, &y, &z]);
+
+    v.schedule();
 
     tr::compile().launch(&device);
 
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
+    dbg!(v.to_vec::<f32>());
 }

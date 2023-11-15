@@ -106,7 +106,8 @@ impl backend::BackendDevice for VulkanDevice {
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> backend::Result<()> {
         let pipeline = self.compile_ir(ir);
 
-        pipeline.launch_fenced(num, buffers.iter().map(|b| &b.buffer));
+        todo!();
+        // pipeline.launch_fenced(num, buffers.iter().map(|b| &b.buffer));
 
         Ok(())
     }
@@ -124,10 +125,15 @@ impl backend::BackendDevice for VulkanDevice {
                     .iter()
                     .map(|id| {
                         let buffer = graph.buffer(trace, *id);
-                        match buffer {
-                            backend::Buffer::VulkanBuffer(buffer) => buffer,
-                            _ => todo!(),
-                        }
+                        &buffer.vulkan().unwrap().buffer
+                    })
+                    .collect::<Vec<_>>();
+                let images = pass
+                    .textures
+                    .iter()
+                    .map(|id| {
+                        let buffer = graph.texture(trace, *id);
+                        &buffer.vulkan().unwrap().images[0]
                     })
                     .collect::<Vec<_>>();
                 match &pass.op {
@@ -149,12 +155,7 @@ impl backend::BackendDevice for VulkanDevice {
                                 &[],
                             );
                         }
-                        pipeline.submit_to_cbuffer(
-                            cb,
-                            device,
-                            *size,
-                            buffers.iter().map(|b| &b.buffer),
-                        );
+                        pipeline.submit_to_cbuffer(cb, device, *size, &buffers, &images);
                     }
                     PassOp::DeviceOp(op) => match op {
                         DeviceOp::Max => todo!(),

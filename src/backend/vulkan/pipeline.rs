@@ -8,6 +8,7 @@ use crate::ir::IR;
 
 use super::buffer::Buffer;
 use super::device::Device;
+use super::image::Image;
 use ash::vk;
 
 #[derive(Debug)]
@@ -128,6 +129,7 @@ impl Pipeline {
         let spirv = codegen::assemble_trace(ir, "main").unwrap();
 
         let num_buffers = ir.n_buffers;
+        let num_textures = ir.n_textures;
 
         unsafe {
             let shader_info = vk::ShaderModuleCreateInfo::builder()
@@ -138,7 +140,7 @@ impl Pipeline {
             // Create Descriptor Pool
             let desc_sizes = [vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: num_buffers as _,
+                descriptor_count: (num_buffers + num_textures) as _,
             }];
             let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
                 .pool_sizes(&desc_sizes)
@@ -148,13 +150,22 @@ impl Pipeline {
                 .unwrap();
 
             // Create Layout
-            let desc_layout_bindings = [vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: num_buffers as _,
-                stage_flags: vk::ShaderStageFlags::ALL,
-                ..Default::default()
-            }];
+            let desc_layout_bindings = [
+                vk::DescriptorSetLayoutBinding {
+                    binding: 0,
+                    descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: num_buffers as _,
+                    stage_flags: vk::ShaderStageFlags::ALL,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: 1,
+                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: num_textures as _,
+                    stage_flags: vk::ShaderStageFlags::ALL,
+                    ..Default::default()
+                },
+            ];
             let desc_info =
                 vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
 
@@ -263,21 +274,79 @@ impl Pipeline {
         cb: vk::CommandBuffer,
         device: &Device,
         num: usize,
-        buffers: impl Iterator<Item = &'a Buffer>,
+        buffers: &[&Buffer],
+        images: &[&Image],
     ) {
+        let samplers = images
+            .iter()
+            .map(|image| {
+                let info = vk::SamplerCreateInfo::builder()
+                    .mag_filter(vk::Filter::LINEAR)
+                    .min_filter(vk::Filter::LINEAR)
+                    .address_mode_u(vk::SamplerAddressMode::REPEAT)
+                    .address_mode_v(vk::SamplerAddressMode::REPEAT)
+                    .address_mode_w(vk::SamplerAddressMode::REPEAT)
+                    .unnormalized_coordinates(false)
+                    .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+                    .build();
+                unsafe { device.create_sampler(&info, None).unwrap() }
+            })
+            .collect::<Vec<_>>();
+
+        let image_views = images
+            .iter()
+            .map(|image| {
+                let info = vk::ImageViewCreateInfo::builder()
+                    .image(***image)
+                    .view_type(match image.info().ty {
+                        vk::ImageType::TYPE_1D => vk::ImageViewType::TYPE_1D,
+                        vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,
+                        vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
+                        _ => todo!(),
+                    })
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    });
+                unsafe { device.create_image_view(&info, None).unwrap() }
+            })
+            .collect::<Vec<_>>();
+
+        let desc_image_infos = images
+            .iter()
+            .enumerate()
+            .map(|(i, image)| vk::DescriptorImageInfo {
+                sampler: samplers[i],
+                image_view: image_views[i],
+                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            })
+            .collect::<Vec<_>>();
+
         let desc_buffer_infos = buffers
+            .iter()
             .map(|buffer| vk::DescriptorBufferInfo {
                 buffer: buffer.buffer(),
                 offset: 0,
                 range: buffer.info().size as _,
             })
             .collect::<Vec<_>>();
-        let write_desc_sets = [vk::WriteDescriptorSet::builder()
-            .dst_set(self.desc_sets[0])
-            .buffer_info(&desc_buffer_infos)
-            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-            .dst_binding(0)
-            .build()];
+        let write_desc_sets = [
+            vk::WriteDescriptorSet::builder()
+                .dst_set(self.desc_sets[0])
+                .buffer_info(&desc_buffer_infos)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .dst_binding(0)
+                .build(),
+            vk::WriteDescriptorSet::builder()
+                .dst_set(self.desc_sets[0])
+                .image_info(&desc_image_infos)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .dst_binding(1)
+                .build(),
+        ];
 
         unsafe {
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
@@ -294,11 +363,11 @@ impl Pipeline {
             device.cmd_dispatch(cb, num as _, 1, 1);
         }
     }
-    pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
-        self.device.submit_global(|device, cb| {
-            self.submit_to_cbuffer(cb, device, num, buffers);
-        })
-    }
+    // pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
+    //     self.device.submit_global(|device, cb| {
+    //         self.submit_to_cbuffer(cb, device, num, buffers, [].iter());
+    //     })
+    // }
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
