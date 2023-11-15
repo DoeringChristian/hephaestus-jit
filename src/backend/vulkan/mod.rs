@@ -114,19 +114,20 @@ impl backend::BackendDevice for VulkanDevice {
                     PassOp::Kernel { ir, size } => {
                         let pipeline = self.get_pipeline(ir);
 
-                        // TODO: look at barriers
-                        let barrier = vk::MemoryBarrier2KHR {
-                            src_stage_mask: vk::PipelineStageFlags2::COMPUTE_SHADER_KHR,
-                            src_access_mask: vk::AccessFlags2::SHADER_WRITE,
-                            dst_stage_mask: vk::PipelineStageFlags2::COMPUTE_SHADER_KHR,
-                            dst_access_mask: vk::AccessFlags2::SHADER_WRITE,
-                            ..Default::default()
-                        };
-                        let info = vk::DependencyInfoKHR::builder()
-                            .memory_barriers(&[barrier])
-                            .build();
+                        let memory_barriers = [vk::MemoryBarrier::builder()
+                            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                            .build()];
                         unsafe {
-                            device.cmd_pipeline_barrier2(cb, &info);
+                            device.cmd_pipeline_barrier(
+                                cb,
+                                vk::PipelineStageFlags::COMPUTE_SHADER,
+                                vk::PipelineStageFlags::COMPUTE_SHADER,
+                                vk::DependencyFlags::empty(),
+                                &memory_barriers,
+                                &[],
+                                &[],
+                            );
                         }
                         pipeline.submit_to_cbuffer(
                             cb,

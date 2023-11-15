@@ -98,6 +98,12 @@ impl Drop for Image {
     }
 }
 
+impl Image {
+    pub fn from_buffer(&self, cb: vk::CommandBuffer, device: &Device) {
+        todo!()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct ImageInfo {
     pub ty: vk::ImageType,
