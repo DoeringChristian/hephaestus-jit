@@ -432,6 +432,5 @@ impl VulkanTexture {
             }
             log::trace!("Finished recording Buffer2Texture Operation.");
         }
-        todo!();
     }
 }
