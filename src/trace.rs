@@ -3,7 +3,7 @@ use std::thread::ThreadId;
 
 use crate::data::Data;
 use crate::ir;
-use crate::op::Op;
+use crate::op::{DeviceOp, Op};
 use crate::vartype::{AsVarType, VarType};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
@@ -305,6 +305,23 @@ impl VarRef {
             deps: vec![self.id()],
             ty,
             size,
+            ..Default::default()
+        })
+    }
+}
+
+// Device Ops
+impl VarRef {
+    pub fn texture(&self, shape: [usize; 3], channels: usize) -> Self {
+        let size = self.size();
+        assert_eq!(shape[0] * shape[1] * shape[2] * channels, size);
+        assert_eq!(self.ty(), VarType::F32);
+
+        push_var(Var {
+            op: Op::DeviceOp(DeviceOp::Buffer2Texture { shape, channels }),
+            deps: vec![self.id()],
+            ty: VarType::F32,
+            size: 0,
             ..Default::default()
         })
     }

@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use crate::backend;
 use crate::backend::vulkan::pipeline::{Binding, BufferWriteInfo, DescSetLayout, WriteSet};
 use crate::ir::IR;
+use crate::op::DeviceOp;
 use ash::vk;
 use buffer::{Buffer, BufferInfo};
 use device::Device;
@@ -73,6 +74,15 @@ impl std::ops::Deref for VulkanDevice {
     }
 }
 
+impl VulkanDevice {
+    fn device_op(&self, cb: vk::CommandBuffer, op: DeviceOp) {
+        match op {
+            DeviceOp::Max => todo!(),
+            DeviceOp::Buffer2Texture { .. } => todo!(),
+        }
+    }
+}
+
 impl backend::BackendDevice for VulkanDevice {
     type Buffer = VulkanBuffer;
     type Texture = VulkanTexture;
@@ -113,8 +123,7 @@ impl backend::BackendDevice for VulkanDevice {
                     .buffers
                     .iter()
                     .map(|id| {
-                        let desc = graph.buffer_desc(*id);
-                        let buffer = trace.var(desc.var.id()).data.buffer().unwrap().clone();
+                        let buffer = graph.buffer(trace, *id);
                         match buffer {
                             backend::Buffer::VulkanBuffer(buffer) => buffer,
                             _ => todo!(),
@@ -147,6 +156,14 @@ impl backend::BackendDevice for VulkanDevice {
                             buffers.iter().map(|b| &b.buffer),
                         );
                     }
+                    PassOp::DeviceOp(op) => match op {
+                        DeviceOp::Max => todo!(),
+                        DeviceOp::Buffer2Texture { .. } => {
+                            let src = graph.buffer(trace, pass.buffers[0]).vulkan().unwrap();
+                            let dst = graph.texture(trace, pass.textures[0]).vulkan().unwrap();
+                            dst.copy_from_buffer(cb, self, &src.buffer);
+                        }
+                    },
                     _ => todo!(),
                 }
             }
@@ -154,9 +171,10 @@ impl backend::BackendDevice for VulkanDevice {
         Ok(())
     }
 
-    fn create_texture(&self, shape: &[usize], channels: usize) -> backend::Result<Self::Texture> {
+    fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {
+        let dim = shape.iter().take_while(|d| **d > 0).count();
         assert!(
-            shape.len() >= 1 && shape.len() <= 3,
+            dim >= 1 && dim <= 3,
             "{dim} dimensional textures are not supported.
                 Only 1, 2 and 3 dimensional textures are supported!",
             dim = shape.len()
@@ -165,11 +183,11 @@ impl backend::BackendDevice for VulkanDevice {
         let images = (0..channels)
             .step_by(4)
             .map(|i| {
-                let width = shape.get(0).cloned().unwrap_or(1) as _;
-                let height = shape.get(1).cloned().unwrap_or(1) as _;
-                let depth = shape.get(2).cloned().unwrap_or(1) as _;
+                let width = shape[0].min(1) as _;
+                let height = shape[1].min(1) as _;
+                let depth = shape[2].min(1) as _;
 
-                let ty = match shape.len() {
+                let ty = match dim {
                     1 => vk::ImageType::TYPE_1D,
                     2 => vk::ImageType::TYPE_2D,
                     3 => vk::ImageType::TYPE_3D,
@@ -257,14 +275,7 @@ impl backend::BackendTexture for VulkanTexture {
 }
 
 impl VulkanTexture {
-    fn copy_from_buffer(
-        &self,
-        cb: vk::CommandBuffer,
-        device: &VulkanDevice,
-        src: &Buffer,
-        offset: u32,
-        n_channels_global: u32,
-    ) {
+    fn copy_from_buffer(&self, cb: vk::CommandBuffer, device: &VulkanDevice, src: &Buffer) {
         #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
         #[repr(C)]
         struct Copy2D {

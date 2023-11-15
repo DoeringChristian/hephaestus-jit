@@ -1,4 +1,4 @@
-use crate::backend::Buffer;
+use crate::backend::{Buffer, Texture};
 
 ///
 /// A variable can hold data directly i.e. literals, buffers, textures or acceleration structures.
@@ -9,6 +9,7 @@ pub enum Data {
     None,
     Literal(u64),
     Buffer(Buffer),
+    Texture(Texture),
 }
 impl Data {
     pub fn is_none(&self) -> bool {
@@ -30,7 +31,7 @@ impl Data {
         }
     }
     pub fn is_storage(&self) -> bool {
-        self.is_buffer()
+        self.is_buffer() || self.is_texture()
     }
     pub fn literal(&self) -> Option<u64> {
         match self {
@@ -41,6 +42,19 @@ impl Data {
     pub fn buffer(&self) -> Option<&Buffer> {
         match self {
             Self::Buffer(buf) => Some(buf),
+            _ => None,
+        }
+    }
+
+    pub fn is_texture(&self) -> bool {
+        match self {
+            Self::Texture(_) => true,
+            _ => false,
+        }
+    }
+    pub fn texture(&self) -> Option<&Texture> {
+        match self {
+            Self::Texture(tex) => Some(tex),
             _ => None,
         }
     }

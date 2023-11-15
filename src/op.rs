@@ -6,11 +6,13 @@ use crate::ir;
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
     Max,
+    Buffer2Texture { shape: [usize; 3], channels: usize },
 }
 impl DeviceOp {
     pub fn resulting_op(self) -> Op {
         match self {
             DeviceOp::Max => Op::Buffer,
+            DeviceOp::Buffer2Texture { shape, channels } => Op::Texture { shape, channels },
         }
     }
 }
@@ -24,8 +26,12 @@ pub enum Op {
     Ref {
         mutable: bool,
     },
-    // TODO: Split into VarType, DeviceOp, KernelOp?
+    // TODO: Split into Evaluated, DeviceOp, KernelOp?
     Buffer,
+    Texture {
+        shape: [usize; 3],
+        channels: usize,
+    },
     DeviceOp(DeviceOp),
     KernelOp(ir::Op),
 }

@@ -39,7 +39,7 @@ impl Device {
         };
         Ok(buffer)
     }
-    fn create_texture(&self, shape: &[usize], channels: usize) -> Result<Texture> {
+    pub fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Texture> {
         match self {
             Device::CudaDevice(_) => todo!(),
             Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(
@@ -104,6 +104,18 @@ impl Buffer {
             Buffer::VulkanBuffer(buffer) => Device::VulkanDevice(buffer.device().clone()),
         }
     }
+    pub fn vulkan(&self) -> Option<&VulkanBuffer> {
+        match self {
+            Self::VulkanBuffer(buffer) => Some(buffer),
+            _ => None,
+        }
+    }
+    pub fn cuda(&self) -> Option<&CudaBuffer> {
+        match self {
+            Self::CudaBuffer(buffer) => Some(buffer),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -111,11 +123,20 @@ pub enum Texture {
     VulkanTexture(VulkanTexture),
 }
 
+impl Texture {
+    pub fn vulkan(&self) -> Option<&VulkanTexture> {
+        match self {
+            Self::VulkanTexture(buffer) => Some(buffer),
+            _ => None,
+        }
+    }
+}
+
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
-    fn create_texture(&self, shape: &[usize], channels: usize) -> Result<Self::Texture>;
+    fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
     fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
         todo!()

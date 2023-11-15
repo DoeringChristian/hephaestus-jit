@@ -117,3 +117,20 @@ fn test_struct() {
     dbg!(a.to_vec::<u8>());
     dbg!(b.to_vec::<u32>());
 }
+
+#[test]
+fn texture() {
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let b = tr::sized_literal(1f32, 10 * 10 * 10 * 10);
+
+    let tex = b.texture([10, 10, 10], 10);
+
+    tex.schedule();
+
+    tr::compile().launch(&device);
+
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+}

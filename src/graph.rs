@@ -1,3 +1,4 @@
+use crate::backend;
 use crate::backend::Device;
 use crate::data::Data;
 use crate::{compiler, ir, op, trace};
@@ -9,6 +10,8 @@ use std::sync::Arc;
 pub struct GraphBuilder {
     buffers: Vec<BufferDesc>,
     id2buffer: HashMap<trace::VarId, BufferId>,
+    textures: Vec<TextureDesc>,
+    id2texture: HashMap<trace::VarId, TextureId>,
     passes: Vec<Pass>,
 }
 
@@ -24,6 +27,24 @@ impl GraphBuilder {
             buffer_id
         })
     }
+    pub fn push_texture(
+        &mut self,
+        trace: &mut trace::Trace,
+        id: trace::VarId,
+        shape: [usize; 3],
+        channels: usize,
+    ) -> TextureId {
+        // TODO: use better method to get VarRef
+        *self.id2texture.entry(id).or_insert_with(|| {
+            let texture_id = TextureId(self.textures.len());
+            self.textures.push(TextureDesc {
+                shape,
+                channels,
+                var: trace.ref_borrow(id),
+            });
+            texture_id
+        })
+    }
     pub fn push_pass(&mut self, pass: Pass) -> PassId {
         let id = PassId(self.passes.len());
         self.passes.push(pass);
@@ -33,6 +54,7 @@ impl GraphBuilder {
         Graph {
             passes: self.passes,
             buffers: self.buffers,
+            textures: self.textures,
             ..Default::default()
         }
     }
@@ -42,6 +64,7 @@ impl GraphBuilder {
 pub struct Graph {
     pub passes: Vec<Pass>,
     pub buffers: Vec<BufferDesc>,
+    pub textures: Vec<TextureDesc>,
     pub schedule: Vec<trace::VarRef>,
 }
 
@@ -49,6 +72,27 @@ impl Graph {
     pub fn buffer_desc(&self, buffer_id: BufferId) -> &BufferDesc {
         &self.buffers[buffer_id.0]
     }
+    pub fn buffer<'a>(
+        &'a self,
+        trace: &'a trace::Trace,
+        buffer_id: BufferId,
+    ) -> &'a backend::Buffer {
+        let desc = self.buffer_desc(buffer_id);
+        trace.var(desc.var.id()).data.buffer().unwrap()
+    }
+
+    pub fn texture_desc(&self, texture_id: TextureId) -> &TextureDesc {
+        &self.textures[texture_id.0]
+    }
+    pub fn texture<'a>(
+        &'a self,
+        trace: &'a trace::Trace,
+        texture_id: TextureId,
+    ) -> &'a backend::Texture {
+        let desc = self.texture_desc(texture_id);
+        trace.var(desc.var.id()).data.texture().unwrap()
+    }
+
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
@@ -63,8 +107,16 @@ impl Graph {
 
             let size = var.size;
             let ty_size = var.ty.size();
-            if var.data.is_none() | var.data.is_literal() {
-                var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
+            if !var.data.is_storage() {
+                match var.op.resulting_op() {
+                    op::Op::Buffer => {
+                        var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap())
+                    }
+                    op::Op::Texture { shape, channels } => {
+                        var.data = Data::Texture(device.create_texture(shape, channels).unwrap())
+                    }
+                    _ => todo!(),
+                }
             }
         }
         for pass in self.passes.iter() {
@@ -91,8 +143,20 @@ impl Graph {
 
                 let size = var.size;
                 let ty_size = var.ty.size();
-                if var.data.is_none() | var.data.is_literal() {
+                if !var.data.is_storage() {
                     var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
+                }
+            }
+            for desc in self.textures.iter() {
+                let var = trace.var_mut(desc.var.id());
+
+                let (shape, channels) = match var.op {
+                    op::Op::Texture { shape, channels } => (shape, channels),
+                    _ => todo!(),
+                };
+
+                if !var.data.is_storage() {
+                    var.data = Data::Texture(device.create_texture(shape, channels).unwrap());
                 }
             }
             device.execute_graph(trace, self).unwrap();
@@ -102,12 +166,16 @@ impl Graph {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PassId(usize);
+
 #[derive(Debug, Clone, Copy)]
 pub struct BufferId(usize);
+#[derive(Debug, Clone, Copy)]
+pub struct TextureId(usize);
 
 #[derive(Default, Debug, Clone)]
 pub struct Pass {
     pub buffers: Vec<BufferId>,
+    pub textures: Vec<TextureId>,
     pub op: PassOp,
 }
 
@@ -124,6 +192,12 @@ pub enum PassOp {
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
     pub size: usize,
+    pub var: trace::VarRef,
+}
+#[derive(Debug, Clone)]
+pub struct TextureDesc {
+    pub shape: [usize; 3],
+    pub channels: usize,
     pub var: trace::VarRef,
 }
 
@@ -227,6 +301,26 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     for group in groups {
         if trace.var(group[0]).op.is_device_op() {
             // Handle Device Ops
+            assert_eq!(group.len(), 1);
+            let id = group[0];
+
+            match trace.var(id).op {
+                op::Op::DeviceOp(op) => match op {
+                    op::DeviceOp::Max => todo!(),
+                    op::DeviceOp::Buffer2Texture { shape, channels } => {
+                        // TODO: Generalize
+                        let src = trace.var(id).deps[0];
+                        let src = graph_builder.push_buffer(trace, src);
+                        let dst = graph_builder.push_texture(trace, id, shape, channels);
+                        graph_builder.push_pass(Pass {
+                            buffers: vec![src],
+                            textures: vec![dst],
+                            op: PassOp::DeviceOp(op),
+                        })
+                    }
+                },
+                _ => todo!(),
+            };
         } else {
             // Handle Kernel Ops (compile)
             let mut compiler = compiler::Compiler::default();
@@ -240,6 +334,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                 .collect::<Vec<_>>();
             let pass = Pass {
                 buffers,
+                textures: vec![],
                 op: PassOp::Kernel {
                     ir: Arc::new(compiler.ir),
                     size: trace.var(group[0]).size,
