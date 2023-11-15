@@ -138,10 +138,16 @@ impl Pipeline {
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
-            let desc_sizes = [vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: (num_buffers + num_textures) as _,
-            }];
+            let desc_sizes = [
+                vk::DescriptorPoolSize {
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: num_buffers as _,
+                },
+                vk::DescriptorPoolSize {
+                    ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: num_textures as _,
+                },
+            ];
             let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
                 .pool_sizes(&desc_sizes)
                 .max_sets(1);

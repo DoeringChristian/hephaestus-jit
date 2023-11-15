@@ -310,19 +310,22 @@ impl VarRef {
     }
     pub fn tex_lookup(&self, pos: &[&VarRef]) -> Self {
         assert!(pos.len() >= 1 && pos.len() <= 3);
-        let size = max_size(pos.iter().cloned());
 
+        let pos = vec(pos);
+
+        let size = pos.size();
+
+        let (shape, channels) = self.shape_channels();
         let ty = self.ty();
+        let ty = VarType::Vec {
+            ty: Box::new(ty),
+            num: channels,
+        };
         let src_ref = self.get_ref();
-
-        let deps = [src_ref.id()]
-            .into_iter()
-            .chain(pos.iter().map(|r| r.id()))
-            .collect::<Vec<_>>();
 
         let composite = push_var(Var {
             op: Op::KernelOp(ir::Op::TexLookup),
-            deps,
+            deps: vec![src_ref.id(), pos.id()],
             ty,
             size,
             ..Default::default()

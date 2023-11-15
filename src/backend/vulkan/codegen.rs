@@ -194,7 +194,10 @@ impl SpirvBuilder {
                         );
                         let ty_sampled_image = self.type_sampled_image(ty_image);
 
-                        let ty_array = self.type_array(ty_sampled_image, ir.n_textures as _);
+                        let ty_int = self.type_int(32, 0);
+                        let length = self.constant_u32(ty_int, ir.n_textures as _);
+
+                        let ty_array = self.type_array(ty_sampled_image, length);
                         let ty_ptr =
                             self.type_pointer(None, spirv::StorageClass::UniformConstant, ty_array);
 
@@ -391,10 +394,11 @@ impl SpirvBuilder {
                 }
                 Op::TexLookup => {
                     let img = deps[0];
+                    let coord = self.get(deps[1]);
 
                     let img_idx = ir.var(img).data;
 
-                    let ty = self.spirv_ty(&var.ty);
+                    let ty = self.spirv_ty(ir.var_ty(img));
                     let ty_image = self.type_image(
                         ty,
                         spirv::Dim::Dim2D,
@@ -418,15 +422,12 @@ impl SpirvBuilder {
                     let img = self.get(img);
                     let ptr = self.access_chain(ptr_ty, None, img, [img_idx])?;
 
-                    let img_ty = 0;
-                    let coord = 0;
-
                     let ty_v4 = self.type_vector(ty, 4);
 
                     let float_ty = self.type_float(32);
                     let float_0 = self.constant_f32(float_ty, 0.);
 
-                    let img = self.load(img_ty, None, ptr, None, None)?;
+                    let img = self.load(ty_sampled_image, None, ptr, None, None)?;
 
                     let dst = self.get(varid);
                     let sample = self.image_sample_explicit_lod(
