@@ -310,6 +310,7 @@ impl Pipeline {
                         vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
                         _ => todo!(),
                     })
+                    .format(vk::Format::R8G8B8A8_SRGB)
                     .subresource_range(vk::ImageSubresourceRange {
                         aspect_mask: vk::ImageAspectFlags::COLOR,
                         base_mip_level: 0,
