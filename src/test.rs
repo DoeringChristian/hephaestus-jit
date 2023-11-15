@@ -120,6 +120,7 @@ fn test_struct() {
 
 #[test]
 fn texture() {
+    pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
     let b = tr::sized_literal(1f32, 10 * 10 * 10 * 10);

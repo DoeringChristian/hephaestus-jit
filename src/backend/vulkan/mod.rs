@@ -325,6 +325,7 @@ impl VulkanTexture {
                 .mapped_slice_mut()
                 .copy_from_slice(bytemuck::cast_slice(&[cfg]));
 
+            log::trace!("Lazy Compiling Pipeline.");
             let pipeline = device.get_pipeline(&PipelineDesc {
                 code: inline_spirv::include_spirv!("src/backend/vulkan/kernels/copy2d.glsl", comp),
                 desc_set_layouts: &[DescSetLayout {
@@ -344,6 +345,7 @@ impl VulkanTexture {
                     ],
                 }],
             });
+            log::trace!("Submitting Pipeline to command buffer.");
             pipeline.submit(
                 cb,
                 &device,
@@ -428,6 +430,7 @@ impl VulkanTexture {
                     &image_memory_barreirs,
                 );
             }
+            log::trace!("Finished recording Buffer2Texture Operation.");
         }
         todo!();
     }

@@ -18,6 +18,7 @@ pub struct Image {
 
 impl Image {
     pub fn create(device: &Device, info: &ImageInfo) -> Self {
+        log::trace!("Creating Image with {info:?}");
         let create_info = vk::ImageCreateInfo::builder()
             .image_type(info.ty)
             .format(vk::Format::R8G8B8A8_SRGB)

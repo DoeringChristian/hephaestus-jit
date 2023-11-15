@@ -213,10 +213,10 @@ impl Pipeline {
         write_sets: &[WriteSet],
         extent: (u32, u32, u32),
     ) {
-        let write_desc_sets = write_sets
+        let buffer_infos = write_sets
             .iter()
             .map(|write_set| {
-                let buffer_infos = write_set
+                write_set
                     .buffers
                     .iter()
                     .map(|info| vk::DescriptorBufferInfo {
@@ -224,20 +224,28 @@ impl Pipeline {
                         offset: 0,
                         range: info.buffer.info().size as _,
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let write_desc_sets = write_sets
+            .iter()
+            .enumerate()
+            .map(|(i, write_set)| {
                 vk::WriteDescriptorSet::builder()
-                    .dst_set(self.desc_sets[0])
-                    .buffer_info(&buffer_infos)
+                    .dst_set(self.desc_sets[write_set.set as usize])
+                    .buffer_info(&buffer_infos[i])
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                     .dst_binding(0)
                     .build()
             })
             .collect::<Vec<_>>();
-
         unsafe {
+            log::trace!("Updating Descriptor Sets{write_desc_sets:#?}");
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
 
+            log::trace!("Binding Pipeline.");
             device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            log::trace!("Binding Descriptor Sets.");
             device.cmd_bind_descriptor_sets(
                 cb,
                 vk::PipelineBindPoint::COMPUTE,
@@ -246,6 +254,7 @@ impl Pipeline {
                 &self.desc_sets,
                 &[],
             );
+            log::trace!("Dispatching Pipeline.");
             device.cmd_dispatch(cb, extent.0, extent.1, extent.2);
         }
     }
