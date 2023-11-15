@@ -1,4 +1,7 @@
+// TODO: Unify precompiled and IR Pipeline workflow
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
+use std::hash::{Hash, Hasher};
 
 use crate::backend::vulkan::codegen;
 use crate::ir::IR;
@@ -214,7 +217,7 @@ impl Pipeline {
             .iter()
             .map(|write_set| {
                 let buffer_infos = write_set
-                    .buffer_info
+                    .buffers
                     .iter()
                     .map(|info| vk::DescriptorBufferInfo {
                         buffer: info.buffer.buffer(),
@@ -293,7 +296,7 @@ impl Pipeline {
 pub struct Binding {
     pub binding: u32,
     pub count: u32,
-    pub ty: vk::DescriptorType,
+    // pub ty: vk::DescriptorType,
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
@@ -306,15 +309,22 @@ pub struct PipelineDesc<'a> {
     pub code: &'a [u32],
     pub desc_set_layouts: &'a [DescSetLayout<'a>],
 }
+impl<'a> PipelineDesc<'a> {
+    pub fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        <Self as Hash>::hash(self, &mut hasher);
+        hasher.finish()
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
-pub struct BufferInfo<'a> {
-    buffer: &'a Buffer,
+pub struct BufferWriteInfo<'a> {
+    pub buffer: &'a Buffer,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct WriteSet<'a> {
-    set: u32,
-    binding: u32,
-    buffer_info: &'a [BufferInfo<'a>],
+    pub set: u32,
+    pub binding: u32,
+    pub buffers: &'a [BufferWriteInfo<'a>],
 }

@@ -5,6 +5,7 @@ use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
+use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
 use super::VulkanDevice;
 
@@ -64,6 +65,12 @@ impl Image {
             info: *info,
         }
     }
+    pub fn n_texels(&self) -> usize {
+        self.info.width as usize * self.info.height as usize * self.info.depth as usize
+    }
+    pub fn info(&self) -> &ImageInfo {
+        &self.info
+    }
 }
 
 impl Deref for Image {
@@ -100,7 +107,14 @@ impl Drop for Image {
 }
 
 impl Image {
-    pub fn from_buffer(&self, cb: vk::CommandBuffer, device: &VulkanDevice) {
+    pub fn from_buffer(
+        &self,
+        cb: vk::CommandBuffer,
+        device: &VulkanDevice,
+        src: &Buffer,
+        offset: u32,
+        n_channels_global: u32,
+    ) {
         #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
         #[repr(C)]
         struct Copy2D {
@@ -108,7 +122,20 @@ impl Image {
             height: u32,
             src_pitch: u32,
             dst_pitch: u32,
+            src_offset: u32,
+            dst_offset: u32,
         }
+
+        let cfg_buffer = Buffer::create(
+            device,
+            BufferInfo {
+                size: std::mem::size_of::<Copy2D>(),
+                alignment: 0,
+                usage: vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+            },
+        );
+
         todo!()
     }
 }
