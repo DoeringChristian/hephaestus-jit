@@ -192,10 +192,10 @@ impl backend::BackendDevice for VulkanDevice {
             _ => todo!(),
         };
         let format = match channels {
-            1 => vk::Format::R8_SRGB,
-            2 => vk::Format::R8G8_SRGB,
-            3 => vk::Format::R8G8B8_SRGB,
-            4 => vk::Format::R8G8B8A8_SRGB,
+            1 => vk::Format::R32_SFLOAT,
+            2 => vk::Format::R32G32_SFLOAT,
+            3 => vk::Format::R32G32B32_SFLOAT,
+            4 => vk::Format::R32G32B32A32_SFLOAT,
             _ => todo!(),
         };
 
