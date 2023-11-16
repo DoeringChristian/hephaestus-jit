@@ -118,6 +118,9 @@ impl backend::BackendDevice for VulkanDevice {
         graph: &crate::graph::Graph,
     ) -> backend::Result<()> {
         use crate::graph::PassOp;
+        // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
+        // submitted
+        // FIX: Add a struct that can collect Arcs to those resources
         self.submit_global(|device, cb| {
             for pass in graph.passes.iter() {
                 let buffers = pass
