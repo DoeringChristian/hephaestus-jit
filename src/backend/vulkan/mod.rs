@@ -147,8 +147,8 @@ impl backend::BackendDevice for VulkanDevice {
                         unsafe {
                             device.cmd_pipeline_barrier(
                                 cb,
-                                vk::PipelineStageFlags::COMPUTE_SHADER,
-                                vk::PipelineStageFlags::COMPUTE_SHADER,
+                                vk::PipelineStageFlags::ALL_COMMANDS,
+                                vk::PipelineStageFlags::ALL_COMMANDS,
                                 vk::DependencyFlags::empty(),
                                 &memory_barriers,
                                 &[],
@@ -204,9 +204,11 @@ impl backend::BackendDevice for VulkanDevice {
             &ImageInfo {
                 ty,
                 format,
-                width,
-                height,
-                depth,
+                extent: vk::Extent3D {
+                    width,
+                    height,
+                    depth,
+                },
             },
         );
 

@@ -316,6 +316,7 @@ impl VarRef {
         let size = pos.size();
 
         let (shape, channels) = self.shape_channels();
+        assert!(channels <= 4);
         let ty = self.ty();
         let ty = VarType::Vec {
             ty: Box::new(ty),
@@ -343,6 +344,8 @@ impl VarRef {
 // Device Ops
 impl VarRef {
     pub fn texture(&self, shape: &[usize], channels: usize) -> Self {
+        self.schedule();
+
         let size = self.size();
         assert_eq!(shape.iter().fold(1, |a, b| a * b) * channels, size);
         assert_eq!(self.ty(), VarType::F32);
