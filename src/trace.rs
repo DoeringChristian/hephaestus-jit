@@ -342,10 +342,17 @@ impl VarRef {
 
 // Device Ops
 impl VarRef {
-    pub fn texture(&self, shape: [usize; 3], channels: usize) -> Self {
+    pub fn texture(&self, shape: &[usize], channels: usize) -> Self {
         let size = self.size();
-        assert_eq!(shape[0] * shape[1] * shape[2] * channels, size);
+        assert_eq!(shape.iter().fold(1, |a, b| a * b) * channels, size);
         assert_eq!(self.ty(), VarType::F32);
+
+        let shape = [
+            *shape.get(0).unwrap_or(&0),
+            *shape.get(1).unwrap_or(&0),
+            *shape.get(2).unwrap_or(&0),
+        ];
+        log::trace!("Recording Texture with {shape:?}");
 
         push_var(Var {
             op: Op::DeviceOp(DeviceOp::Buffer2Texture { shape, channels }),

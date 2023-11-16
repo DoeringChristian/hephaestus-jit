@@ -182,9 +182,9 @@ impl backend::BackendDevice for VulkanDevice {
         );
         assert!(channels <= 4);
 
-        let width = shape[0].min(1) as _;
-        let height = shape[1].min(1) as _;
-        let depth = shape[2].min(1) as _;
+        let width = shape[0].max(1) as _;
+        let height = shape[1].max(1) as _;
+        let depth = shape[2].max(1) as _;
         let ty = match dim {
             1 => vk::ImageType::TYPE_1D,
             2 => vk::ImageType::TYPE_2D,

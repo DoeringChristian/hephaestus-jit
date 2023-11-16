@@ -33,9 +33,12 @@ impl Image {
             .array_layers(1)
             .queue_family_indices(&queue_family_indices)
             .tiling(vk::ImageTiling::OPTIMAL)
-            .usage(vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST)
-            .sharing_mode(vk::SharingMode::CONCURRENT)
-            .initial_layout(vk::ImageLayout::UNDEFINED);
+            .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .build();
+        log::trace!("Creating VkImage with {create_info:#?}");
 
         let image = unsafe { device.create_image(&create_info, None).unwrap() };
 
@@ -83,13 +86,22 @@ impl Image {
         }
     }
     pub fn copy_from_buffer(&self, cb: vk::CommandBuffer, device: &Device, src: &Buffer) {
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
+        // let memory_barriers = [vk::MemoryBarrier::builder()
+        //     .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+        //     .dst_access_mask(vk::AccessFlags::SHADER_READ)
+        //     .build()];
         let image_memory_barreirs = [vk::ImageMemoryBarrier::builder()
             .old_layout(vk::ImageLayout::UNDEFINED)
             .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
             .image(self.image)
             .build()];
         unsafe {
@@ -98,7 +110,7 @@ impl Image {
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::empty(),
-                &memory_barriers,
+                &[],
                 &[],
                 &image_memory_barreirs,
             );
@@ -108,6 +120,12 @@ impl Image {
                 width: self.info().width,
                 height: self.info().height,
                 depth: self.info().depth,
+            })
+            .image_subresource(vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
             })
             .build();
         unsafe {
@@ -120,13 +138,22 @@ impl Image {
             );
         }
 
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
+        // let memory_barriers = [vk::MemoryBarrier::builder()
+        //     .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+        //     .dst_access_mask(vk::AccessFlags::SHADER_READ)
+        //     .build()];
         let image_memory_barreirs = [vk::ImageMemoryBarrier::builder()
             .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
             .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
             .image(self.image)
             .build()];
         unsafe {
@@ -135,11 +162,14 @@ impl Image {
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::empty(),
-                &memory_barriers,
+                &[],
                 &[],
                 &image_memory_barreirs,
             );
         }
+    }
+    pub fn default_sampler(&self) -> vk::Sampler {
+        self.sampler
     }
     pub fn n_texels(&self) -> usize {
         self.info.width as usize * self.info.height as usize * self.info.depth as usize
@@ -168,6 +198,7 @@ impl Drop for Image {
         if let Some(allocation) = self.allocation.take() {
             unsafe {
                 self.device.destroy_image(self.image, None);
+                self.device.destroy_sampler(self.sampler, None);
             }
 
             self.device
@@ -179,40 +210,6 @@ impl Drop for Image {
                 .free(allocation)
                 .unwrap();
         }
-    }
-}
-
-impl Image {
-    pub fn from_buffer(
-        &self,
-        cb: vk::CommandBuffer,
-        device: &VulkanDevice,
-        src: &Buffer,
-        offset: u32,
-        n_channels_global: u32,
-    ) {
-        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-        #[repr(C)]
-        struct Copy2D {
-            width: u32,
-            height: u32,
-            src_pitch: u32,
-            dst_pitch: u32,
-            src_offset: u32,
-            dst_offset: u32,
-        }
-
-        let cfg_buffer = Buffer::create(
-            device,
-            BufferInfo {
-                size: std::mem::size_of::<Copy2D>(),
-                alignment: 0,
-                usage: vk::BufferUsageFlags::STORAGE_BUFFER,
-                memory_location: MemoryLocation::CpuToGpu,
-            },
-        );
-
-        todo!()
     }
 }
 

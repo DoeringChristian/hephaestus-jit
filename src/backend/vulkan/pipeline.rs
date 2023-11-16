@@ -283,22 +283,6 @@ impl Pipeline {
         buffers: &[&Buffer],
         images: &[&Image],
     ) {
-        let samplers = images
-            .iter()
-            .map(|image| {
-                let info = vk::SamplerCreateInfo::builder()
-                    .mag_filter(vk::Filter::LINEAR)
-                    .min_filter(vk::Filter::LINEAR)
-                    .address_mode_u(vk::SamplerAddressMode::REPEAT)
-                    .address_mode_v(vk::SamplerAddressMode::REPEAT)
-                    .address_mode_w(vk::SamplerAddressMode::REPEAT)
-                    .unnormalized_coordinates(false)
-                    .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
-                    .build();
-                unsafe { device.create_sampler(&info, None).unwrap() }
-            })
-            .collect::<Vec<_>>();
-
         let image_views = images
             .iter()
             .map(|image| {
@@ -310,7 +294,7 @@ impl Pipeline {
                         vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
                         _ => todo!(),
                     })
-                    .format(vk::Format::R8G8B8A8_SRGB)
+                    .format(image.info().format)
                     .subresource_range(vk::ImageSubresourceRange {
                         aspect_mask: vk::ImageAspectFlags::COLOR,
                         base_mip_level: 0,
@@ -326,7 +310,7 @@ impl Pipeline {
             .iter()
             .enumerate()
             .map(|(i, image)| vk::DescriptorImageInfo {
-                sampler: samplers[i],
+                sampler: image.default_sampler(),
                 image_view: image_views[i],
                 image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             })
