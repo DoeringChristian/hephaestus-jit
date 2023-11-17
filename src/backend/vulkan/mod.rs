@@ -224,6 +224,31 @@ impl backend::BackendDevice for VulkanDevice {
             channels,
         })
     }
+
+    fn create_buffer_from_slice<T: bytemuck::Pod>(
+        &self,
+        slice: &[T],
+    ) -> backend::Result<Self::Buffer> {
+        let size = slice.len() * std::mem::size_of::<T>();
+        let buffer = self.create_buffer(size)?;
+
+        let info = BufferInfo {
+            size,
+            alignment: 0,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
+            memory_location: MemoryLocation::GpuToCpu,
+        };
+        let staging = Buffer::create(&self.device, info);
+        self.device.submit_global(|ctx| unsafe {
+            let region = vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: size as _,
+            };
+            ctx.cmd_copy_buffer(ctx.cb, staging.buffer(), buffer.buffer.buffer(), &[region]);
+        });
+        Ok(buffer)
+    }
 }
 
 pub struct VulkanBuffer {
@@ -247,9 +272,7 @@ impl backend::BackendBuffer for VulkanBuffer {
         let info = BufferInfo {
             size,
             alignment: 0,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
             memory_location: MemoryLocation::GpuToCpu,
         };
         let staging = Buffer::create(&self.device, info);

@@ -143,3 +143,41 @@ fn texture() {
     });
     dbg!(v.to_vec::<f32>());
 }
+#[test]
+fn conditionals() {
+    pretty_env_logger::try_init().ok();
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let dst = tr::sized_literal(true, 100);
+
+    dst.schedule();
+
+    let graph = tr::compile();
+    insta::assert_debug_snapshot!(graph);
+    graph.launch(&device);
+
+    dbg!(&dst.to_vec::<u8>());
+}
+#[test]
+fn conditional_scatter() {
+    pretty_env_logger::try_init().ok();
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let dst = tr::sized_literal(0, 10);
+    let active = tr::array(
+        &[
+            true, true, false, false, true, false, true, false, true, false,
+        ],
+        &device,
+    );
+
+    tr::literal(1).scatter(&dst, &tr::index(10), &active);
+
+    dst.schedule();
+
+    let graph = tr::compile();
+    insta::assert_debug_snapshot!(graph);
+    graph.launch(&device);
+
+    dbg!(&dst.to_vec::<u8>());
+}

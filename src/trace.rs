@@ -1,10 +1,11 @@
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::thread::ThreadId;
 
 use crate::data::Data;
-use crate::ir;
 use crate::op::{DeviceOp, Op};
 use crate::vartype::{AsVarType, VarType};
+use crate::{backend, ir};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
@@ -78,10 +79,14 @@ impl Drop for Trace {
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(DefaultKey);
 
-#[derive(Debug)]
 pub struct VarRef {
     id: VarId,
     _thread_id: ThreadId,
+}
+impl Debug for VarRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VarRef").field("id", &self.id).finish()
+    }
 }
 
 impl VarRef {
@@ -159,6 +164,9 @@ pub fn index(size: usize) -> VarRef {
         ..Default::default()
     })
 }
+pub fn literal<T: AsVarType>(val: T) -> VarRef {
+    sized_literal(val, 0)
+}
 pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     let ty = T::var_ty();
     let mut data = 0;
@@ -171,8 +179,19 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
         ..Default::default()
     })
 }
-pub fn literal<T: AsVarType>(val: T) -> VarRef {
-    sized_literal(val, 0)
+pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
+    let ty = T::var_ty();
+    let size = slice.len();
+    let slice: &[u8] =
+        unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const _, slice.len() * ty.size()) };
+    let data = device.create_buffer_from_slice(slice).unwrap();
+    push_var(Var {
+        op: Op::Buffer,
+        size,
+        ty,
+        data: Data::Buffer(data),
+        ..Default::default()
+    })
 }
 fn max_size<'a>(refs: impl Iterator<Item = &'a VarRef>) -> usize {
     refs.map(|r| r.size()).reduce(|s0, s1| s0.max(s1)).unwrap()
@@ -253,13 +272,13 @@ impl VarRef {
     pub fn scatter(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
         // It is important that dst is schedules
         dst.schedule();
-        let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
+        let size = max_size([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
         let res = push_var(Var {
             op: Op::KernelOp(ir::Op::Scatter),
             deps: vec![dst_ref.id(), self.id(), idx.id(), active.id()],
             ty: VarType::Void,
-            size: info.size,
+            size,
             ..Default::default()
         });
         res.schedule(); // Auto schedule

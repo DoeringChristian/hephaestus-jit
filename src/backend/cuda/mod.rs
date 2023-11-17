@@ -81,6 +81,13 @@ impl BackendDevice for CudaDevice {
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {
         todo!()
     }
+
+    fn create_buffer_from_slice<T: bytemuck::Pod>(
+        &self,
+        slice: &[T],
+    ) -> backend::Result<Self::Buffer> {
+        todo!()
+    }
 }
 
 impl BackendBuffer for CudaBuffer {

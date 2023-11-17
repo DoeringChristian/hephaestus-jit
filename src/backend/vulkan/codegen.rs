@@ -38,9 +38,15 @@ fn isint(ty: &VarType) -> bool {
 }
 
 #[derive(Default)]
+/// A wrapper arround `dr::Builder` to generate spriv code.
+///
+/// * `b`: Builder from `rspriv`
+/// * `spirv_vars`: Mapping from VarId -> Spirv Id
+/// * `glsl_ext`: GLSL_EXT libarary loaded by default
 struct SpirvBuilder {
     b: dr::Builder,
-    spirv_vars: Vec<u32>,
+    // spirv_vars: Vec<u32>,
+    spriv_regs: HashMap<VarId, u32>,
     glsl_ext: u32,
 }
 impl Deref for SpirvBuilder {
@@ -66,7 +72,7 @@ impl SpirvBuilder {
 
         self.id();
 
-        self.acquire_ids(ir);
+        // self.acquire_ids(ir);
 
         self.set_version(1, 5);
 
@@ -132,18 +138,18 @@ impl SpirvBuilder {
 
         Ok(())
     }
-    fn acquire_ids(&mut self, trace: &IR) {
-        let vars = trace.vars.iter().map(|_| self.id()).collect::<Vec<_>>();
-        self.spirv_vars = vars;
+    // fn acquire_ids(&mut self, trace: &IR) {
+    //     let vars = trace.vars.iter().map(|_| self.id()).collect::<Vec<_>>();
+    //     self.spirv_vars = vars;
+    // }
+    fn reg(&self, id: VarId) -> u32 {
+        self.spriv_regs[&id]
     }
-    fn get(&self, id: VarId) -> u32 {
-        self.spirv_vars[id.0]
-    }
-    fn if_block<F: FnOnce(&mut Self) -> Result<(), dr::Error>>(
+    fn if_block<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
         &mut self,
         cond: u32,
         f: F,
-    ) -> Result<(), dr::Error> {
+    ) -> Result<T, dr::Error> {
         let ty_bool = self.type_bool();
         let bool_true = self.constant_true(ty_bool);
 
@@ -174,12 +180,12 @@ impl SpirvBuilder {
 
         self.begin_block(Some(start_label))?;
 
-        f(self)?;
+        let res = f(self)?;
 
         self.branch(end_label).unwrap();
 
         self.begin_block(Some(end_label))?;
-        Ok(())
+        Ok(res)
     }
     fn spirv_ty(&mut self, ty: &VarType) -> u32 {
         match ty {
@@ -221,8 +227,6 @@ impl SpirvBuilder {
                 let var = ir.var(varid);
                 match var.op {
                     Op::TextureRef => {
-                        let dst = self.get(varid);
-
                         let ty = self.spirv_ty(&var.ty);
                         let ty_image = self.type_image(
                             ty,
@@ -243,25 +247,23 @@ impl SpirvBuilder {
                         let ty_ptr =
                             self.type_pointer(None, spirv::StorageClass::UniformConstant, ty_array);
 
-                        self.variable(
-                            ty_ptr,
-                            Some(dst),
-                            spirv::StorageClass::UniformConstant,
-                            None,
-                        );
+                        let res =
+                            self.variable(ty_ptr, None, spirv::StorageClass::UniformConstant, None);
 
                         self.decorate(
-                            dst,
+                            res,
                             spirv::Decoration::DescriptorSet,
                             [dr::Operand::LiteralInt32(0)],
                         );
                         self.decorate(
-                            dst,
+                            res,
                             spirv::Decoration::Binding,
                             [dr::Operand::LiteralInt32(1)],
                         );
 
-                        Some(dst)
+                        self.spriv_regs.insert(varid, res);
+                        dbg!(res);
+                        Some(res)
                     }
                     _ => None,
                 }
@@ -275,10 +277,14 @@ impl SpirvBuilder {
                 let var = ir.var(varid);
                 match var.op {
                     Op::BufferRef => {
-                        let ty = self.spirv_ty(&var.ty);
+                        let ty = match var.ty {
+                            VarType::Bool => &VarType::U8,
+                            _ => &var.ty,
+                        };
+                        let spriv_ty = self.spirv_ty(&ty);
                         let u32_ty = self.type_int(32, 0);
                         let array_len = self.constant_u32(u32_ty, ir.n_buffers as _);
-                        let rta_ty = self.type_runtime_array(ty);
+                        let rta_ty = self.type_runtime_array(spriv_ty);
                         let struct_ty = self.type_struct([rta_ty]);
                         let array_ty = self.type_array(struct_ty, array_len);
 
@@ -292,27 +298,31 @@ impl SpirvBuilder {
                         self.decorate(
                             rta_ty,
                             rspirv::spirv::Decoration::ArrayStride,
-                            [dr::Operand::LiteralInt32(var.ty.size() as _)],
+                            [dr::Operand::LiteralInt32(ty.size() as _)],
                         );
 
                         let ptr_ty =
                             self.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
 
-                        let dst = self.get(varid);
+                        // let dst = self.get(varid);
 
-                        self.variable(ptr_ty, Some(dst), spirv::StorageClass::StorageBuffer, None);
+                        let res =
+                            self.variable(ptr_ty, None, spirv::StorageClass::StorageBuffer, None);
 
                         self.decorate(
-                            dst,
+                            res,
                             spirv::Decoration::DescriptorSet,
                             [dr::Operand::LiteralInt32(0)],
                         );
                         self.decorate(
-                            dst,
+                            res,
                             spirv::Decoration::Binding,
                             [dr::Operand::LiteralInt32(0)],
                         );
-                        Some(dst)
+
+                        self.spriv_regs.insert(varid, res);
+                        dbg!(res);
+                        Some(res)
                     }
                     _ => None,
                 }
@@ -349,94 +359,93 @@ impl SpirvBuilder {
         for varid in ir.var_ids() {
             let var = ir.var(varid);
             let deps = ir.deps(varid);
-            match var.op {
-                Op::Nop => {}
+            let res = match var.op {
+                Op::Nop => 0,
                 Op::Bop(bop) => {
-                    let dst = self.get(varid);
-                    let lhs = self.get(deps[0]);
-                    let rhs = self.get(deps[1]);
+                    let res = self.id();
+                    let lhs = self.reg(deps[0]);
+                    let rhs = self.reg(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
                     match bop {
                         Bop::Add => {
                             if isint(&var.ty) {
-                                self.i_add(ty, Some(dst), lhs, rhs)?;
+                                self.i_add(ty, Some(res), lhs, rhs)?;
                             } else if isfloat(&var.ty) {
-                                self.f_add(ty, Some(dst), lhs, rhs)?;
+                                self.f_add(ty, Some(res), lhs, rhs)?;
                             } else {
                                 todo!()
                             }
                         }
                         Bop::Sub => {
                             if isint(&var.ty) {
-                                self.i_sub(ty, Some(dst), lhs, rhs)?;
+                                self.i_sub(ty, Some(res), lhs, rhs)?;
                             } else if isfloat(&var.ty) {
-                                self.f_sub(ty, Some(dst), lhs, rhs)?;
+                                self.f_sub(ty, Some(res), lhs, rhs)?;
                             } else {
                                 todo!()
                             }
                         }
                         Bop::Mul => {
                             if isint(&var.ty) {
-                                self.i_mul(ty, Some(dst), lhs, rhs)?;
+                                self.i_mul(ty, Some(res), lhs, rhs)?;
                             } else if isfloat(&var.ty) {
-                                self.f_mul(ty, Some(dst), lhs, rhs)?;
+                                self.f_mul(ty, Some(res), lhs, rhs)?;
                             } else {
                                 todo!()
                             }
                         }
                         Bop::Div => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.s_div(ty, Some(dst), lhs, rhs)?;
+                                self.s_div(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_div(ty, Some(dst), lhs, rhs)?;
+                                self.u_div(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::F32 | VarType::F64 => {
-                                self.f_div(ty, Some(dst), lhs, rhs)?;
+                                self.f_div(ty, Some(res), lhs, rhs)?;
                             }
                             _ => todo!(),
                         },
                         Bop::Min => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                glsl_ext!(self; dst: ty = SMin, lhs, rhs);
+                                glsl_ext!(self; res: ty = SMin, lhs, rhs);
                             }
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                glsl_ext!(self; dst: ty = UMin, lhs, rhs);
+                                glsl_ext!(self; res: ty = UMin, lhs, rhs);
                             }
                             VarType::F32 | VarType::F64 => {
-                                glsl_ext!(self; dst: ty = FMin, lhs, rhs);
+                                glsl_ext!(self; res: ty = FMin, lhs, rhs);
                             }
                             _ => todo!(),
                         },
                         Bop::Max => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                glsl_ext!(self; dst: ty = SMax, lhs, rhs);
+                                glsl_ext!(self; res: ty = SMax, lhs, rhs);
                             }
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                glsl_ext!(self; dst: ty = UMax, lhs, rhs);
+                                glsl_ext!(self; res: ty = UMax, lhs, rhs);
                             }
                             VarType::F32 | VarType::F64 => {
-                                glsl_ext!(self; dst: ty = FMax, lhs, rhs);
+                                glsl_ext!(self; res: ty = FMax, lhs, rhs);
                             }
                             _ => todo!(),
                         },
-                    }
+                    };
+                    res
                 }
                 Op::Construct => {
-                    let dst = self.get(varid);
                     let ty = self.spirv_ty(&var.ty);
-                    let deps = deps.iter().map(|id| self.get(*id)).collect::<Vec<_>>();
-                    self.composite_construct(ty, Some(dst), deps)?;
+                    let deps = deps.iter().map(|id| self.reg(*id)).collect::<Vec<_>>();
+                    self.composite_construct(ty, None, deps)?
                 }
                 Op::Extract(elem) => {
                     let ty = self.spirv_ty(&ir.var(varid).ty);
-                    let dst = self.get(varid);
-                    let src = self.get(deps[0]);
-                    self.composite_extract(ty, Some(dst), src, [elem as u32])?;
+                    let src = self.reg(deps[0]);
+                    self.composite_extract(ty, None, src, [elem as u32])?
                 }
                 Op::TexLookup => {
                     let img = deps[0];
-                    let coord = self.get(deps[1]);
+                    let coord = self.reg(deps[1]);
 
                     let img_idx = ir.var(img).data;
 
@@ -461,7 +470,7 @@ impl SpirvBuilder {
                     let int_ty = self.type_int(32, 0);
                     let img_idx = self.constant_u32(int_ty, img_idx as _);
 
-                    let img = self.get(img);
+                    let img = self.reg(img);
                     let ptr = self.access_chain(ptr_ty, None, img, [img_idx])?;
 
                     let ty_v4 = self.type_vector(ty, 4);
@@ -471,16 +480,15 @@ impl SpirvBuilder {
 
                     let img = self.load(ty_sampled_image, None, ptr, None, None)?;
 
-                    let dst = self.get(varid);
-                    let sample = self.image_sample_explicit_lod(
+                    self.image_sample_explicit_lod(
                         ty_v4,
                         // None,
-                        Some(dst),
+                        None,
                         img,
                         coord,
                         spirv::ImageOperands::LOD,
                         [dr::Operand::IdRef(float_0)],
-                    )?;
+                    )?
                 }
                 Op::Scatter => {
                     let dst = deps[0];
@@ -489,26 +497,50 @@ impl SpirvBuilder {
                     let cond = deps[3];
                     assert_eq!(ir.var(cond).ty, VarType::Bool);
 
-                    let cond = self.get(cond);
+                    let cond = self.reg(cond);
 
                     self.if_block(cond, |s| {
+                        let ty = &ir.var(src).ty;
+                        let data_ty = match ty {
+                            VarType::Bool => &VarType::U8,
+                            _ => &ir.var(src).ty,
+                        };
+
                         let buffer_idx = ir.var(dst).data;
 
-                        let ty = s.spirv_ty(ir.var_ty(src));
-                        let ptr_ty = s.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
+                        let spriv_ty = s.spirv_ty(data_ty);
+                        let ptr_ty =
+                            s.type_pointer(None, spirv::StorageClass::StorageBuffer, spriv_ty);
                         let int_ty = s.type_int(32, 0);
                         let buffer = s.constant_u32(int_ty, buffer_idx as _);
                         let elem = s.constant_u32(int_ty, 0);
 
-                        let dst = s.get(dst);
-                        let idx = s.get(idx);
-                        let src = s.get(src);
+                        dbg!(&s.spriv_regs);
+                        dbg!(&dst);
+                        let dst = s.reg(dst);
+                        let idx = s.reg(idx);
+                        let src = s.reg(src);
 
                         let ptr = s.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
-                        s.store(ptr, src, None, None)?;
+
+                        match ty {
+                            VarType::Bool => {
+                                let u8_ty = s.type_int(8, 0);
+                                let u8_0 = s.constant_u32(u8_ty, 0);
+                                let u8_1 = s.constant_u32(u8_ty, 1);
+
+                                let data = s.select(u8_ty, None, src, u8_1, u8_0)?;
+                                dbg!(data);
+                                s.store(ptr, data, None, None)?;
+                            }
+                            _ => {
+                                s.store(ptr, src, None, None)?;
+                            }
+                        };
 
                         Ok(())
                     })?;
+                    0
                 }
                 Op::Gather => {
                     let src = deps[0];
@@ -516,23 +548,36 @@ impl SpirvBuilder {
                     let cond = deps[2];
                     let buffer_idx = ir.var(src).data;
 
-                    let cond = self.get(cond);
+                    let cond = self.reg(cond);
 
                     self.if_block(cond, |s| {
-                        let ty = s.spirv_ty(&var.ty);
-                        let ptr_ty = s.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
+                        let ty = match var.ty {
+                            VarType::Bool => &VarType::U8,
+                            _ => &var.ty,
+                        };
+
+                        let spirv_ty = s.spirv_ty(ty);
+                        let ptr_ty =
+                            s.type_pointer(None, spirv::StorageClass::StorageBuffer, spirv_ty);
                         let int_ty = s.type_int(32, 0);
                         let buffer = s.constant_u32(int_ty, buffer_idx as _);
                         let elem = s.constant_u32(int_ty, 0);
 
-                        let src = s.get(src);
-                        let idx = s.get(idx);
-                        let dst = s.get(varid);
+                        let src = s.reg(src);
+                        let idx = s.reg(idx);
 
                         let ptr = s.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
-                        s.load(ty, Some(dst), ptr, None, None)?;
 
-                        Ok(())
+                        match var.ty {
+                            VarType::Bool => {
+                                let bool_ty = s.type_bool();
+                                let u8_ty = s.type_int(8, 0);
+                                let u8_0 = s.constant_u32(u8_ty, 0);
+                                let data = s.load(spirv_ty, None, ptr, None, None)?;
+                                Ok(s.i_not_equal(bool_ty, None, data, u8_0)?)
+                            }
+                            _ => Ok(s.load(spirv_ty, None, ptr, None, None)?),
+                        }
                     })?
                 }
                 Op::Index => {
@@ -541,13 +586,11 @@ impl SpirvBuilder {
                     let u32_0 = self.constant_u32(u32_ty, 0);
                     let ptr = self.access_chain(ptr_ty, None, global_invocation_id, [u32_0])?;
 
-                    let dst = self.get(varid);
-
-                    self.load(u32_ty, Some(dst), ptr, None, None)?;
+                    self.load(u32_ty, None, ptr, None, None)?
                 }
                 Op::Literal => {
                     let ty = self.spirv_ty(&var.ty);
-                    let c = match &var.ty {
+                    match &var.ty {
                         VarType::Bool => {
                             if var.data == 0 {
                                 self.constant_false(ty)
@@ -566,10 +609,12 @@ impl SpirvBuilder {
                         | VarType::F32
                         | VarType::F64 => self.constant_u32(ty, var.data as _),
                         _ => todo!(),
-                    };
-                    self.spirv_vars[varid.0] = c;
+                    }
                 }
-                _ => {}
+                _ => 0,
+            };
+            if !self.spriv_regs.contains_key(&varid) {
+                self.spriv_regs.insert(varid, res);
             }
         }
         Ok(())
