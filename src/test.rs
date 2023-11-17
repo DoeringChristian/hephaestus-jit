@@ -170,6 +170,7 @@ fn conditional_scatter() {
         ],
         &device,
     );
+    dbg!(&active.to_vec::<u8>());
 
     tr::literal(1).scatter(&dst, &tr::index(10), &active);
 
@@ -179,5 +180,5 @@ fn conditional_scatter() {
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
-    dbg!(&dst.to_vec::<u8>());
+    dbg!(&dst.to_vec::<i32>());
 }

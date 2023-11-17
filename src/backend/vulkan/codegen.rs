@@ -48,6 +48,7 @@ struct SpirvBuilder {
     // spirv_vars: Vec<u32>,
     spriv_regs: HashMap<VarId, u32>,
     glsl_ext: u32,
+    function_block: usize,
 }
 impl Deref for SpirvBuilder {
     type Target = dr::Builder;
@@ -115,6 +116,7 @@ impl SpirvBuilder {
         )?;
 
         self.begin_block(None)?;
+        self.function_block = self.selected_block().unwrap();
 
         self.assemble_vars(ir, global_invocation_id)?;
 
@@ -144,6 +146,17 @@ impl SpirvBuilder {
     // }
     fn reg(&self, id: VarId) -> u32 {
         self.spriv_regs[&id]
+    }
+    fn with_function<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
+        &mut self,
+        f: F,
+    ) -> Result<T, dr::Error> {
+        let current = self.selected_block();
+        let function_block = self.function_block;
+        self.select_block(Some(function_block))?;
+        let res = f(self)?;
+        self.select_block(current)?;
+        Ok(res)
     }
     fn if_block<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
         &mut self,
@@ -515,8 +528,6 @@ impl SpirvBuilder {
                         let buffer = s.constant_u32(int_ty, buffer_idx as _);
                         let elem = s.constant_u32(int_ty, 0);
 
-                        dbg!(&s.spriv_regs);
-                        dbg!(&dst);
                         let dst = s.reg(dst);
                         let idx = s.reg(idx);
                         let src = s.reg(src);
@@ -550,35 +561,58 @@ impl SpirvBuilder {
 
                     let cond = self.reg(cond);
 
+                    let ty = &var.ty;
+                    let data_ty = match var.ty {
+                        VarType::Bool => &VarType::U8,
+                        _ => &var.ty,
+                    };
+
+                    let spirv_ty = self.spirv_ty(ty);
+                    let spirv_data_ty = self.spirv_ty(data_ty);
+                    let ptr_ty =
+                        self.type_pointer(None, spirv::StorageClass::StorageBuffer, spirv_data_ty);
+                    let int_ty = self.type_int(32, 0);
+                    let buffer_idx = self.constant_u32(int_ty, buffer_idx as _);
+                    let elem = self.constant_u32(int_ty, 0);
+
+                    let src = self.reg(src);
+                    let idx = self.reg(idx);
+
+                    let res_var_ty =
+                        self.type_pointer(None, spirv::StorageClass::Function, spirv_ty);
+                    let res_var = self.id();
+                    self.with_function(|s| {
+                        s.insert_into_block(
+                            dr::InsertPoint::Begin,
+                            dr::Instruction::new(
+                                spirv::Op::Variable,
+                                Some(res_var_ty),
+                                Some(res_var),
+                                vec![dr::Operand::StorageClass(spirv::StorageClass::Function)],
+                            ),
+                        )?;
+                        Ok(())
+                    })?;
+
                     self.if_block(cond, |s| {
-                        let ty = match var.ty {
-                            VarType::Bool => &VarType::U8,
-                            _ => &var.ty,
-                        };
+                        let ptr = s.access_chain(ptr_ty, None, src, [buffer_idx, elem, idx])?;
 
-                        let spirv_ty = s.spirv_ty(ty);
-                        let ptr_ty =
-                            s.type_pointer(None, spirv::StorageClass::StorageBuffer, spirv_ty);
-                        let int_ty = s.type_int(32, 0);
-                        let buffer = s.constant_u32(int_ty, buffer_idx as _);
-                        let elem = s.constant_u32(int_ty, 0);
-
-                        let src = s.reg(src);
-                        let idx = s.reg(idx);
-
-                        let ptr = s.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
-
-                        match var.ty {
+                        let res = match var.ty {
                             VarType::Bool => {
                                 let bool_ty = s.type_bool();
                                 let u8_ty = s.type_int(8, 0);
                                 let u8_0 = s.constant_u32(u8_ty, 0);
-                                let data = s.load(spirv_ty, None, ptr, None, None)?;
-                                Ok(s.i_not_equal(bool_ty, None, data, u8_0)?)
+                                let data = s.load(spirv_data_ty, None, ptr, None, None)?;
+                                s.i_not_equal(bool_ty, None, data, u8_0)?
                             }
-                            _ => Ok(s.load(spirv_ty, None, ptr, None, None)?),
-                        }
-                    })?
+                            _ => s.load(spirv_data_ty, None, ptr, None, None)?,
+                        };
+
+                        s.store(res_var, res, None, None)?;
+
+                        Ok(())
+                    })?;
+                    self.load(spirv_ty, None, res_var, None, None)?
                 }
                 Op::Index => {
                     let u32_ty = self.type_int(32, 0);

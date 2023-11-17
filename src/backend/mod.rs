@@ -39,7 +39,7 @@ impl Device {
         };
         Ok(buffer)
     }
-    pub fn create_buffer_from_slice<T: bytemuck::Pod>(&self, slice: &[T]) -> Result<Buffer> {
+    pub fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Buffer> {
         Ok(match self {
             Device::CudaDevice(device) => {
                 Buffer::CudaBuffer(device.create_buffer_from_slice(slice)?)
@@ -146,7 +146,7 @@ pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
-    fn create_buffer_from_slice<T: bytemuck::Pod>(&self, slice: &[T]) -> Result<Self::Buffer>;
+    fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Self::Buffer>;
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
     fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {

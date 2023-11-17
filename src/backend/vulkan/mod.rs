@@ -225,20 +225,18 @@ impl backend::BackendDevice for VulkanDevice {
         })
     }
 
-    fn create_buffer_from_slice<T: bytemuck::Pod>(
-        &self,
-        slice: &[T],
-    ) -> backend::Result<Self::Buffer> {
-        let size = slice.len() * std::mem::size_of::<T>();
+    fn create_buffer_from_slice(&self, slice: &[u8]) -> backend::Result<Self::Buffer> {
+        let size = slice.len();
         let buffer = self.create_buffer(size)?;
 
         let info = BufferInfo {
             size,
             alignment: 0,
             usage: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
-            memory_location: MemoryLocation::GpuToCpu,
+            memory_location: MemoryLocation::CpuToGpu,
         };
-        let staging = Buffer::create(&self.device, info);
+        let mut staging = Buffer::create(&self.device, info);
+        staging.mapped_slice_mut().copy_from_slice(slice);
         self.device.submit_global(|ctx| unsafe {
             let region = vk::BufferCopy {
                 src_offset: 0,

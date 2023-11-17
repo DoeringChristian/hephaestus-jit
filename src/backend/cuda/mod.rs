@@ -82,10 +82,7 @@ impl BackendDevice for CudaDevice {
         todo!()
     }
 
-    fn create_buffer_from_slice<T: bytemuck::Pod>(
-        &self,
-        slice: &[T],
-    ) -> backend::Result<Self::Buffer> {
+    fn create_buffer_from_slice(&self, slice: &[u8]) -> backend::Result<Self::Buffer> {
         todo!()
     }
 }

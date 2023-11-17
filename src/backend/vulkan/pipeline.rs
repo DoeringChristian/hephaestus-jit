@@ -283,7 +283,6 @@ impl Pipeline {
         buffers: &[&Buffer],
         images: &[&Image],
     ) {
-        dbg!("test");
         let image_views = images
             .iter()
             .map(|image| {
