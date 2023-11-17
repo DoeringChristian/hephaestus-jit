@@ -142,11 +142,11 @@ impl Pipeline {
             let desc_sizes = [
                 vk::DescriptorPoolSize {
                     ty: vk::DescriptorType::STORAGE_BUFFER,
-                    descriptor_count: num_buffers as _,
+                    descriptor_count: num_buffers.max(1) as _,
                 },
                 vk::DescriptorPoolSize {
                     ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: num_textures as _,
+                    descriptor_count: num_textures.max(1) as _,
                 },
             ];
             let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
@@ -324,20 +324,36 @@ impl Pipeline {
                 range: buffer.info().size as _,
             })
             .collect::<Vec<_>>();
+
         let write_desc_sets = [
-            vk::WriteDescriptorSet::builder()
-                .dst_set(self.desc_sets[0])
-                .buffer_info(&desc_buffer_infos)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                .dst_binding(0)
-                .build(),
-            vk::WriteDescriptorSet::builder()
-                .dst_set(self.desc_sets[0])
-                .image_info(&desc_image_infos)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .dst_binding(1)
-                .build(),
-        ];
+            if !desc_buffer_infos.is_empty() {
+                Some(
+                    vk::WriteDescriptorSet::builder()
+                        .dst_set(self.desc_sets[0])
+                        .buffer_info(&desc_buffer_infos)
+                        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                        .dst_binding(0)
+                        .build(),
+                )
+            } else {
+                None
+            },
+            if !desc_image_infos.is_empty() {
+                Some(
+                    vk::WriteDescriptorSet::builder()
+                        .dst_set(self.desc_sets[0])
+                        .image_info(&desc_image_infos)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .dst_binding(1)
+                        .build(),
+                )
+            } else {
+                None
+            },
+        ]
+        .into_iter()
+        .flat_map(|s| s)
+        .collect::<Vec<_>>();
 
         unsafe {
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
