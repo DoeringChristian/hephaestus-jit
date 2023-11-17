@@ -507,59 +507,77 @@ impl SpirvBuilder {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
-                    let cond = deps[3];
-                    assert_eq!(ir.var(cond).ty, VarType::Bool);
+                    let cond = deps.get(3);
+                    let ty = &ir.var(src).ty;
+                    let data_ty = match ty {
+                        VarType::Bool => &VarType::U8,
+                        _ => &ir.var(src).ty,
+                    };
 
-                    let cond = self.reg(cond);
+                    let buffer_idx = ir.var(dst).data;
 
-                    self.if_block(cond, |s| {
-                        let ty = &ir.var(src).ty;
-                        let data_ty = match ty {
-                            VarType::Bool => &VarType::U8,
-                            _ => &ir.var(src).ty,
-                        };
+                    let spriv_ty = self.spirv_ty(data_ty);
+                    let ptr_ty =
+                        self.type_pointer(None, spirv::StorageClass::StorageBuffer, spriv_ty);
+                    let int_ty = self.type_int(32, 0);
+                    let buffer = self.constant_u32(int_ty, buffer_idx as _);
+                    let elem = self.constant_u32(int_ty, 0);
 
-                        let buffer_idx = ir.var(dst).data;
+                    let dst = self.reg(dst);
+                    let idx = self.reg(idx);
+                    let src = self.reg(src);
 
-                        let spriv_ty = s.spirv_ty(data_ty);
-                        let ptr_ty =
-                            s.type_pointer(None, spirv::StorageClass::StorageBuffer, spriv_ty);
-                        let int_ty = s.type_int(32, 0);
-                        let buffer = s.constant_u32(int_ty, buffer_idx as _);
-                        let elem = s.constant_u32(int_ty, 0);
+                    // Don't need to condition the scatter if that's not neccesarry
+                    // TODO: unify conditioned and uncoditioned part
+                    if let Some(cond) = cond {
+                        assert_eq!(ir.var(*cond).ty, VarType::Bool);
 
-                        let dst = s.reg(dst);
-                        let idx = s.reg(idx);
-                        let src = s.reg(src);
+                        let cond = self.reg(*cond);
+                        self.if_block(cond, |s| {
+                            let ptr = s.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
 
-                        let ptr = s.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
+                            match ty {
+                                VarType::Bool => {
+                                    let u8_ty = s.type_int(8, 0);
+                                    let u8_0 = s.constant_u32(u8_ty, 0);
+                                    let u8_1 = s.constant_u32(u8_ty, 1);
+
+                                    let data = s.select(u8_ty, None, src, u8_1, u8_0)?;
+                                    dbg!(data);
+                                    s.store(ptr, data, None, None)?;
+                                }
+                                _ => {
+                                    s.store(ptr, src, None, None)?;
+                                }
+                            };
+
+                            Ok(())
+                        })?;
+                    } else {
+                        let ptr = self.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
 
                         match ty {
                             VarType::Bool => {
-                                let u8_ty = s.type_int(8, 0);
-                                let u8_0 = s.constant_u32(u8_ty, 0);
-                                let u8_1 = s.constant_u32(u8_ty, 1);
+                                let u8_ty = self.type_int(8, 0);
+                                let u8_0 = self.constant_u32(u8_ty, 0);
+                                let u8_1 = self.constant_u32(u8_ty, 1);
 
-                                let data = s.select(u8_ty, None, src, u8_1, u8_0)?;
+                                let data = self.select(u8_ty, None, src, u8_1, u8_0)?;
                                 dbg!(data);
-                                s.store(ptr, data, None, None)?;
+                                self.store(ptr, data, None, None)?;
                             }
                             _ => {
-                                s.store(ptr, src, None, None)?;
+                                self.store(ptr, src, None, None)?;
                             }
                         };
-
-                        Ok(())
-                    })?;
+                    }
                     0
                 }
                 Op::Gather => {
                     let src = deps[0];
                     let idx = deps[1];
-                    let cond = deps[2];
+                    let cond = deps.get(2);
                     let buffer_idx = ir.var(src).data;
-
-                    let cond = self.reg(cond);
 
                     let ty = &var.ty;
                     let data_ty = match var.ty {
@@ -578,41 +596,60 @@ impl SpirvBuilder {
                     let src = self.reg(src);
                     let idx = self.reg(idx);
 
-                    let res_var_ty =
-                        self.type_pointer(None, spirv::StorageClass::Function, spirv_ty);
-                    let res_var = self.id();
-                    self.with_function(|s| {
-                        s.insert_into_block(
-                            dr::InsertPoint::Begin,
-                            dr::Instruction::new(
-                                spirv::Op::Variable,
-                                Some(res_var_ty),
-                                Some(res_var),
-                                vec![dr::Operand::StorageClass(spirv::StorageClass::Function)],
-                            ),
-                        )?;
-                        Ok(())
-                    })?;
+                    // We do not need variables if the gather operation is not conditioned.
+                    if let Some(cond) = cond {
+                        let cond = self.reg(*cond);
 
-                    self.if_block(cond, |s| {
-                        let ptr = s.access_chain(ptr_ty, None, src, [buffer_idx, elem, idx])?;
+                        let res_var_ty =
+                            self.type_pointer(None, spirv::StorageClass::Function, spirv_ty);
+                        let res_var = self.id();
+                        // Insert a variable at the beginning of the function (bit hacky)
+                        self.with_function(|s| {
+                            s.insert_into_block(
+                                dr::InsertPoint::Begin,
+                                dr::Instruction::new(
+                                    spirv::Op::Variable,
+                                    Some(res_var_ty),
+                                    Some(res_var),
+                                    vec![dr::Operand::StorageClass(spirv::StorageClass::Function)],
+                                ),
+                            )?;
+                            Ok(())
+                        })?;
 
-                        let res = match var.ty {
+                        self.if_block(cond, |s| {
+                            let ptr = s.access_chain(ptr_ty, None, src, [buffer_idx, elem, idx])?;
+
+                            let res = match var.ty {
+                                VarType::Bool => {
+                                    let bool_ty = s.type_bool();
+                                    let u8_ty = s.type_int(8, 0);
+                                    let u8_0 = s.constant_u32(u8_ty, 0);
+                                    let data = s.load(spirv_data_ty, None, ptr, None, None)?;
+                                    s.i_not_equal(bool_ty, None, data, u8_0)?
+                                }
+                                _ => s.load(spirv_data_ty, None, ptr, None, None)?,
+                            };
+
+                            s.store(res_var, res, None, None)?;
+
+                            Ok(())
+                        })?;
+                        self.load(spirv_ty, None, res_var, None, None)?
+                    } else {
+                        let ptr = self.access_chain(ptr_ty, None, src, [buffer_idx, elem, idx])?;
+
+                        match var.ty {
                             VarType::Bool => {
-                                let bool_ty = s.type_bool();
-                                let u8_ty = s.type_int(8, 0);
-                                let u8_0 = s.constant_u32(u8_ty, 0);
-                                let data = s.load(spirv_data_ty, None, ptr, None, None)?;
-                                s.i_not_equal(bool_ty, None, data, u8_0)?
+                                let bool_ty = self.type_bool();
+                                let u8_ty = self.type_int(8, 0);
+                                let u8_0 = self.constant_u32(u8_ty, 0);
+                                let data = self.load(spirv_data_ty, None, ptr, None, None)?;
+                                self.i_not_equal(bool_ty, None, data, u8_0)?
                             }
-                            _ => s.load(spirv_data_ty, None, ptr, None, None)?,
-                        };
-
-                        s.store(res_var, res, None, None)?;
-
-                        Ok(())
-                    })?;
-                    self.load(spirv_ty, None, res_var, None, None)?
+                            _ => self.load(spirv_data_ty, None, ptr, None, None)?,
+                        }
+                    }
                 }
                 Op::Index => {
                     let u32_ty = self.type_int(32, 0);

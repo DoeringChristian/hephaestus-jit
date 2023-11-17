@@ -257,7 +257,19 @@ impl VarRef {
             ..Default::default()
         })
     }
-    pub fn gather(&self, idx: &Self, active: &Self) -> Self {
+    pub fn gather(&self, idx: &Self) -> Self {
+        let ty = self.ty();
+        let size = idx.size();
+        let src_ref = self.get_ref();
+        push_var(Var {
+            op: Op::KernelOp(ir::Op::Gather),
+            deps: vec![src_ref.id(), idx.id()],
+            ty,
+            size,
+            ..Default::default()
+        })
+    }
+    pub fn gather_if(&self, idx: &Self, active: &Self) -> Self {
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
@@ -269,7 +281,21 @@ impl VarRef {
             ..Default::default()
         })
     }
-    pub fn scatter(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
+    pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
+        dst.schedule();
+        let size = max_size([self, idx].into_iter());
+        let dst_ref = dst.get_mut();
+        let res = push_var(Var {
+            op: Op::KernelOp(ir::Op::Scatter),
+            deps: vec![dst_ref.id(), self.id(), idx.id()],
+            ty: VarType::Void,
+            size,
+            ..Default::default()
+        });
+        res.schedule(); // Auto schedule
+        res
+    }
+    pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
         // It is important that dst is schedules
         dst.schedule();
         let size = max_size([self, idx, active].into_iter());

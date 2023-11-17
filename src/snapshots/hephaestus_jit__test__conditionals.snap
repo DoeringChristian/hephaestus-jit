@@ -42,20 +42,11 @@ Graph {
                             data: 0,
                         },
                         Var {
-                            ty: Bool,
-                            op: Literal,
-                            deps: (
-                                0,
-                                0,
-                            ),
-                            data: 1,
-                        },
-                        Var {
                             ty: Void,
                             op: Scatter,
                             deps: (
                                 0,
-                                4,
+                                3,
                             ),
                             data: 0,
                         },
@@ -69,9 +60,6 @@ Graph {
                         ),
                         VarId(
                             2,
-                        ),
-                        VarId(
-                            3,
                         ),
                     ],
                     n_buffers: 1,

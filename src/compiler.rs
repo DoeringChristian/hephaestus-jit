@@ -63,22 +63,13 @@ impl Compiler {
                 },
                 [],
             );
-            let active = self.ir.push_var(
-                ir::Var {
-                    op: ir::Op::Literal,
-                    ty: VarType::Bool,
-                    data: 1,
-                    ..Default::default()
-                },
-                [],
-            );
             self.ir.push_var(
                 ir::Var {
                     op: ir::Op::Scatter,
                     ty: VarType::Void,
                     ..Default::default()
                 },
-                [dst, src, idx, active],
+                [dst, src, idx],
             );
         }
         self.ir.n_buffers = self.buffers.len();
@@ -107,22 +98,13 @@ impl Compiler {
                     },
                     [],
                 );
-                let active = self.ir.push_var(
-                    ir::Var {
-                        op: ir::Op::Literal,
-                        ty: VarType::Bool,
-                        data: 1,
-                        ..Default::default()
-                    },
-                    [],
-                );
                 self.ir.push_var(
                     ir::Var {
                         op: ir::Op::Gather,
                         ty: var.ty.clone(),
                         ..Default::default()
                     },
-                    [data, idx, active],
+                    [data, idx],
                 )
             }
             Op::KernelOp(kop) => match kop {

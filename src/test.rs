@@ -7,8 +7,7 @@ fn simple() {
     let i = tr::index(10);
     let j = tr::index(5);
 
-    j.add(&tr::literal(1u32))
-        .scatter(&i, &j, &tr::literal(true));
+    j.add(&tr::literal(1u32)).scatter(&i, &j);
 
     j.schedule();
 
@@ -33,6 +32,7 @@ fn simple_u16() {
     tr::compile().launch(&device);
 
     dbg!(c.to_vec::<u16>());
+    assert_eq!(c.to_vec::<u16>(), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn scatter_chain() {
 
     let b0 = tr::sized_literal(0, 5);
 
-    tr::literal(1).scatter(&b0, &tr::index(10), &tr::literal(true));
+    tr::literal(1).scatter_if(&b0, &tr::index(10), &tr::literal(true));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
@@ -59,7 +59,7 @@ fn scatter_chain2() {
 
     let a = tr::sized_literal(0, 5);
     let b = a.add(&tr::literal(1));
-    tr::literal(1).scatter(&a, &tr::index(5), &tr::literal(true));
+    tr::literal(1).scatter(&a, &tr::index(5));
 
     b.schedule();
 
@@ -68,11 +68,9 @@ fn scatter_chain2() {
     graph.launch(&device);
 
     dbg!(b.to_vec::<i32>());
-    // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
-    // assert_eq!(
-    //     b1.data().buffer().unwrap().to_host::<i32>().unwrap(),
-    //     vec![2, 2, 2, 2, 2]
-    // );
+    dbg!(a.to_vec::<i32>());
+    assert_eq!(b.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
+    assert_eq!(a.to_vec::<i32>(), vec![1, 1, 1, 1, 1]);
 }
 #[test]
 fn extract() {
@@ -172,7 +170,7 @@ fn conditional_scatter() {
     );
     dbg!(&active.to_vec::<u8>());
 
-    tr::literal(1).scatter(&dst, &tr::index(10), &active);
+    tr::literal(1).scatter_if(&dst, &tr::index(10), &active);
 
     dst.schedule();
 
