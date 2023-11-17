@@ -6,6 +6,7 @@ use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
 use super::buffer::{Buffer, BufferInfo};
+use super::context::Context;
 use super::device::Device;
 use super::VulkanDevice;
 
@@ -79,7 +80,7 @@ impl Image {
             info: *info,
         }
     }
-    pub fn copy_from_buffer(&self, cb: vk::CommandBuffer, device: &Device, src: &Buffer) {
+    pub fn copy_from_buffer(&self, ctx: &Context, src: &Buffer) {
         let image_memory_barrier = vk::ImageMemoryBarrier {
             dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
             new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -93,8 +94,8 @@ impl Image {
             ..Default::default()
         };
         unsafe {
-            device.cmd_pipeline_barrier(
-                cb,
+            ctx.cmd_pipeline_barrier(
+                ctx.cb,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::DependencyFlags::empty(),
@@ -115,8 +116,8 @@ impl Image {
             .build();
 
         unsafe {
-            device.cmd_copy_buffer_to_image(
-                cb,
+            ctx.cmd_copy_buffer_to_image(
+                ctx.cb,
                 src.buffer(),
                 self.image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -139,8 +140,8 @@ impl Image {
             ..Default::default()
         };
         unsafe {
-            device.cmd_pipeline_barrier(
-                cb,
+            ctx.cmd_pipeline_barrier(
+                ctx.cb,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::DependencyFlags::empty(),

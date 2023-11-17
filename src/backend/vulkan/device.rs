@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::ffi::CStr;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -10,6 +11,9 @@ use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use gpu_allocator::AllocatorDebugSettings;
 
 pub use ash::vk;
+
+use super::buffer;
+use super::context::Context;
 
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -45,7 +49,7 @@ impl Device {
     pub fn create(index: usize) -> Self {
         Self(Arc::new(InternalDevice::create(index)))
     }
-    pub fn submit_global<F: FnOnce(&Self, vk::CommandBuffer)>(&self, f: F) {
+    pub fn submit_global<'a, F: FnOnce(&mut Context)>(&'a self, f: F) {
         unsafe {
             self.reset_fences(&[self.fence]).unwrap();
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
@@ -53,7 +57,9 @@ impl Device {
             self.begin_command_buffer(self.command_buffer, &command_buffer_begin_info)
                 .unwrap();
 
-            f(self, self.command_buffer);
+            let mut ctx = Context::new(self, self.command_buffer);
+
+            f(&mut ctx);
 
             self.end_command_buffer(self.command_buffer).unwrap();
 
@@ -65,6 +71,7 @@ impl Device {
                 .unwrap();
 
             self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
+            drop(ctx);
         }
     }
 }

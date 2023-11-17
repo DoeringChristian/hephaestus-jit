@@ -7,6 +7,7 @@ use crate::backend::vulkan::codegen;
 use crate::ir::IR;
 
 use super::buffer::Buffer;
+use super::context::Context;
 use super::device::Device;
 use super::image::Image;
 use ash::vk;
@@ -275,10 +276,9 @@ impl Pipeline {
             device.cmd_dispatch(cb, extent.0, extent.1, extent.2);
         }
     }
-    pub fn submit_to_cbuffer<'a>(
-        &'a self,
-        cb: vk::CommandBuffer,
-        device: &Device,
+    pub fn submit_to_cbuffer(
+        &self,
+        ctx: &mut Context,
         num: usize,
         buffers: &[&Buffer],
         images: &[&Image],
@@ -302,7 +302,7 @@ impl Pipeline {
                         base_array_layer: 0,
                         layer_count: 1,
                     });
-                unsafe { device.create_image_view(&info, None).unwrap() }
+                ctx.create_image_view(&info)
             })
             .collect::<Vec<_>>();
 
@@ -342,16 +342,16 @@ impl Pipeline {
         unsafe {
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
 
-            device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
-            device.cmd_bind_descriptor_sets(
-                cb,
+            ctx.cmd_bind_pipeline(ctx.cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            ctx.cmd_bind_descriptor_sets(
+                ctx.cb,
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
                 0,
                 &self.desc_sets,
                 &[],
             );
-            device.cmd_dispatch(cb, num as _, 1, 1);
+            ctx.cmd_dispatch(ctx.cb, num as _, 1, 1);
         }
     }
     // pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
