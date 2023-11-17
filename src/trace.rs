@@ -238,27 +238,26 @@ impl VarRef {
             ..Default::default()
         })
     }
-    pub fn gather(&self, idx: &Self) -> Self {
-        // It is important that dst is schedules
+    pub fn gather(&self, idx: &Self, active: &Self) -> Self {
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
         push_var(Var {
             op: Op::KernelOp(ir::Op::Gather),
-            deps: vec![src_ref.id(), idx.id()],
+            deps: vec![src_ref.id(), idx.id(), active.id()],
             ty,
             size,
             ..Default::default()
         })
     }
-    pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
+    pub fn scatter(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
         // It is important that dst is schedules
         dst.schedule();
         let info = with_trace(|t| t.var_info(&[self.id(), idx.id()]));
         let dst_ref = dst.get_mut();
         let res = push_var(Var {
             op: Op::KernelOp(ir::Op::Scatter),
-            deps: vec![dst_ref.id(), self.id(), idx.id()],
+            deps: vec![dst_ref.id(), self.id(), idx.id(), active.id()],
             ty: VarType::Void,
             size: info.size,
             ..Default::default()

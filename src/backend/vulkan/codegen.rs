@@ -139,6 +139,48 @@ impl SpirvBuilder {
     fn get(&self, id: VarId) -> u32 {
         self.spirv_vars[id.0]
     }
+    fn if_block<F: FnOnce(&mut Self) -> Result<(), dr::Error>>(
+        &mut self,
+        cond: u32,
+        f: F,
+    ) -> Result<(), dr::Error> {
+        let ty_bool = self.type_bool();
+        let bool_true = self.constant_true(ty_bool);
+
+        let cond = self.logical_equal(ty_bool, None, cond, bool_true)?;
+
+        let start_label = self.id();
+        let end_label = self.id();
+
+        // According to spirv OpSelectionMerge should be second to last
+        // instruction in block. Rspirv however ends block with
+        // selection_merge. Therefore, we insert the instruction by hand.
+        self.b
+            .insert_into_block(
+                rspirv::dr::InsertPoint::End,
+                rspirv::dr::Instruction::new(
+                    spirv::Op::SelectionMerge,
+                    None,
+                    None,
+                    vec![
+                        rspirv::dr::Operand::IdRef(end_label),
+                        rspirv::dr::Operand::SelectionControl(spirv::SelectionControl::NONE),
+                    ],
+                ),
+            )
+            .unwrap();
+        self.branch_conditional(cond, start_label, end_label, [])
+            .unwrap();
+
+        self.begin_block(Some(start_label))?;
+
+        f(self)?;
+
+        self.branch(end_label).unwrap();
+
+        self.begin_block(Some(end_label))?;
+        Ok(())
+    }
     fn spirv_ty(&mut self, ty: &VarType) -> u32 {
         match ty {
             VarType::Void => self.type_void(),
@@ -444,41 +486,54 @@ impl SpirvBuilder {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
-                    dbg!(&ir.var(src));
-                    dbg!(&ir.var(dst));
+                    let cond = deps[3];
+                    assert_eq!(ir.var(cond).ty, VarType::Bool);
 
-                    let buffer_idx = ir.var(dst).data;
+                    let cond = self.get(cond);
 
-                    let ty = self.spirv_ty(ir.var_ty(src));
-                    let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
-                    let int_ty = self.type_int(32, 0);
-                    let buffer = self.constant_u32(int_ty, buffer_idx as _);
-                    let elem = self.constant_u32(int_ty, 0);
+                    self.if_block(cond, |s| {
+                        let buffer_idx = ir.var(dst).data;
 
-                    let dst = self.get(dst);
-                    let idx = self.get(idx);
-                    let src = self.get(src);
+                        let ty = s.spirv_ty(ir.var_ty(src));
+                        let ptr_ty = s.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
+                        let int_ty = s.type_int(32, 0);
+                        let buffer = s.constant_u32(int_ty, buffer_idx as _);
+                        let elem = s.constant_u32(int_ty, 0);
 
-                    let ptr = self.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
-                    self.store(ptr, src, None, None)?;
+                        let dst = s.get(dst);
+                        let idx = s.get(idx);
+                        let src = s.get(src);
+
+                        let ptr = s.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
+                        s.store(ptr, src, None, None)?;
+
+                        Ok(())
+                    })?;
                 }
                 Op::Gather => {
                     let src = deps[0];
                     let idx = deps[1];
+                    let cond = deps[2];
                     let buffer_idx = ir.var(src).data;
 
-                    let ty = self.spirv_ty(&var.ty);
-                    let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
-                    let int_ty = self.type_int(32, 0);
-                    let buffer = self.constant_u32(int_ty, buffer_idx as _);
-                    let elem = self.constant_u32(int_ty, 0);
+                    let cond = self.get(cond);
 
-                    let src = self.get(src);
-                    let idx = self.get(idx);
-                    let dst = self.get(varid);
+                    self.if_block(cond, |s| {
+                        let ty = s.spirv_ty(&var.ty);
+                        let ptr_ty = s.type_pointer(None, spirv::StorageClass::StorageBuffer, ty);
+                        let int_ty = s.type_int(32, 0);
+                        let buffer = s.constant_u32(int_ty, buffer_idx as _);
+                        let elem = s.constant_u32(int_ty, 0);
 
-                    let ptr = self.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
-                    self.load(ty, Some(dst), ptr, None, None)?;
+                        let src = s.get(src);
+                        let idx = s.get(idx);
+                        let dst = s.get(varid);
+
+                        let ptr = s.access_chain(ptr_ty, None, src, [buffer, elem, idx])?;
+                        s.load(ty, Some(dst), ptr, None, None)?;
+
+                        Ok(())
+                    })?
                 }
                 Op::Index => {
                     let u32_ty = self.type_int(32, 0);

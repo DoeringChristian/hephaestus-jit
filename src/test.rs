@@ -7,7 +7,8 @@ fn simple() {
     let i = tr::index(10);
     let j = tr::index(5);
 
-    j.add(&tr::literal(1u32)).scatter(&i, &j);
+    j.add(&tr::literal(1u32))
+        .scatter(&i, &j, &tr::literal(true));
 
     j.schedule();
 
@@ -40,7 +41,7 @@ fn scatter_chain() {
 
     let b0 = tr::sized_literal(0, 5);
 
-    tr::literal(1).scatter(&b0, &tr::index(10));
+    tr::literal(1).scatter(&b0, &tr::index(10), &tr::literal(true));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
@@ -58,7 +59,7 @@ fn scatter_chain2() {
 
     let a = tr::sized_literal(0, 5);
     let b = a.add(&tr::literal(1));
-    tr::literal(1).scatter(&a, &tr::index(5));
+    tr::literal(1).scatter(&a, &tr::index(5), &tr::literal(true));
 
     b.schedule();
 
