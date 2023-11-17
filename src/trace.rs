@@ -197,9 +197,11 @@ fn max_size<'a>(refs: impl Iterator<Item = &'a VarRef>) -> usize {
     refs.map(|r| r.size()).reduce(|s0, s1| s0.max(s1)).unwrap()
 }
 pub fn composite(refs: &[&VarRef]) -> VarRef {
-    let ty = VarType::Struct {
-        tys: refs.iter().map(|r| r.ty()).collect(),
-    };
+    let tys = refs.iter().map(|r| r.ty()).collect();
+    let ty = VarType::Struct { tys };
+
+    log::trace!("Constructing composite struct {ty:?}.");
+
     let size = max_size(refs.iter().map(|r| *r));
     let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
     push_var(Var {

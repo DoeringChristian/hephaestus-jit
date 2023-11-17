@@ -10,4 +10,5 @@ mod vartype;
 #[cfg(test)]
 mod test;
 
+pub use backend::vulkan;
 pub use trace as tr;

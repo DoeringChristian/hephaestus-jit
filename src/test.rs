@@ -1,4 +1,4 @@
-use crate::{backend, tr};
+use crate::{backend, tr, vulkan};
 
 #[test]
 fn simple() {
@@ -93,6 +93,22 @@ fn extract() {
     dbg!(v.to_vec::<f32>());
     dbg!(a.to_vec::<f32>());
     dbg!(b.to_vec::<f32>());
+}
+#[test]
+fn extract2() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let b = tr::sized_literal(0xffu8, 2);
+    let a = tr::sized_literal(2u32, 2);
+
+    let s = tr::composite(&[&a, &b]);
+
+    s.schedule();
+
+    tr::compile().launch(&device);
+
+    dbg!(&s.to_vec::<u8>());
 }
 #[test]
 fn test_struct() {

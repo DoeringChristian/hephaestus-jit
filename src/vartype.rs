@@ -59,10 +59,7 @@ impl VarType {
         match self {
             VarType::Struct { tys } => {
                 let mut offset = 0;
-                if elem == 0 {
-                    return 0;
-                }
-                for i in 0..elem - 1 {
+                for i in 0..elem {
                     offset += tys[i].size();
                     offset = align_up(offset, tys[i + 1].alignment());
                 }

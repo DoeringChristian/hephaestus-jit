@@ -7,9 +7,13 @@ use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
 
 use crate::graph::Graph;
 use crate::ir::IR;
-use crate::tr;
 use crate::trace;
 use crate::vartype::AsVarType;
+
+// TODO: Device Caching
+pub fn vulkan(id: usize) -> Device {
+    Device::vulkan(id).unwrap()
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

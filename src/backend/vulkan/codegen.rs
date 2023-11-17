@@ -225,7 +225,7 @@ impl SpirvBuilder {
                     let offset = ty.offset(i);
                     self.member_decorate(
                         struct_ty,
-                        offset as _,
+                        i as _,
                         spirv::Decoration::Offset,
                         [dr::Operand::LiteralInt32(offset as _)],
                     );
