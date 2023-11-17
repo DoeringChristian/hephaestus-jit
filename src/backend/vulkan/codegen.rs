@@ -446,6 +446,13 @@ impl SpirvBuilder {
                     };
                     res
                 }
+                Op::Select => {
+                    let ty = self.spirv_ty(&var.ty);
+                    let cond = self.reg(deps[0]);
+                    let true_val = self.reg(deps[1]);
+                    let false_val = self.reg(deps[2]);
+                    self.select(ty, None, cond, true_val, false_val)?
+                }
                 Op::Construct => {
                     let ty = self.spirv_ty(&var.ty);
                     let deps = deps.iter().map(|id| self.reg(*id)).collect::<Vec<_>>();

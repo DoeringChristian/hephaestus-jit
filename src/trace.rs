@@ -354,6 +354,22 @@ impl VarRef {
             ..Default::default()
         })
     }
+    pub fn select(&self, true_val: &Self, false_val: &Self) -> Self {
+        assert_eq!(self.ty(), VarType::Bool);
+        assert_eq!(true_val.ty(), false_val.ty());
+
+        let ty = true_val.ty();
+
+        let size = max_size([self, true_val, false_val].into_iter());
+
+        push_var(Var {
+            op: Op::KernelOp(ir::Op::Select),
+            deps: vec![self.id(), true_val.id(), false_val.id()],
+            ty,
+            size,
+            ..Default::default()
+        })
+    }
     pub fn tex_lookup(&self, pos: &[&VarRef]) -> Self {
         assert!(pos.len() >= 1 && pos.len() <= 3);
 

@@ -1,0 +1,172 @@
+---
+source: src/test.rs
+expression: graph
+---
+Graph {
+    passes: [
+        Pass {
+            buffers: [
+                BufferId(
+                    0,
+                ),
+                BufferId(
+                    1,
+                ),
+            ],
+            textures: [],
+            op: Kernel {
+                ir: IR {
+                    vars: [
+                        Var {
+                            ty: Bool,
+                            op: BufferRef,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: U32,
+                            op: Index,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Bool,
+                            op: Gather,
+                            deps: (
+                                0,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Literal,
+                            deps: (
+                                2,
+                                2,
+                            ),
+                            data: 10,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Literal,
+                            deps: (
+                                2,
+                                2,
+                            ),
+                            data: 5,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Select,
+                            deps: (
+                                2,
+                                5,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: BufferRef,
+                            deps: (
+                                5,
+                                5,
+                            ),
+                            data: 1,
+                        },
+                        Var {
+                            ty: U32,
+                            op: Index,
+                            deps: (
+                                5,
+                                5,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Void,
+                            op: Scatter,
+                            deps: (
+                                5,
+                                8,
+                            ),
+                            data: 0,
+                        },
+                    ],
+                    deps: [
+                        VarId(
+                            0,
+                        ),
+                        VarId(
+                            1,
+                        ),
+                        VarId(
+                            2,
+                        ),
+                        VarId(
+                            3,
+                        ),
+                        VarId(
+                            4,
+                        ),
+                        VarId(
+                            6,
+                        ),
+                        VarId(
+                            5,
+                        ),
+                        VarId(
+                            7,
+                        ),
+                    ],
+                    n_buffers: 2,
+                    n_textures: 0,
+                    hash: Mutex {
+                        data: None,
+                        poisoned: false,
+                        ..
+                    },
+                },
+                size: 2,
+            },
+        },
+    ],
+    buffers: [
+        BufferDesc {
+            size: 2,
+            var: VarRef {
+                id: VarId(
+                    DefaultKey(
+                        1v1,
+                    ),
+                ),
+            },
+        },
+        BufferDesc {
+            size: 2,
+            var: VarRef {
+                id: VarId(
+                    DefaultKey(
+                        4v1,
+                    ),
+                ),
+            },
+        },
+    ],
+    textures: [],
+    schedule: [
+        VarRef {
+            id: VarId(
+                DefaultKey(
+                    4v1,
+                ),
+            ),
+        },
+    ],
+}

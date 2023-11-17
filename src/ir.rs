@@ -39,6 +39,8 @@ pub enum Op {
     Extract(usize),
     Construct,
 
+    Select,
+
     TexLookup,
 
     Bop(Bop),

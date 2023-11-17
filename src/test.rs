@@ -196,3 +196,22 @@ fn conditional_scatter() {
 
     dbg!(&dst.to_vec::<i32>());
 }
+#[test]
+fn select() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let cond = tr::array(&[true, false], &device);
+
+    let true_val = tr::literal(10);
+    let false_val = tr::literal(5);
+
+    let res = cond.select(&true_val, &false_val);
+    res.schedule();
+
+    let graph = tr::compile();
+    insta::assert_debug_snapshot!(graph);
+    graph.launch(&device);
+
+    assert_eq!(res.to_vec::<i32>(), vec![10, 5]);
+}
