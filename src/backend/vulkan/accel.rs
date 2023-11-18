@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
@@ -320,6 +322,7 @@ pub struct Accel {
     device: Device,
     blases: Vec<AccelInternal>,
     tlas: AccelInternal,
+    instance_buffer: Mutex<Option<Buffer>>,
 }
 
 impl Accel {
@@ -335,9 +338,10 @@ impl Accel {
             blases,
             tlas,
             device: device.clone(),
+            instance_buffer: Mutex::new(None),
         }
     }
-    pub fn build(&self, ctx: &mut Context, desc: &AccelBuildDesc) {
+    pub fn build(&self, ctx: &mut Context, desc: AccelBuildDesc) {
         // TODO: Heavy validation effort
         for (i, blas) in self.blases.iter().enumerate() {
             blas.build_blas(ctx, &desc.geometries[i]);
@@ -359,7 +363,9 @@ impl Accel {
             );
         }
 
-        self.tlas.build_tlas(ctx, desc);
+        self.tlas.build_tlas(ctx, &desc);
+
+        *self.instance_buffer.lock().unwrap() = Some(desc.instances);
     }
     pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
         unsafe {

@@ -492,4 +492,7 @@ impl VarRef {
             ..Default::default()
         })
     }
+    pub fn trace_ray(&self) -> Self {
+        todo!()
+    }
 }

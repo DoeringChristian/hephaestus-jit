@@ -90,7 +90,8 @@ impl backend::BackendDevice for VulkanDevice {
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+            | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
             memory_location: MemoryLocation::GpuOnly,
         };
         let buffer = Buffer::create(self, info);
@@ -212,7 +213,7 @@ impl backend::BackendDevice for VulkanDevice {
                                 instances: instance_buffer,
                             };
                             
-                            accel.accel.build(ctx, &desc);
+                            accel.accel.build(ctx, desc);
                         }
                     },
                     _ => todo!(),
@@ -278,9 +279,7 @@ impl backend::BackendDevice for VulkanDevice {
             size,
             alignment: 0,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                | vk::BufferUsageFlags::TRANSFER_DST,
             memory_location: MemoryLocation::CpuToGpu,
         };
         let mut staging = Buffer::create(&self.device, info);
