@@ -111,6 +111,13 @@ impl Buffer {
     pub fn buffer(&self) -> vk::Buffer {
         self.buffer
     }
+    pub fn device_address(&self) -> vk::DeviceAddress {
+        unsafe {
+            self.device.get_buffer_device_address(
+                &vk::BufferDeviceAddressInfo::builder().buffer(self.buffer),
+            )
+        }
+    }
 }
 
 #[cfg(test)]

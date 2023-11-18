@@ -10,7 +10,7 @@ use ash::Entry;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use gpu_allocator::AllocatorDebugSettings;
 
-pub use ash::vk;
+pub use ash::{extensions::khr, vk};
 
 use crate::backend::vulkan::physical_device::{self, PhysicalDevice};
 
@@ -113,6 +113,8 @@ pub struct InternalDevice {
     pub allocator: Option<Mutex<Allocator>>,
 
     pub fence: vk::Fence,
+
+    pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
 }
 impl Debug for InternalDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -209,6 +211,7 @@ impl InternalDevice {
             let queue_family_index = physical_device.queue_family_index;
             let vk_physical_device = physical_device.physical_device;
 
+            // TODO: better features for physical device
             let mut features_v1_1 = vk::PhysicalDeviceVulkan11Features::default();
             let mut features_v1_2 = vk::PhysicalDeviceVulkan12Features::default();
             let mut acceleration_structure_features =
@@ -277,6 +280,10 @@ impl InternalDevice {
             let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
             let fence = device.create_fence(&fence_info, None).unwrap();
 
+            // Extensons:
+            let acceleration_structure_ext =
+                Some(khr::AccelerationStructure::new(&instance, &device));
+
             Ok(Self {
                 entry,
                 instance,
@@ -289,6 +296,7 @@ impl InternalDevice {
                 allocator: Some(Mutex::new(allocator)),
                 command_buffer,
                 fence,
+                acceleration_structure_ext,
             })
         }
     }
