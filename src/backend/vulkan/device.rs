@@ -12,8 +12,18 @@ use gpu_allocator::AllocatorDebugSettings;
 
 pub use ash::vk;
 
+use crate::backend::vulkan::physical_device::{self, PhysicalDevice};
+
 use super::buffer;
 use super::context::Context;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("{0}")]
+    PhysicalDeviceError(#[from] physical_device::Error),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -47,7 +57,7 @@ unsafe extern "system" fn vulkan_debug_callback(
 pub struct Device(Arc<InternalDevice>);
 impl Device {
     pub fn create(index: usize) -> Self {
-        Self(Arc::new(InternalDevice::create(index)))
+        Self(Arc::new(InternalDevice::create(index).unwrap()))
     }
     pub fn submit_global<'a, F: FnOnce(&mut Context)>(&'a self, f: F) {
         unsafe {
@@ -94,9 +104,7 @@ pub struct InternalDevice {
     pub device: ash::Device,
     pub debug_utils_loader: DebugUtils,
     pub debug_callback: vk::DebugUtilsMessengerEXT,
-    pub physical_device: vk::PhysicalDevice,
-    pub device_memory_properties: vk::PhysicalDeviceMemoryProperties,
-    pub queue_family_index: u32,
+    pub physical_device: PhysicalDevice,
 
     pub queue: vk::Queue,
     pub pool: vk::CommandPool,
@@ -110,8 +118,6 @@ impl Debug for InternalDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InternalDevice")
             .field("physical_device", &self.physical_device)
-            .field("device_memory_properties", &self.device_memory_properties)
-            .field("queue_family_index", &self.queue_family_index)
             .field("queue", &self.queue)
             .field("pool", &self.pool)
             .field("command_buffer", &self.command_buffer)
@@ -122,7 +128,7 @@ impl Debug for InternalDevice {
 }
 
 impl InternalDevice {
-    pub fn create(index: usize) -> Self {
+    pub fn create(index: usize) -> Result<Self> {
         unsafe {
             let entry = Entry::linked();
             let app_name = CStr::from_bytes_with_nul_unchecked(b"Candle\0");
@@ -168,44 +174,55 @@ impl InternalDevice {
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
 
-            let physical_devices = instance.enumerate_physical_devices().unwrap();
-            let (physical_device, queue_family_index) = physical_devices
-                .iter()
+            let physical_devices = instance
+                .enumerate_physical_devices()
+                .unwrap()
+                .into_iter()
+                .map(|physical_device| Ok(PhysicalDevice::new(&instance, physical_device)?))
+                .collect::<Result<Vec<_>>>()?;
+            let physical_devices = physical_devices
+                .into_iter()
                 .filter_map(|physical_device| {
-                    instance
-                        .get_physical_device_queue_family_properties(*physical_device)
-                        .iter()
-                        .enumerate()
-                        .find_map(|(index, info)| {
-                            let valid = info.queue_flags.contains(vk::QueueFlags::COMPUTE);
-                            if valid {
-                                Some((*physical_device, index as _))
-                            } else {
-                                None
-                            }
-                        })
+                    if physical_device
+                        .acceleration_structure_features
+                        .acceleration_structure
+                        == vk::TRUE
+                        && physical_device.ray_query_features.ray_query == vk::TRUE
+                        && physical_device.supports_ray_query
+                        && physical_device.supports_accel_struct
+                    {
+                        Some(physical_device)
+                    } else {
+                        None
+                    }
                 })
-                .nth(index)
-                .unwrap();
+                .collect::<Vec<_>>();
 
-            // let queue_family_index =
-            // instance.get_physical_device_queue_family_properties(pdevice)
+            log::trace!("Compatible Devices: {physical_devices:?}");
+            let physical_device = physical_devices.into_iter().nth(index).unwrap();
 
-            let device_extension_names = [vk::ExtDescriptorIndexingFn::name().as_ptr()];
+            let device_extension_names = [
+                vk::ExtDescriptorIndexingFn::name().as_ptr(),
+                vk::KhrRayQueryFn::name().as_ptr(),
+            ];
 
-            let vk::InstanceFnV1_1 {
-                get_physical_device_features2,
-                ..
-            } = instance.fp_v1_1();
+            let queue_family_index = physical_device.queue_family_index;
+            let vk_physical_device = physical_device.physical_device;
 
             let mut features_v1_1 = vk::PhysicalDeviceVulkan11Features::default();
             let mut features_v1_2 = vk::PhysicalDeviceVulkan12Features::default();
-            let mut features = vk::PhysicalDeviceFeatures2::builder()
+            let mut acceleration_structure_features =
+                vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default();
+            let mut ray_query_features = vk::PhysicalDeviceRayQueryFeaturesKHR::default();
+
+            let mut features2 = vk::PhysicalDeviceFeatures2::builder()
                 .push_next(&mut features_v1_1)
                 .push_next(&mut features_v1_2)
+                .push_next(&mut acceleration_structure_features)
+                .push_next(&mut ray_query_features)
                 .build();
 
-            get_physical_device_features2(physical_device, &mut features);
+            instance.get_physical_device_features2(physical_device.physical_device, &mut features2);
 
             let priorities = [1.0];
 
@@ -216,21 +233,21 @@ impl InternalDevice {
             let device_create_info = vk::DeviceCreateInfo::builder()
                 .queue_create_infos(std::slice::from_ref(&queue_info))
                 .enabled_extension_names(&device_extension_names)
-                .push_next(&mut features);
+                .push_next(&mut features2);
 
             let device = instance
-                .create_device(physical_device, &device_create_info, None)
+                .create_device(vk_physical_device, &device_create_info, None)
                 .unwrap();
             // .map_err(|_| VulkanError::DeviceCreateError)?;
 
-            let queue = device.get_device_queue(queue_family_index, 0);
+            let queue = device.get_device_queue(physical_device.queue_family_index, 0);
 
-            let device_memory_properties =
-                instance.get_physical_device_memory_properties(physical_device);
+            // let device_memory_properties =
+            //     instance.get_physical_device_memory_properties(physical_device.physical_device);
 
             let pool_create_info = vk::CommandPoolCreateInfo::builder()
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-                .queue_family_index(queue_family_index);
+                .queue_family_index(physical_device.queue_family_index);
 
             let pool = device.create_command_pool(&pool_create_info, None).unwrap();
 
@@ -246,7 +263,7 @@ impl InternalDevice {
             let allocator = Allocator::new(&AllocatorCreateDesc {
                 instance: instance.clone(),
                 device: device.clone(),
-                physical_device,
+                physical_device: physical_device.physical_device,
                 debug_settings: AllocatorDebugSettings {
                     log_leaks_on_shutdown: true,
                     log_memory_information: true,
@@ -260,21 +277,19 @@ impl InternalDevice {
             let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
             let fence = device.create_fence(&fence_info, None).unwrap();
 
-            Self {
+            Ok(Self {
                 entry,
                 instance,
                 device,
                 debug_utils_loader,
                 debug_callback,
                 physical_device,
-                device_memory_properties,
-                queue_family_index,
                 queue,
                 pool,
                 allocator: Some(Mutex::new(allocator)),
                 command_buffer,
                 fence,
-            }
+            })
         }
     }
 }

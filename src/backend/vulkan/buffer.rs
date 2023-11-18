@@ -52,7 +52,7 @@ impl Buffer {
     }
     pub fn create(device: &Device, info: BufferInfo) -> Self {
         let device = device.clone();
-        let queue_family_indices = [device.queue_family_index];
+        let queue_family_indices = [device.physical_device.queue_family_index];
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(info.size as _)
             .usage(info.usage)

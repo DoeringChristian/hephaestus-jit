@@ -1,10 +1,11 @@
-mod accell;
+mod accel;
 mod buffer;
 mod codegen;
 mod context;
 mod device;
 mod glslext;
 mod image;
+mod physical_device;
 mod pipeline;
 #[cfg(test)]
 mod test;

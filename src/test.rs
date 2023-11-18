@@ -2,6 +2,8 @@ use crate::{backend, tr, vulkan};
 
 #[test]
 fn simple() {
+    pretty_env_logger::try_init().ok();
+
     let device = backend::Device::vulkan(0).unwrap();
 
     let i = tr::index(10);
@@ -24,6 +26,7 @@ fn simple() {
 
 #[test]
 fn simple_u16() {
+    pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
     let c = tr::sized_literal(1u16, 10);
