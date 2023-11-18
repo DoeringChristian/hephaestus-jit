@@ -12,6 +12,8 @@ pub struct GraphBuilder {
     id2buffer: HashMap<trace::VarId, BufferId>,
     textures: Vec<TextureDesc>,
     id2texture: HashMap<trace::VarId, TextureId>,
+    accels: Vec<AccelDesc>,
+    id2accel: HashMap<trace::VarId, AccelId>,
     passes: Vec<Pass>,
 }
 
@@ -44,6 +46,30 @@ impl GraphBuilder {
             texture_id
         })
     }
+    pub fn push_accel(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> AccelId {
+        // TODO: use better method to get VarRef
+        *self.id2accel.entry(id).or_insert_with(|| {
+            // TODO: reevaluate method here. We are loading the instances from buffer => struct
+            // layout has to be correct.
+            let instances = trace.var(trace.var(id).deps[0]).size;
+
+            // FIX: Different geometries
+            let n_triangles = trace.var(trace.var(id).deps[1]).size;
+            let n_vertices = trace.var(trace.var(id).deps[2]).size;
+            let geometries = vec![GeometryDesc::Triangles {
+                n_triangles,
+                n_vertices,
+            }];
+
+            let accel_id = AccelId(self.accels.len());
+            self.accels.push(AccelDesc {
+                var: trace.ref_borrow(id),
+                geometries,
+                instances,
+            });
+            accel_id
+        })
+    }
     pub fn push_pass(&mut self, pass: Pass) -> PassId {
         let id = PassId(self.passes.len());
         self.passes.push(pass);
@@ -54,7 +80,8 @@ impl GraphBuilder {
             passes: self.passes,
             buffers: self.buffers,
             textures: self.textures,
-            ..Default::default()
+            accels: self.accels,
+            schedule: vec![],
         }
     }
 }
@@ -64,6 +91,7 @@ pub struct Graph {
     pub passes: Vec<Pass>,
     pub buffers: Vec<BufferDesc>,
     pub textures: Vec<TextureDesc>,
+    pub accels: Vec<AccelDesc>,
     pub schedule: Vec<trace::VarRef>,
 }
 
@@ -161,6 +189,9 @@ impl Graph {
                     var.data = Data::Texture(device.create_texture(shape, channels).unwrap());
                 }
             }
+            for desc in self.accels.iter() {
+                todo!()
+            }
             device.execute_graph(trace, self).unwrap();
         })
     }
@@ -173,11 +204,14 @@ pub struct PassId(usize);
 pub struct BufferId(usize);
 #[derive(Debug, Clone, Copy)]
 pub struct TextureId(usize);
+#[derive(Debug, Clone, Copy)]
+pub struct AccelId(usize);
 
 #[derive(Default, Debug, Clone)]
 pub struct Pass {
     pub buffers: Vec<BufferId>,
     pub textures: Vec<TextureId>,
+    pub accels: Vec<AccelId>,
     pub op: PassOp,
 }
 
@@ -200,6 +234,19 @@ pub struct BufferDesc {
 pub struct TextureDesc {
     pub shape: [usize; 3],
     pub channels: usize,
+    pub var: trace::VarRef,
+}
+#[derive(Debug, Clone)]
+pub enum GeometryDesc {
+    Triangles {
+        n_triangles: usize,
+        n_vertices: usize,
+    },
+}
+#[derive(Debug, Clone)]
+pub struct AccelDesc {
+    pub geometries: Vec<GeometryDesc>,
+    pub instances: usize,
     pub var: trace::VarRef,
 }
 
@@ -309,14 +356,33 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             match trace.var(id).op {
                 op::Op::DeviceOp(op) => match op {
                     op::DeviceOp::Max => todo!(),
-                    op::DeviceOp::Buffer2Texture { shape, channels } => {
-                        // TODO: Generalize
-                        let src = trace.var(id).deps[0];
-                        let src = graph_builder.push_buffer(trace, src);
-                        let dst = graph_builder.push_texture(trace, id);
+                    _ => {
+                        let deps = trace.var(id).deps.clone();
+
+                        let mut buffers = vec![];
+                        let mut textures = vec![];
+                        let mut accels = vec![];
+
+                        // TODO: Improve the readability here. atm. we are pushing all the
+                        // dependenceis into multiple vecs starting with [id]
+                        for id in [id].iter().chain(deps.iter()) {
+                            match trace.var(*id).op.resulting_op() {
+                                op::Op::Buffer => {
+                                    buffers.push(graph_builder.push_buffer(trace, *id));
+                                }
+                                op::Op::Texture { .. } => {
+                                    textures.push(graph_builder.push_texture(trace, *id));
+                                }
+                                op::Op::Accel => {
+                                    accels.push(graph_builder.push_accel(trace, *id));
+                                }
+                                _ => todo!(),
+                            };
+                        }
                         graph_builder.push_pass(Pass {
-                            buffers: vec![src],
-                            textures: vec![dst],
+                            buffers,
+                            textures,
+                            accels,
                             op: PassOp::DeviceOp(op),
                         })
                     }
@@ -342,6 +408,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             let pass = Pass {
                 buffers,
                 textures,
+                accels: vec![], // WARNING: Add ray trace to shader compilation
                 op: PassOp::Kernel {
                     ir: Arc::new(compiler.ir),
                     size: trace.var(group[0]).size,

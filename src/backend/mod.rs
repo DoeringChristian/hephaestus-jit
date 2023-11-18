@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
 
-use crate::graph::Graph;
+use crate::graph::{AccelDesc, Graph};
 use crate::ir::IR;
 use crate::trace;
 use crate::vartype::AsVarType;
@@ -149,9 +149,11 @@ impl Texture {
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
+    type Accel: BackendAccel;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
     fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Self::Buffer>;
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
+    fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
     fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
         todo!()
@@ -175,5 +177,9 @@ impl AsRef<CudaBuffer> for Buffer {
 }
 
 pub trait BackendTexture: Debug {
+    type Device: BackendDevice;
+}
+
+pub trait BackendAccel {
     type Device: BackendDevice;
 }

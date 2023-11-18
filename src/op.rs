@@ -7,12 +7,14 @@ use crate::ir;
 pub enum DeviceOp {
     Max,
     Buffer2Texture { shape: [usize; 3], channels: usize },
+    BuildAccel,
 }
 impl DeviceOp {
     pub fn resulting_op(self) -> Op {
         match self {
             DeviceOp::Max => Op::Buffer,
             DeviceOp::Buffer2Texture { shape, channels } => Op::Texture { shape, channels },
+            DeviceOp::BuildAccel => Op::Accel,
         }
     }
 }
@@ -32,6 +34,7 @@ pub enum Op {
         shape: [usize; 3],
         channels: usize,
     },
+    Accel,
     DeviceOp(DeviceOp),
     KernelOp(ir::Op),
 }

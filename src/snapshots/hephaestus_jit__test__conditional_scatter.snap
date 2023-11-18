@@ -11,6 +11,7 @@ Graph {
                 ),
             ],
             textures: [],
+            accels: [],
             op: Kernel {
                 ir: IR {
                     vars: [
@@ -83,6 +84,7 @@ Graph {
                 ),
             ],
             textures: [],
+            accels: [],
             op: Kernel {
                 ir: IR {
                     vars: [
@@ -205,6 +207,7 @@ Graph {
         },
     ],
     textures: [],
+    accels: [],
     schedule: [
         VarRef {
             id: VarId(

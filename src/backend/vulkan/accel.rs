@@ -1,19 +1,20 @@
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
+use crate::graph::{AccelDesc, GeometryDesc};
 use ash::vk;
 
-pub enum GeometryCreateDesc {
-    Triangles {
-        n_triangles: usize,
-        n_vertices: usize,
-    },
-}
-
-pub struct AccelCreateDesc<'a> {
-    pub geometries: &'a [GeometryCreateDesc],
-    pub instances: usize,
-}
+// pub enum GeometryCreateDesc {
+//     Triangles {
+//         n_triangles: usize,
+//         n_vertices: usize,
+//     },
+// }
+//
+// pub struct AccelCreateDesc<'a> {
+//     pub geometries: &'a [GeometryCreateDesc],
+//     pub instances: usize,
+// }
 
 pub enum GeometryBuildDesc<'a> {
     Triangles {
@@ -29,6 +30,7 @@ pub struct AccelBuildDesc<'a> {
     pub instances: &'a Buffer,
 }
 
+#[derive(Debug)]
 pub struct AccelInternal {
     buffer: Buffer,
     accel: vk::AccelerationStructureKHR,
@@ -39,7 +41,7 @@ pub struct AccelInternal {
     geometry_type: vk::GeometryTypeKHR,
 }
 impl AccelInternal {
-    pub fn create_tlas(device: &Device, desc: &AccelCreateDesc) -> Self {
+    pub fn create_tlas(device: &Device, desc: &AccelDesc) -> Self {
         let geometry = vk::AccelerationStructureGeometryDataKHR {
             instances: vk::AccelerationStructureGeometryInstancesDataKHR {
                 array_of_pointers: vk::FALSE,
@@ -105,10 +107,10 @@ impl AccelInternal {
             geometry_type,
         }
     }
-    pub fn create_blas(device: &Device, desc: &GeometryCreateDesc) -> Self {
+    pub fn create_blas(device: &Device, desc: &GeometryDesc) -> Self {
         // Get Geometries for sizes
         let (geometry_type, geometry, n_primitives) = match desc {
-            GeometryCreateDesc::Triangles {
+            GeometryDesc::Triangles {
                 n_triangles,
                 n_vertices,
             } => (
@@ -313,6 +315,7 @@ impl Drop for AccelInternal {
     }
 }
 
+#[derive(Debug)]
 pub struct Accel {
     device: Device,
     blases: Vec<AccelInternal>,
@@ -320,7 +323,7 @@ pub struct Accel {
 }
 
 impl Accel {
-    pub fn create(device: &Device, desc: &AccelCreateDesc) -> Self {
+    pub fn create(device: &Device, desc: &AccelDesc) -> Self {
         let blases = desc
             .geometries
             .iter()

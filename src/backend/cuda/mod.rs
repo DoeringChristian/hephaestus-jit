@@ -6,6 +6,7 @@ use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
 use std::sync::Arc;
 
 use crate::backend::{self, BackendBuffer, BackendDevice};
+use crate::graph::AccelDesc;
 
 #[derive(Clone, Debug)]
 pub struct CudaDevice {
@@ -30,6 +31,7 @@ pub struct CudaBuffer {
 impl BackendDevice for CudaDevice {
     type Texture = CudaTexture;
     type Buffer = CudaBuffer;
+    type Accel = CudaAccel;
 
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
         Ok(CudaBuffer {
@@ -85,6 +87,10 @@ impl BackendDevice for CudaDevice {
     fn create_buffer_from_slice(&self, slice: &[u8]) -> backend::Result<Self::Buffer> {
         todo!()
     }
+
+    fn create_accel(&self, desc: &AccelDesc) -> backend::Result<Self::Accel> {
+        todo!()
+    }
 }
 
 impl BackendBuffer for CudaBuffer {
@@ -113,5 +119,12 @@ impl BackendBuffer for CudaBuffer {
 pub struct CudaTexture;
 
 impl backend::BackendTexture for CudaTexture {
+    type Device = CudaDevice;
+}
+
+#[derive(Debug)]
+pub struct CudaAccel;
+
+impl backend::BackendAccel for CudaAccel {
     type Device = CudaDevice;
 }

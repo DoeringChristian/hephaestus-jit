@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::backend;
 use crate::backend::vulkan::pipeline::{Binding, BufferWriteInfo, DescSetLayout, WriteSet};
+use crate::graph::AccelDesc;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use ash::vk;
@@ -78,18 +79,10 @@ impl std::ops::Deref for VulkanDevice {
     }
 }
 
-impl VulkanDevice {
-    fn device_op(&self, cb: vk::CommandBuffer, op: DeviceOp) {
-        match op {
-            DeviceOp::Max => todo!(),
-            DeviceOp::Buffer2Texture { .. } => todo!(),
-        }
-    }
-}
-
 impl backend::BackendDevice for VulkanDevice {
     type Buffer = VulkanBuffer;
     type Texture = VulkanTexture;
+    type Accel = VulkanAccel;
 
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
         let info = BufferInfo {
@@ -171,6 +164,10 @@ impl backend::BackendDevice for VulkanDevice {
                             let dst = graph.texture(trace, pass.textures[0]).vulkan().unwrap();
                             dst.copy_from_buffer(ctx, &src.buffer);
                         }
+                        DeviceOp::BuildAccel => {
+                            todo!();
+                            todo!()
+                        }
                     },
                     _ => todo!(),
                 }
@@ -249,6 +246,12 @@ impl backend::BackendDevice for VulkanDevice {
         });
         Ok(buffer)
     }
+
+    fn create_accel(&self, desc: &AccelDesc) -> backend::Result<Self::Accel> {
+        Ok(VulkanAccel {
+            accel: accel::Accel::create(&self, desc),
+        })
+    }
 }
 
 pub struct VulkanBuffer {
@@ -312,4 +315,13 @@ impl VulkanTexture {
         assert!(self.channels <= 4);
         self.image.copy_from_buffer(ctx, src);
     }
+}
+
+#[derive(Debug)]
+pub struct VulkanAccel {
+    accel: accel::Accel,
+}
+
+impl backend::BackendAccel for VulkanAccel {
+    type Device = VulkanDevice;
 }

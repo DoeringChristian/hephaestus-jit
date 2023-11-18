@@ -159,6 +159,7 @@ fn texture() {
         dbg!(&trace);
     });
     dbg!(v.to_vec::<f32>());
+    assert_eq!(v.to_vec::<f32>(), vec![1.0; 8]);
 }
 #[test]
 fn conditionals() {
@@ -217,4 +218,28 @@ fn select() {
     graph.launch(&device);
 
     assert_eq!(res.to_vec::<i32>(), vec![10, 5]);
+}
+#[test]
+fn accel() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let m00 = tr::literal(1f32);
+    let m01 = tr::literal(0f32);
+    let m02 = tr::literal(0f32);
+    let m03 = tr::literal(0f32);
+    let m10 = tr::literal(0f32);
+    let m11 = tr::literal(1f32);
+    let m12 = tr::literal(0f32);
+    let m13 = tr::literal(0f32);
+    let m20 = tr::literal(0f32);
+    let m21 = tr::literal(0f32);
+    let m22 = tr::literal(1f32);
+    let m23 = tr::literal(0f32);
+
+    let mat3x4 = tr::composite(&[
+        &m00, &m01, &m02, &m03, &m10, &m11, &m12, &m13, &m20, &m21, &m22, &m23,
+    ]);
+    let custom_index_and_mask = tr::literal(0xffu32);
+    let sbt_offset_and_flag = tr::literal(01u32);
 }
