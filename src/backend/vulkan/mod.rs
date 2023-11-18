@@ -1,3 +1,4 @@
+mod accell;
 mod buffer;
 mod codegen;
 mod context;
