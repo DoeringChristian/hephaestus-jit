@@ -275,7 +275,7 @@ impl InternalDevice {
                     log_allocations: true,
                     ..Default::default()
                 },
-                buffer_device_address: false,
+                buffer_device_address: true,
             })
             .unwrap();
 
