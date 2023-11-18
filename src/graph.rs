@@ -51,21 +51,17 @@ impl GraphBuilder {
         *self.id2accel.entry(id).or_insert_with(|| {
             // TODO: reevaluate method here. We are loading the instances from buffer => struct
             // layout has to be correct.
-            let instances = trace.var(trace.var(id).deps[0]).size;
 
-            // FIX: Different geometries
-            let n_triangles = trace.var(trace.var(id).deps[1]).size;
-            let n_vertices = trace.var(trace.var(id).deps[2]).size;
-            let geometries = vec![GeometryDesc::Triangles {
-                n_triangles,
-                n_vertices,
-            }];
+            let accel_desc = trace
+                .var(id)
+                .accel_desc
+                .clone()
+                .expect("Expected to find a Accel Descriptor, accociated with this var!");
 
             let accel_id = AccelId(self.accels.len());
             self.accels.push(AccelDesc {
+                desc: accel_desc,
                 var: trace.ref_borrow(id),
-                geometries,
-                instances,
             });
             accel_id
         })
@@ -118,6 +114,14 @@ impl Graph {
     ) -> &'a backend::Texture {
         let desc = self.texture_desc(texture_id);
         trace.var(desc.var.id()).data.texture().unwrap()
+    }
+
+    pub fn accel_desc(&self, accel_id: AccelId) -> &AccelDesc {
+        &self.accels[accel_id.0]
+    }
+    pub fn accel<'a>(&'a self, trace: &'a trace::Trace, accel_id: AccelId) -> &'a backend::Accel {
+        let desc = self.accel_desc(accel_id);
+        trace.var(desc.var.id()).data.accel().unwrap()
     }
 
     pub fn n_passes(&self) -> usize {
@@ -190,7 +194,11 @@ impl Graph {
                 }
             }
             for desc in self.accels.iter() {
-                todo!()
+                let var = trace.var_mut(desc.var.id());
+
+                if !var.data.is_storage() {
+                    var.data = Data::Accel(device.create_accel(&desc.desc).unwrap());
+                }
             }
             device.execute_graph(trace, self).unwrap();
         })
@@ -237,16 +245,8 @@ pub struct TextureDesc {
     pub var: trace::VarRef,
 }
 #[derive(Debug, Clone)]
-pub enum GeometryDesc {
-    Triangles {
-        n_triangles: usize,
-        n_vertices: usize,
-    },
-}
-#[derive(Debug, Clone)]
 pub struct AccelDesc {
-    pub geometries: Vec<GeometryDesc>,
-    pub instances: usize,
+    pub desc: backend::AccelDesc,
     pub var: trace::VarRef,
 }
 

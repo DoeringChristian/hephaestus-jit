@@ -224,22 +224,41 @@ fn accel() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    let m00 = tr::literal(1f32);
-    let m01 = tr::literal(0f32);
-    let m02 = tr::literal(0f32);
-    let m03 = tr::literal(0f32);
-    let m10 = tr::literal(0f32);
-    let m11 = tr::literal(1f32);
-    let m12 = tr::literal(0f32);
-    let m13 = tr::literal(0f32);
-    let m20 = tr::literal(0f32);
-    let m21 = tr::literal(0f32);
-    let m22 = tr::literal(1f32);
-    let m23 = tr::literal(0f32);
+    let x = tr::array(&[0f32, 0f32, 1f32], &device);
+    let y = tr::array(&[0f32, 1f32, 1f32], &device);
+    let z = tr::array(&[0f32, 0f32, 0f32], &device);
 
-    let mat3x4 = tr::composite(&[
-        &m00, &m01, &m02, &m03, &m10, &m11, &m12, &m13, &m20, &m21, &m22, &m23,
+    let vertices = tr::vec(&[&x, &y, &z]);
+    let triangles = tr::vec(&[
+        &tr::sized_literal(0u32, 1),
+        &tr::literal(1u32),
+        &tr::literal(2u32),
     ]);
-    let custom_index_and_mask = tr::literal(0xffu32);
-    let sbt_offset_and_flag = tr::literal(01u32);
+
+    let desc = tr::AccelDesc {
+        geometries: vec![tr::GeometryDesc::Triangles {
+            triangles,
+            vertices,
+        }],
+        instances: vec![tr::InstanceDesc {
+            geometry: 0,
+            transform: [
+                1.0, 0.0, 0.0, 0.0, //
+                0.0, 1.0, 0.0, 0.0, //
+                0.0, 0.0, 1.0, 0.0, //
+            ],
+        }],
+    };
+
+    let accel = tr::accel(&desc);
+
+    accel.schedule();
+
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+
+    let graph = tr::compile();
+    dbg!(&graph);
+    graph.launch(&device);
 }

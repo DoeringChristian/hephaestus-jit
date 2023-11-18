@@ -118,6 +118,9 @@ pub struct Var {
     pub size: usize, // number of elements
     pub rc: usize,
 
+    // TODO: Unify that with some other member (data or index?)
+    pub accel_desc: Option<backend::AccelDesc>,
+
     // pub arrays: Option<Array>,
     pub data: Data,
 }
@@ -140,11 +143,6 @@ fn push_var(v: Var) -> VarRef {
     })
 }
 
-// pub fn eval(refs: &[&VarRef]) {
-//     with_trace(|t| {
-//         compiler::eval(t, refs.iter().map(|r| r.id()));
-//     })
-// }
 pub fn compile() -> graph::Graph {
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
@@ -231,6 +229,74 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
         ..Default::default()
     })
 }
+
+#[derive(Debug, Clone)]
+pub enum GeometryDesc {
+    Triangles { triangles: VarRef, vertices: VarRef },
+}
+#[derive(Debug, Clone)]
+pub struct InstanceDesc {
+    pub geometry: usize,
+    pub transform: [f32; 12],
+}
+#[derive(Debug, Clone)]
+pub struct AccelDesc {
+    pub geometries: Vec<GeometryDesc>,
+    pub instances: Vec<InstanceDesc>,
+}
+
+pub fn accel(desc: &AccelDesc) -> VarRef {
+    let mut deps = vec![];
+    let geometries = desc
+        .geometries
+        .iter()
+        .map(|g| match g {
+            GeometryDesc::Triangles {
+                triangles,
+                vertices,
+            } => {
+                // NOTE: order in which triangles/vertices are pushed must match how they are
+                // used when building Accel
+                deps.push(triangles.id());
+                deps.push(vertices.id());
+                backend::GeometryDesc::Triangles {
+                    n_triangles: triangles.size(),
+                    n_vertices: vertices.size(),
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    let instances = desc
+        .instances
+        .iter()
+        .cloned()
+        .map(
+            |InstanceDesc {
+                 geometry,
+                 transform,
+             }| {
+                backend::InstanceDesc {
+                    geometry,
+                    transform,
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+    let create_desc = backend::AccelDesc {
+        geometries,
+        instances,
+    };
+
+    push_var(Var {
+        op: Op::DeviceOp(DeviceOp::BuildAccel),
+        deps,
+        ty: VarType::Void,
+        size: 0,
+        accel_desc: Some(create_desc),
+        ..Default::default()
+    })
+}
+
 impl VarRef {
     pub fn same_trace(&self, other: &VarRef) -> bool {
         self._thread_id == other._thread_id
@@ -245,7 +311,6 @@ impl VarRef {
         with_trace(|t| t.var(self.id()).rc)
     }
 }
-
 impl VarRef {
     pub fn add(&self, other: &VarRef) -> VarRef {
         assert_eq!(self._thread_id, std::thread::current().id());

@@ -86,6 +86,7 @@ impl Buffer {
                 .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())
                 .unwrap();
         }
+        log::trace!("Created Buffer with id {buffer:?}.");
 
         Self {
             allocation: Some(allocation),

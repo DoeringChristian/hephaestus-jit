@@ -5,8 +5,7 @@ pub use cudarc::driver::DriverError;
 use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
 use std::sync::Arc;
 
-use crate::backend::{self, BackendBuffer, BackendDevice};
-use crate::graph::AccelDesc;
+use crate::backend::{self, AccelDesc, BackendBuffer, BackendDevice};
 
 #[derive(Clone, Debug)]
 pub struct CudaDevice {

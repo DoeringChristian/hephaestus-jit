@@ -1,7 +1,7 @@
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
-use crate::graph::{AccelDesc, GeometryDesc};
+use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
 
 // pub enum GeometryCreateDesc {
@@ -27,7 +27,7 @@ pub enum GeometryBuildDesc<'a> {
 pub struct AccelBuildDesc<'a> {
     pub geometries: &'a [GeometryBuildDesc<'a>],
     // pub instances: &'a [InstanceBuildDesc],
-    pub instances: &'a Buffer,
+    pub instances: Buffer,
 }
 
 #[derive(Debug)]
@@ -50,7 +50,7 @@ impl AccelInternal {
             },
         };
         let geometry_type = vk::GeometryTypeKHR::INSTANCES;
-        let n_primitives = desc.instances;
+        let n_primitives = desc.instances.len();
 
         let geometries = [vk::AccelerationStructureGeometryKHR {
             geometry_type,
@@ -218,7 +218,7 @@ impl AccelInternal {
                 .cmd_build_acceleration_structures(
                     ctx.cb,
                     &[vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-                        .ty(vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL)
+                        .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
                         .flags(vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE)
                         .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
                         .dst_acceleration_structure(self.accel)
@@ -360,5 +360,17 @@ impl Accel {
         }
 
         self.tlas.build_tlas(ctx, desc);
+    }
+    pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
+        unsafe {
+            self.device
+                .acceleration_structure_ext
+                .as_ref()
+                .unwrap()
+                .get_acceleration_structure_device_address(
+                    &vk::AccelerationStructureDeviceAddressInfoKHR::builder()
+                        .acceleration_structure(self.blases[id].accel),
+                )
+        }
     }
 }

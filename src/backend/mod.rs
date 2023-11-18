@@ -5,10 +5,12 @@ use std::fmt::Debug;
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
 
-use crate::graph::{AccelDesc, Graph};
+use crate::graph::Graph;
 use crate::ir::IR;
 use crate::trace;
 use crate::vartype::AsVarType;
+
+use self::vulkan::VulkanAccel;
 
 // TODO: Device Caching
 pub fn vulkan(id: usize) -> Device {
@@ -59,6 +61,12 @@ impl Device {
             Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(
                 device.create_texture(shape, channels)?,
             )),
+        }
+    }
+    pub fn create_accel(&self, desc: &AccelDesc) -> Result<Accel> {
+        match self {
+            Device::CudaDevice(_) => todo!(),
+            Device::VulkanDevice(device) => Ok(Accel::VulkanAccel(device.create_accel(desc)?)),
         }
     }
     pub fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
@@ -146,6 +154,19 @@ impl Texture {
     }
 }
 
+#[derive(Debug)]
+pub enum Accel {
+    VulkanAccel(VulkanAccel),
+}
+impl Accel {
+    pub fn vulkan(&self) -> Option<&VulkanAccel> {
+        match self {
+            Self::VulkanAccel(accel) => Some(accel),
+            _ => None,
+        }
+    }
+}
+
 pub trait BackendDevice: Clone {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
@@ -182,4 +203,22 @@ pub trait BackendTexture: Debug {
 
 pub trait BackendAccel {
     type Device: BackendDevice;
+}
+
+#[derive(Debug, Clone)]
+pub enum GeometryDesc {
+    Triangles {
+        n_triangles: usize,
+        n_vertices: usize,
+    },
+}
+#[derive(Debug, Clone)]
+pub struct InstanceDesc {
+    pub geometry: usize,
+    pub transform: [f32; 12],
+}
+#[derive(Debug, Clone)]
+pub struct AccelDesc {
+    pub geometries: Vec<GeometryDesc>,
+    pub instances: Vec<InstanceDesc>,
 }

@@ -16,7 +16,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::backend;
 use crate::backend::vulkan::pipeline::{Binding, BufferWriteInfo, DescSetLayout, WriteSet};
-use crate::graph::AccelDesc;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use ash::vk;
@@ -90,7 +89,8 @@ impl backend::BackendDevice for VulkanDevice {
             alignment: 0,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
+                | vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             memory_location: MemoryLocation::GpuOnly,
         };
         let buffer = Buffer::create(self, info);
@@ -165,8 +165,54 @@ impl backend::BackendDevice for VulkanDevice {
                             dst.copy_from_buffer(ctx, &src.buffer);
                         }
                         DeviceOp::BuildAccel => {
-                            todo!();
-                            todo!()
+                            let accel_desc = graph.accel_desc(pass.accels[0]);
+                            let accel = trace.var(accel_desc.var.id()).data.accel().unwrap().vulkan().unwrap();
+                            
+                            let mut buffers = pass.buffers.iter().rev().map(|id|graph.buffer(trace, *id));
+
+                            let geometries = accel_desc.desc.geometries.iter().map(|g|{
+                                match g{
+                                    backend::GeometryDesc::Triangles { n_triangles, n_vertices } => {
+                                        accel::GeometryBuildDesc::Triangles{triangles: &buffers.next().unwrap().vulkan().unwrap().buffer, vertices: &buffers.next().unwrap().vulkan().unwrap().buffer}
+                                    },
+                                }
+                            }).collect::<Vec<_>>();
+
+
+                            let instances = accel_desc.desc.instances.iter().map(|instance|{
+                                vk::AccelerationStructureInstanceKHR{
+                                    transform: vk::TransformMatrixKHR{
+                                        matrix: instance.transform,
+                                    },
+                                    instance_custom_index_and_mask: vk::Packed24_8::new(0, 0xff),
+                                            instance_shader_binding_table_record_offset_and_flags: vk::Packed24_8::new(
+                                                0,
+                                                vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as _,
+                                            ),
+                                    acceleration_structure_reference: vk::AccelerationStructureReferenceKHR{
+                                        device_handle: accel.accel.get_blas_device_address(instance.geometry),
+                                    }
+                                }
+                            }).collect::<Vec<_>>();
+
+                            let instance_slice: &[u8] =  unsafe { std::slice::from_raw_parts(instances.as_ptr() as *const _, std::mem::size_of_val(&instances)) };
+
+                            let mut instance_buffer = Buffer::create(&ctx, BufferInfo{
+                                size: instance_slice.len(),
+                                 usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR
+                                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                                memory_location: MemoryLocation::CpuToGpu,
+                                ..Default::default()
+                            });
+                            instance_buffer.mapped_slice_mut().copy_from_slice(instance_slice);
+                            
+
+                            let desc = accel::AccelBuildDesc{
+                                geometries: &geometries,
+                                instances: instance_buffer,
+                            };
+                            
+                            accel.accel.build(ctx, &desc);
                         }
                     },
                     _ => todo!(),
@@ -231,7 +277,10 @@ impl backend::BackendDevice for VulkanDevice {
         let info = BufferInfo {
             size,
             alignment: 0,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             memory_location: MemoryLocation::CpuToGpu,
         };
         let mut staging = Buffer::create(&self.device, info);
@@ -247,7 +296,7 @@ impl backend::BackendDevice for VulkanDevice {
         Ok(buffer)
     }
 
-    fn create_accel(&self, desc: &AccelDesc) -> backend::Result<Self::Accel> {
+    fn create_accel(&self, desc: &backend::AccelDesc) -> backend::Result<Self::Accel> {
         Ok(VulkanAccel {
             accel: accel::Accel::create(&self, desc),
         })

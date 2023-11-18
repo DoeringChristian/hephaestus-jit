@@ -206,6 +206,8 @@ impl InternalDevice {
             let device_extension_names = [
                 vk::ExtDescriptorIndexingFn::name().as_ptr(),
                 vk::KhrRayQueryFn::name().as_ptr(),
+                vk::KhrAccelerationStructureFn::name().as_ptr(),
+                vk::KhrDeferredHostOperationsFn::name().as_ptr(),
             ];
 
             let queue_family_index = physical_device.queue_family_index;
