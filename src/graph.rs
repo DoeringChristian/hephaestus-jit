@@ -172,7 +172,7 @@ impl Graph {
             for desc in self.buffers.iter() {
                 log::trace!("{:#?}", trace);
                 let var = trace.var_mut(desc.var.id());
-                log::trace!("{var:#?}");
+                // log::trace!("{var:#?}");
 
                 let size = var.size;
                 let ty_size = var.ty.size();

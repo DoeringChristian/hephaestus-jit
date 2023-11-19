@@ -6,18 +6,6 @@ use super::device::Device;
 use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
 
-// pub enum GeometryCreateDesc {
-//     Triangles {
-//         n_triangles: usize,
-//         n_vertices: usize,
-//     },
-// }
-//
-// pub struct AccelCreateDesc<'a> {
-//     pub geometries: &'a [GeometryCreateDesc],
-//     pub instances: usize,
-// }
-
 pub enum GeometryBuildDesc<'a> {
     Triangles {
         triangles: &'a Buffer,
