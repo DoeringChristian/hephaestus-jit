@@ -254,11 +254,25 @@ fn accel() {
 
     accel.schedule();
 
-    tr::with_trace(|trace| {
-        dbg!(&trace);
-    });
+    let x = tr::array(&[0.6f32, 0.3f32], &device);
+    let y = tr::array(&[0.6f32, 0.3f32], &device);
+    let z = tr::array(&[1f32, 1f32], &device);
+
+    let o = tr::vec(&[&x, &y, &z]);
+    let d = tr::vec(&[&tr::literal(0f32), &tr::literal(0f32), &tr::literal(-1f32)]);
+    let tmin = tr::literal(0f32);
+    let tmax = tr::literal(10_000f32);
+
+    let intersection_ty = accel.trace_ray(&o, &d, &tmin, &tmax);
+    intersection_ty.schedule();
+
+    // tr::with_trace(|trace| {
+    //     dbg!(&trace);
+    // });
 
     let graph = tr::compile();
-    dbg!(&graph);
+    // dbg!(&graph);
     graph.launch(&device);
+
+    dbg!(intersection_ty.to_vec::<i32>());
 }

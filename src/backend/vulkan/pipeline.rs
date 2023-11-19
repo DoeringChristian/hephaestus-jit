@@ -6,6 +6,7 @@ use std::hash::{Hash, Hasher};
 use crate::backend::vulkan::codegen;
 use crate::ir::IR;
 
+use super::accel::Accel;
 use super::buffer::Buffer;
 use super::context::Context;
 use super::device::Device;
@@ -131,6 +132,7 @@ impl Pipeline {
 
         let num_buffers = ir.n_buffers;
         let num_textures = ir.n_textures;
+        let num_accels = ir.n_accels;
 
         unsafe {
             let shader_info = vk::ShaderModuleCreateInfo::builder()
@@ -147,6 +149,10 @@ impl Pipeline {
                 vk::DescriptorPoolSize {
                     ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     descriptor_count: num_textures.max(1) as _,
+                },
+                vk::DescriptorPoolSize {
+                    ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+                    descriptor_count: num_accels.max(1) as _,
                 },
             ];
             let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
@@ -169,6 +175,13 @@ impl Pipeline {
                     binding: 1,
                     descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     descriptor_count: num_textures as _,
+                    stage_flags: vk::ShaderStageFlags::ALL,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: 2,
+                    descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+                    descriptor_count: num_accels as _,
                     stage_flags: vk::ShaderStageFlags::ALL,
                     ..Default::default()
                 },
@@ -282,6 +295,7 @@ impl Pipeline {
         num: usize,
         buffers: &[&Buffer],
         images: &[&Image],
+        accels: &[&Accel],
     ) {
         let image_views = images
             .iter()
@@ -325,6 +339,14 @@ impl Pipeline {
             })
             .collect::<Vec<_>>();
 
+        let acceleration_structures = accels
+            .iter()
+            .map(|accel| accel.get_tlas())
+            .collect::<Vec<_>>();
+
+        let mut desc_accel_infos = vk::WriteDescriptorSetAccelerationStructureKHR::builder()
+            .acceleration_structures(&acceleration_structures);
+
         let write_desc_sets = [
             if !desc_buffer_infos.is_empty() {
                 Some(
@@ -347,6 +369,19 @@ impl Pipeline {
                         .dst_binding(1)
                         .build(),
                 )
+            } else {
+                None
+            },
+            if !acceleration_structures.is_empty() {
+                let mut write_desc_set = vk::WriteDescriptorSet::builder()
+                    .dst_set(self.desc_sets[0])
+                    .dst_binding(2)
+                    .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
+                    .push_next(&mut desc_accel_infos)
+                    .build();
+                write_desc_set.descriptor_count = acceleration_structures.len() as _; // WARN: no
+                                                                                      // Idea if this is correct
+                Some(write_desc_set)
             } else {
                 None
             },

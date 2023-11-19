@@ -405,10 +405,15 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                 .iter()
                 .map(|id| graph_builder.push_texture(trace, *id))
                 .collect::<Vec<_>>();
+            let accels = compiler
+                .accels
+                .iter()
+                .map(|id| graph_builder.push_accel(trace, *id))
+                .collect::<Vec<_>>();
             let pass = Pass {
                 buffers,
                 textures,
-                accels: vec![], // WARNING: Add ray trace to shader compilation
+                accels,
                 op: PassOp::Kernel {
                     ir: Arc::new(compiler.ir),
                     size: trace.var(group[0]).size,

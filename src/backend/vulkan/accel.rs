@@ -379,4 +379,7 @@ impl Accel {
                 )
         }
     }
+    pub fn get_tlas(&self) -> vk::AccelerationStructureKHR {
+        self.tlas.accel
+    }
 }

@@ -137,6 +137,14 @@ impl backend::BackendDevice for VulkanDevice {
                         &buffer.vulkan().unwrap().image
                     })
                     .collect::<Vec<_>>();
+                let accels = pass
+                    .accels
+                    .iter()
+                    .map(|id| {
+                        let accel = graph.accel(trace, *id);
+                        &accel.vulkan().unwrap().accel
+                    })
+                    .collect::<Vec<_>>();
                 match &pass.op {
                     PassOp::Kernel { ir, size } => {
                         let pipeline = self.compile_ir(ir);
@@ -156,7 +164,7 @@ impl backend::BackendDevice for VulkanDevice {
                                 &[],
                             );
                         }
-                        pipeline.submit_to_cbuffer(ctx, *size, &buffers, &images);
+                        pipeline.submit_to_cbuffer(ctx, *size, &buffers, &images, &accels);
                     }
                     PassOp::DeviceOp(op) => match op {
                         DeviceOp::Max => todo!(),

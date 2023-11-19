@@ -492,7 +492,19 @@ impl VarRef {
             ..Default::default()
         })
     }
-    pub fn trace_ray(&self) -> Self {
-        todo!()
+    pub fn trace_ray(&self, o: &Self, d: &Self, tmin: &Self, tmax: &Self) -> Self {
+        let size = max_size([o, d, tmin, tmax].into_iter());
+
+        let ty = VarType::U32;
+
+        let accel_ref = self.get_ref();
+
+        push_var(Var {
+            op: Op::KernelOp(ir::Op::TraceRay),
+            deps: vec![accel_ref.id(), o.id(), d.id(), tmin.id(), tmax.id()],
+            ty,
+            size,
+            ..Default::default()
+        })
     }
 }

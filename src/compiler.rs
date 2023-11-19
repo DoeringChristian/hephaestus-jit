@@ -33,6 +33,8 @@ pub struct Compiler {
     pub buffers: Vec<trace::VarId>,
     id2texture: HashMap<trace::VarId, usize>,
     pub textures: Vec<trace::VarId>,
+    id2accel: HashMap<trace::VarId, usize>,
+    pub accels: Vec<trace::VarId>,
 }
 
 impl Compiler {
@@ -74,6 +76,7 @@ impl Compiler {
         }
         self.ir.n_buffers = self.buffers.len();
         self.ir.n_textures = self.textures.len();
+        self.ir.n_accels = self.accels.len();
     }
     pub fn collect(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
         if self.visited.contains_key(&id) {
@@ -169,6 +172,18 @@ impl Compiler {
                     [],
                 )
             }
+            Op::Accel => {
+                let accel_id = self.push_accel(id);
+                self.ir.push_var(
+                    ir::Var {
+                        op: ir::Op::AccelRef,
+                        ty: var.ty.clone(),
+                        data: accel_id as _,
+                        ..Default::default()
+                    },
+                    [],
+                )
+            }
             _ => todo!(),
         }
     }
@@ -184,6 +199,13 @@ impl Compiler {
             let texture_id = self.textures.len();
             self.textures.push(id);
             texture_id
+        })
+    }
+    pub fn push_accel(&mut self, id: trace::VarId) -> usize {
+        *self.id2accel.entry(id).or_insert_with(|| {
+            let accel_id = self.accels.len();
+            self.accels.push(id);
+            accel_id
         })
     }
 }

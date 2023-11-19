@@ -50,6 +50,7 @@ impl Op {
         match self {
             Op::Buffer => Op::Buffer,
             Op::Texture { .. } => self.clone(),
+            Op::Accel => Op::Accel,
             Op::KernelOp(_) => Op::Buffer,
             Op::DeviceOp(dop) => dop.resulting_op(),
             _ => todo!(),

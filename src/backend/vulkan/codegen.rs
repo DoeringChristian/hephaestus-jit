@@ -1,3 +1,4 @@
+use std::backtrace::Backtrace;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -8,6 +9,12 @@ use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
 
 // fn ty(ty: &VarType) ->
+
+// #[derive(Debug, thiserror::Error)]
+// pub enum Error {
+//     #[error("{0}")]
+//     RspirvError(#[from] dr::Error, Backtrace),
+// }
 
 pub fn assemble_trace(trace: &IR, entry_point: &str) -> Result<Vec<u32>, dr::Error> {
     let mut b = SpirvBuilder::default();
@@ -84,10 +91,15 @@ impl SpirvBuilder {
         self.capability(spirv::Capability::Float16);
         self.capability(spirv::Capability::Float64);
 
+        self.capability(spirv::Capability::RayQueryKHR);
+
         self.capability(spirv::Capability::StorageUniformBufferBlock16);
 
         self.glsl_ext = self.ext_inst_import("GLSL.std.450");
+
         self.extension("SPV_KHR_16bit_storage");
+        self.extension("SPV_KHR_ray_query");
+
         self.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
 
         let void = self.type_void();
@@ -140,13 +152,10 @@ impl SpirvBuilder {
 
         Ok(())
     }
-    // fn acquire_ids(&mut self, trace: &IR) {
-    //     let vars = trace.vars.iter().map(|_| self.id()).collect::<Vec<_>>();
-    //     self.spirv_vars = vars;
-    // }
     fn reg(&self, id: VarId) -> u32 {
         self.spriv_regs[&id]
     }
+    /// Put the instructions at the beginning of a function
     fn with_function<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
         &mut self,
         f: F,
@@ -158,11 +167,74 @@ impl SpirvBuilder {
         self.select_block(current)?;
         Ok(res)
     }
-    fn if_block<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
+    /// Put the instructions at the top of the module, outside of any function
+    fn with_module<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
         &mut self,
-        cond: u32,
         f: F,
     ) -> Result<T, dr::Error> {
+        let current = self.selected_block();
+        self.select_block(None)?;
+        let res = f(self)?;
+        self.select_block(current)?;
+        Ok(res)
+    }
+    fn while_block(
+        &mut self,
+        cond: impl FnOnce(&mut Self) -> Result<u32, dr::Error>,
+        f: impl FnOnce(&mut Self) -> Result<(), dr::Error>,
+    ) -> Result<(), dr::Error> {
+        let start_label = self.id();
+        let start_cond_label = self.id();
+        let start_body_label = self.id();
+        let continue_label = self.id();
+        let end_label = self.id();
+
+        self.branch(start_label)?;
+        self.begin_block(Some(start_label))?;
+
+        // According to spirv OpLoopMerge should be second to last
+        // instruction in block. Rspirv however ends block with
+        // selection_merge. Therefore, we insert the instruction by hand.
+        self.b
+            .insert_into_block(
+                rspirv::dr::InsertPoint::End,
+                rspirv::dr::Instruction::new(
+                    spirv::Op::LoopMerge,
+                    None,
+                    None,
+                    vec![
+                        rspirv::dr::Operand::IdRef(end_label),
+                        rspirv::dr::Operand::IdRef(continue_label),
+                        rspirv::dr::Operand::SelectionControl(spirv::SelectionControl::NONE),
+                    ],
+                ),
+            )
+            .unwrap();
+
+        self.branch(start_cond_label)?;
+        self.begin_block(Some(start_cond_label))?;
+
+        let cond = cond(self)?;
+
+        self.branch_conditional(cond, start_body_label, end_label, [])?;
+        self.begin_block(Some(start_body_label))?;
+
+        f(self)?;
+
+        self.branch(continue_label)?;
+        self.begin_block(Some(continue_label))?;
+
+        self.branch(start_label)?;
+
+        self.begin_block(Some(end_label))?;
+
+        Ok(())
+    }
+    fn if_block(
+        &mut self,
+        cond: u32,
+        f: impl FnOnce(&mut Self) -> Result<(), dr::Error>,
+    ) -> Result<(), dr::Error> {
         let ty_bool = self.type_bool();
         let bool_true = self.constant_true(ty_bool);
 
@@ -193,12 +265,12 @@ impl SpirvBuilder {
 
         self.begin_block(Some(start_label))?;
 
-        let res = f(self)?;
+        f(self)?;
 
         self.branch(end_label).unwrap();
 
         self.begin_block(Some(end_label))?;
-        Ok(res)
+        Ok(())
     }
     fn spirv_ty(&mut self, ty: &VarType) -> u32 {
         match ty {
@@ -235,6 +307,7 @@ impl SpirvBuilder {
         }
     }
     fn assemble_samplers(&mut self, ir: &IR) -> Vec<u32> {
+        // TODO: no longer sure why this has it's own function
         ir.var_ids()
             .filter_map(|varid| {
                 let var = ir.var(varid);
@@ -283,7 +356,6 @@ impl SpirvBuilder {
             })
             .collect()
     }
-    // TODO: Spirv Builder
     fn assemble_storage_vars(&mut self, ir: &IR) -> Vec<u32> {
         ir.var_ids()
             .filter_map(|varid| {
@@ -335,6 +407,30 @@ impl SpirvBuilder {
 
                         self.spriv_regs.insert(varid, res);
                         dbg!(res);
+                        Some(res)
+                    }
+                    Op::AccelRef => {
+                        let accel_ty = self.type_acceleration_structure_khr();
+                        let u32_ty = self.type_int(32, 0);
+                        let array_len = self.constant_u32(u32_ty, ir.n_accels as _);
+                        let array_ty = self.type_array(accel_ty, array_len);
+                        let ptr_ty =
+                            self.type_pointer(None, spirv::StorageClass::UniformConstant, array_ty);
+                        let res =
+                            self.variable(ptr_ty, None, spirv::StorageClass::UniformConstant, None);
+
+                        self.decorate(
+                            res,
+                            spirv::Decoration::DescriptorSet,
+                            [dr::Operand::LiteralInt32(0)],
+                        );
+                        self.decorate(
+                            res,
+                            spirv::Decoration::Binding,
+                            [dr::Operand::LiteralInt32(2)],
+                        );
+                        self.spriv_regs.insert(varid, res);
+
                         Some(res)
                     }
                     _ => None,
@@ -462,6 +558,78 @@ impl SpirvBuilder {
                     let ty = self.spirv_ty(&ir.var(varid).ty);
                     let src = self.reg(deps[0]);
                     self.composite_extract(ty, None, src, [elem as u32])?
+                }
+                Op::TraceRay => {
+                    let accels = deps[0];
+                    let accel_idx = ir.var(accels).data;
+                    let o = deps[1];
+                    let d = deps[2];
+                    let tmin = deps[3];
+                    let tmax = deps[4];
+
+                    let u32_ty = self.type_int(32, 0);
+                    let i32_ty = self.type_int(32, 1);
+
+                    let accels = self.reg(accels);
+                    let accel_idx = self.constant_u32(u32_ty, accel_idx as _);
+                    let accel_ty = self.type_acceleration_structure_khr();
+                    let accel_ptr_ty =
+                        self.type_pointer(None, spirv::StorageClass::UniformConstant, accel_ty);
+                    let accel_ptr = self.access_chain(accel_ptr_ty, None, accels, [accel_idx])?;
+
+                    let accel = self.load(accel_ty, None, accel_ptr, None, None)?;
+
+                    let ray_query_ty = self.type_ray_query_khr();
+                    let ray_query_ptr_ty =
+                        self.type_pointer(None, spirv::StorageClass::Private, ray_query_ty);
+
+                    let ray_query_var = self.with_module(|s| {
+                        Ok(s.variable(ray_query_ptr_ty, None, spirv::StorageClass::Private, None))
+                    })?;
+
+                    let ray_flags = self.constant_u32(u32_ty, 0x01);
+                    let cull_mask = self.constant_u32(u32_ty, 0xff);
+                    let o = self.reg(o);
+                    let d = self.reg(d);
+                    let tmin = self.reg(tmin);
+                    let tmax = self.reg(tmax);
+
+                    self.ray_query_initialize_khr(
+                        ray_query_var,
+                        accel,
+                        ray_flags,
+                        cull_mask,
+                        o,
+                        tmin,
+                        d,
+                        tmax,
+                    )?;
+
+                    let bool_ty = self.type_bool();
+                    let i32_0 = self.constant_u32(i32_ty, 0);
+                    let u32_0 = self.constant_u32(u32_ty, 0);
+
+                    self.while_block(
+                        |s| s.ray_query_proceed_khr(bool_ty, None, ray_query_var),
+                        |s| {
+                            let intersection_ty = s.ray_query_get_intersection_type_khr(
+                                u32_ty,
+                                None,
+                                ray_query_var,
+                                i32_0,
+                            )?;
+                            let is_opaque = s.i_equal(bool_ty, None, intersection_ty, u32_0)?;
+                            s.if_block(is_opaque, |s| {
+                                s.ray_query_confirm_intersection_khr(ray_query_var)
+                            })?;
+                            Ok(())
+                        },
+                    )?;
+
+                    let i32_1 = self.constant_u32(i32_ty, 1);
+
+                    // TODO: Handle intersections
+                    self.ray_query_get_intersection_type_khr(u32_ty, None, ray_query_var, i32_1)?
                 }
                 Op::TexLookup => {
                     let img = deps[0];
