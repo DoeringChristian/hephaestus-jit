@@ -265,17 +265,11 @@ fn accel() {
 
     // d.schedule();
     // o.schedule();
-    dbg!(o.size());
 
     let intersection_ty = accel.trace_ray(&o, &d, &tmin, &tmax);
     intersection_ty.schedule();
-    dbg!(intersection_ty.size());
-    // tr::with_trace(|trace| {
-    //     dbg!(&trace);
-    // });
 
     let graph = tr::compile();
-    // dbg!(&graph);
     graph.launch(&device);
 
     dbg!(intersection_ty.to_vec::<i32>());

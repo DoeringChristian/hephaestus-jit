@@ -327,6 +327,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     if !group.is_empty() {
         groups.push(group);
     }
+    dbg!(&groups);
 
     // Step 3: subdivide groups by size:
 

@@ -856,9 +856,13 @@ impl SpirvBuilder {
                         | VarType::I32
                         | VarType::U32
                         | VarType::I64
-                        | VarType::U64
-                        | VarType::F32
-                        | VarType::F64 => self.constant_u32(ty, var.data as _),
+                        | VarType::U64 => self.constant_u32(ty, var.data as _),
+                        VarType::F32 => {
+                            self.constant_f32(ty, unsafe { *(&var.data as *const _ as *const _) })
+                        }
+                        VarType::F64 => {
+                            self.constant_f64(ty, unsafe { *(&var.data as *const _ as *const _) })
+                        }
                         _ => todo!(),
                     }
                 }
