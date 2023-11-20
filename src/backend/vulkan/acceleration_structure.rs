@@ -141,6 +141,7 @@ pub struct AccelerationStructure {
 }
 impl AccelerationStructure {
     pub fn create(device: &Device, info: AccelerationStructureInfo) -> Self {
+        log::trace!("Creating AccelerationStructure with {info:#?}");
         let (geometries, max_primitive_counts): (Vec<_>, Vec<_>) = info
             .geometries
             .iter()
@@ -159,7 +160,7 @@ impl AccelerationStructure {
             .unzip();
 
         let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
+            .ty(info.ty)
             .flags(info.flags)
             .geometries(&geometries);
 
@@ -185,7 +186,7 @@ impl AccelerationStructure {
             },
         );
         let create_info = vk::AccelerationStructureCreateInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
+            .ty(info.ty)
             .buffer(buffer.buffer())
             .size(sizes.acceleration_structure_size);
 
@@ -197,6 +198,11 @@ impl AccelerationStructure {
                 .create_acceleration_structure(&create_info, None)
                 .unwrap()
         };
+
+        log::trace!(
+            "Created AccelerationStructure with handle {handle:?}",
+            handle = accel
+        );
         Self {
             buffer,
             accel,
@@ -206,6 +212,7 @@ impl AccelerationStructure {
         }
     }
     pub fn build(&self, ctx: &mut Context, info: &AccelerationStructureInfo) {
+        log::trace!("Building AccelerationStructure with {info:#?}");
         let scratch_buffer = ctx.buffer(BufferInfo {
             size: self.sizes.build_scratch_size as _,
             usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
@@ -238,29 +245,28 @@ impl AccelerationStructure {
             .unzip();
 
         let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
-            .flags(info.flags)
-            .geometries(&geometries);
+            .ty(self.info.ty)
+            .flags(self.info.flags)
+            .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
+            .dst_acceleration_structure(self.accel)
+            .geometries(&geometries)
+            .scratch_data(vk::DeviceOrHostAddressKHR {
+                device_address: scratch_buffer,
+            })
+            .build();
+
+        log::trace!("Using geometry info {geometry_info:#?}");
 
         unsafe {
             ctx.acceleration_structure_ext
                 .as_ref()
                 .unwrap()
-                .cmd_build_acceleration_structures(
-                    ctx.cb,
-                    &[vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-                        .ty(self.info.ty)
-                        .flags(self.info.flags)
-                        .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
-                        .dst_acceleration_structure(self.accel)
-                        .geometries(&geometries)
-                        .scratch_data(vk::DeviceOrHostAddressKHR {
-                            device_address: scratch_buffer,
-                        })
-                        .build()],
-                    &[&build_ranges],
-                );
+                .cmd_build_acceleration_structures(ctx.cb, &[geometry_info], &[&build_ranges]);
         }
+        log::trace!(
+            "Built AccelerationStructure with handle {handle:?}",
+            handle = self.accel
+        );
     }
 }
 

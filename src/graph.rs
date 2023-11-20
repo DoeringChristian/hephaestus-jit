@@ -156,7 +156,7 @@ impl Graph {
                 .iter()
                 .map(|id| {
                     let desc = self.buffer_desc(*id);
-                    trace.var(desc.var.id()).data.buffer().unwrap().clone()
+                    trace.var(desc.var.id()).data.buffer().unwrap()
                 })
                 .collect::<Vec<_>>();
             match &pass.op {

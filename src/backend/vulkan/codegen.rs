@@ -56,6 +56,7 @@ struct SpirvBuilder {
     spriv_regs: HashMap<VarId, u32>,
     glsl_ext: u32,
     function_block: usize,
+    interface_vars: Vec<u32>,
 }
 impl Deref for SpirvBuilder {
     type Target = dr::Builder;
@@ -139,6 +140,7 @@ impl SpirvBuilder {
             .into_iter()
             .chain(storage_vars.into_iter())
             .chain(samplers.into_iter())
+            .chain(self.interface_vars.drain(..))
             .collect::<Vec<_>>();
 
         self.entry_point(
@@ -584,7 +586,10 @@ impl SpirvBuilder {
                         self.type_pointer(None, spirv::StorageClass::Private, ray_query_ty);
 
                     let ray_query_var = self.with_module(|s| {
-                        Ok(s.variable(ray_query_ptr_ty, None, spirv::StorageClass::Private, None))
+                        let var =
+                            s.variable(ray_query_ptr_ty, None, spirv::StorageClass::Private, None);
+                        s.interface_vars.push(var);
+                        Ok(var)
                     })?;
 
                     let ray_flags = self.constant_u32(u32_ty, 0x01);

@@ -16,7 +16,6 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
 use crate::backend;
-use crate::backend::vulkan::pipeline::{Binding, BufferWriteInfo, DescSetLayout, WriteSet};
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use ash::vk;
