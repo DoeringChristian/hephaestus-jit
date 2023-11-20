@@ -1,316 +1,30 @@
+use ash::vk;
 use std::sync::Mutex;
 
+use super::acceleration_structure::*;
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
-use crate::backend::{AccelDesc, GeometryDesc};
-use ash::vk;
 
-pub enum GeometryBuildDesc<'a> {
+use crate::backend::{AccelDesc, GeometryDesc, InstanceDesc};
+
+pub enum AccelGeometryBuildInfo<'a> {
     Triangles {
         triangles: &'a Buffer,
         vertices: &'a Buffer,
     },
 }
-// pub enum InstanceBuildDesc {}
-
-pub struct AccelBuildDesc<'a> {
-    pub geometries: &'a [GeometryBuildDesc<'a>],
-    // pub instances: &'a [InstanceBuildDesc],
-    pub instances: Buffer,
-}
-
-#[derive(Debug)]
-pub struct AccelInternal {
-    buffer: Buffer,
-    accel: vk::AccelerationStructureKHR,
-    sizes: vk::AccelerationStructureBuildSizesInfoKHR,
-
-    device: Device,
-    n_primitives: usize,
-    geometry_type: vk::GeometryTypeKHR,
-}
-impl AccelInternal {
-    pub fn create_tlas(device: &Device, desc: &AccelDesc) -> Self {
-        let geometry = vk::AccelerationStructureGeometryDataKHR {
-            instances: vk::AccelerationStructureGeometryInstancesDataKHR {
-                array_of_pointers: vk::FALSE,
-                data: vk::DeviceOrHostAddressConstKHR { device_address: 0 },
-                ..Default::default()
-            },
-        };
-        let geometry_type = vk::GeometryTypeKHR::INSTANCES;
-        let n_primitives = desc.instances.len();
-
-        let geometries = [vk::AccelerationStructureGeometryKHR {
-            geometry_type,
-            geometry,
-            flags: vk::GeometryFlagsKHR::OPAQUE,
-            ..Default::default()
-        }];
-
-        let info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
-            .flags(vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE)
-            .geometries(&geometries);
-
-        let sizes = unsafe {
-            device
-                .acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .get_acceleration_structure_build_sizes(
-                    vk::AccelerationStructureBuildTypeKHR::DEVICE,
-                    &info,
-                    &[n_primitives as u32],
-                )
-        };
-        let buffer = Buffer::create(
-            device,
-            BufferInfo {
-                size: sizes.acceleration_structure_size as _,
-                usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR
-                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                memory_location: MemoryLocation::GpuOnly,
-                ..Default::default()
-            },
-        );
-        let info = vk::AccelerationStructureCreateInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
-            .buffer(buffer.buffer())
-            .size(sizes.acceleration_structure_size);
-
-        let accel = unsafe {
-            device
-                .acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .create_acceleration_structure(&info, None)
-                .unwrap()
-        };
-        Self {
-            buffer,
-            accel,
-            sizes,
-            device: device.clone(),
-            n_primitives,
-            geometry_type,
-        }
-    }
-    pub fn create_blas(device: &Device, desc: &GeometryDesc) -> Self {
-        // Get Geometries for sizes
-        let (geometry_type, geometry, n_primitives) = match desc {
-            GeometryDesc::Triangles {
-                n_triangles,
-                n_vertices,
-            } => (
-                vk::GeometryTypeKHR::TRIANGLES,
-                vk::AccelerationStructureGeometryDataKHR {
-                    triangles: vk::AccelerationStructureGeometryTrianglesDataKHR {
-                        vertex_format: vk::Format::R32G32B32_SFLOAT,
-                        vertex_stride: 12,
-                        max_vertex: *n_vertices as _,
-                        index_type: vk::IndexType::UINT32,
-                        transform_data: vk::DeviceOrHostAddressConstKHR { device_address: 0 },
-                        ..Default::default()
-                    },
-                },
-                *n_triangles,
-            ),
-        };
-        let geometries = [vk::AccelerationStructureGeometryKHR {
-            geometry_type,
-            geometry,
-            flags: vk::GeometryFlagsKHR::OPAQUE,
-            ..Default::default()
-        }];
-
-        let info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL)
-            .flags(vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE)
-            .geometries(&geometries);
-
-        let sizes = unsafe {
-            device
-                .acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .get_acceleration_structure_build_sizes(
-                    vk::AccelerationStructureBuildTypeKHR::DEVICE,
-                    &info,
-                    &[n_primitives as u32],
-                )
-        };
-        let buffer = Buffer::create(
-            device,
-            BufferInfo {
-                size: sizes.acceleration_structure_size as _,
-                usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR
-                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                memory_location: MemoryLocation::GpuOnly,
-                ..Default::default()
-            },
-        );
-        let info = vk::AccelerationStructureCreateInfoKHR::builder()
-            .ty(vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL)
-            .buffer(buffer.buffer())
-            .size(sizes.acceleration_structure_size);
-
-        let accel = unsafe {
-            device
-                .acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .create_acceleration_structure(&info, None)
-                .unwrap()
-        };
-        Self {
-            buffer,
-            accel,
-            sizes,
-            device: device.clone(),
-            n_primitives,
-            geometry_type,
-        }
-    }
-    pub fn build_tlas(&self, ctx: &mut Context, desc: &AccelBuildDesc) {
-        let scratch_buffer = ctx.buffer(BufferInfo {
-            size: self.sizes.build_scratch_size as _,
-            usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        });
-        let scratch_buffer = scratch_buffer.device_address();
-
-        let geometry_type = vk::GeometryTypeKHR::INSTANCES;
-        let geometry = vk::AccelerationStructureGeometryDataKHR {
-            instances: vk::AccelerationStructureGeometryInstancesDataKHR {
-                array_of_pointers: vk::FALSE,
-                data: vk::DeviceOrHostAddressConstKHR {
-                    device_address: desc.instances.device_address(),
-                },
-                ..Default::default()
-            },
-        };
-
-        let geometries = [vk::AccelerationStructureGeometryKHR {
-            geometry_type,
-            geometry,
-            flags: vk::GeometryFlagsKHR::OPAQUE,
-            ..Default::default()
-        }];
-
-        unsafe {
-            ctx.acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .cmd_build_acceleration_structures(
-                    ctx.cb,
-                    &[vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-                        .ty(vk::AccelerationStructureTypeKHR::TOP_LEVEL)
-                        .flags(vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE)
-                        .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
-                        .dst_acceleration_structure(self.accel)
-                        .geometries(&geometries)
-                        .scratch_data(vk::DeviceOrHostAddressKHR {
-                            device_address: scratch_buffer,
-                        })
-                        .build()],
-                    &[&[vk::AccelerationStructureBuildRangeInfoKHR {
-                        primitive_count: self.n_primitives as _,
-                        primitive_offset: 0,
-                        first_vertex: 0,
-                        transform_offset: 0,
-                    }]],
-                );
-        }
-    }
-    pub fn build_blas(&self, ctx: &mut Context, desc: &GeometryBuildDesc) {
-        let scratch_buffer = ctx.buffer(BufferInfo {
-            size: self.sizes.build_scratch_size as _,
-            usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        });
-        let scratch_buffer = scratch_buffer.device_address();
-
-        let (geometry_type, geometry) = match desc {
-            GeometryBuildDesc::Triangles {
-                triangles,
-                vertices,
-            } => (
-                vk::GeometryTypeKHR::TRIANGLES,
-                vk::AccelerationStructureGeometryDataKHR {
-                    triangles: vk::AccelerationStructureGeometryTrianglesDataKHR {
-                        vertex_format: vk::Format::R32G32B32_SFLOAT,
-                        vertex_stride: 12,
-                        vertex_data: vk::DeviceOrHostAddressConstKHR {
-                            device_address: vertices.device_address(),
-                        },
-                        max_vertex: (vertices.info().size / 3) as _,
-                        index_type: vk::IndexType::UINT32,
-                        index_data: vk::DeviceOrHostAddressConstKHR {
-                            device_address: triangles.device_address(),
-                        },
-                        transform_data: vk::DeviceOrHostAddressConstKHR { device_address: 0 },
-                        ..Default::default()
-                    },
-                },
-            ),
-        };
-        let geometries = [vk::AccelerationStructureGeometryKHR {
-            geometry_type,
-            geometry,
-            flags: vk::GeometryFlagsKHR::OPAQUE,
-            ..Default::default()
-        }];
-        unsafe {
-            ctx.acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .cmd_build_acceleration_structures(
-                    ctx.cb,
-                    &[vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-                        .ty(vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL)
-                        .flags(vk::BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE)
-                        .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
-                        .dst_acceleration_structure(self.accel)
-                        .geometries(&geometries)
-                        .scratch_data(vk::DeviceOrHostAddressKHR {
-                            device_address: scratch_buffer,
-                        })
-                        .build()],
-                    &[&[vk::AccelerationStructureBuildRangeInfoKHR {
-                        primitive_count: self.n_primitives as _,
-                        primitive_offset: 0,
-                        first_vertex: 0,
-                        transform_offset: 0,
-                    }]],
-                );
-        }
-    }
-}
-
-impl Drop for AccelInternal {
-    fn drop(&mut self) {
-        unsafe {
-            self.device
-                .acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .destroy_acceleration_structure(self.accel, None);
-        }
-    }
+pub struct AccelBuildInfo<'a> {
+    pub geometries: &'a [AccelGeometryBuildInfo<'a>],
+    pub instances: &'a [InstanceDesc],
 }
 
 #[derive(Debug)]
 pub struct Accel {
     device: Device,
-    blases: Vec<AccelInternal>,
-    tlas: AccelInternal,
-    instance_buffer: Mutex<Option<Buffer>>,
+    blases: Vec<AccelerationStructure>,
+    tlas: AccelerationStructure,
+    instance_buffer: Mutex<Buffer>,
 }
 
 impl Accel {
@@ -318,23 +32,96 @@ impl Accel {
         let blases = desc
             .geometries
             .iter()
-            .map(|desc| AccelInternal::create_blas(device, desc))
+            .map(|desc| match desc {
+                GeometryDesc::Triangles {
+                    n_triangles,
+                    n_vertices,
+                } => {
+                    let info = AccelerationStructureInfo {
+                        ty: vk::AccelerationStructureTypeKHR::BOTTOM_LEVEL,
+                        flags: vk::BuildAccelerationStructureFlagsKHR::empty(),
+                        geometries: vec![AccelerationStructureGeometry {
+                            max_primitive_count: *n_triangles as _,
+                            flags: vk::GeometryFlagsKHR::empty(),
+                            data: AccelerationStructureGeometryData::Triangles {
+                                index_data: DeviceOrHostAddress::null(),
+                                index_type: vk::IndexType::UINT32,
+                                max_vertex: *n_triangles as _,
+                                transform_data: DeviceOrHostAddress::null(),
+                                vertex_data: DeviceOrHostAddress::null(),
+                                vertex_format: vk::Format::R32G32B32_SFLOAT,
+                                vertex_stride: 12,
+                            },
+                        }],
+                    };
+                    AccelerationStructure::create(device, info)
+                }
+            })
             .collect::<Vec<_>>();
-        let tlas = AccelInternal::create_tlas(device, &desc);
+
+        let info = AccelerationStructureInfo {
+            ty: vk::AccelerationStructureTypeKHR::TOP_LEVEL,
+            flags: vk::BuildAccelerationStructureFlagsKHR::empty(),
+            geometries: vec![AccelerationStructureGeometry {
+                max_primitive_count: desc.instances.len() as _,
+                flags: vk::GeometryFlagsKHR::empty(),
+                data: AccelerationStructureGeometryData::Instances {
+                    array_of_pointers: false,
+                    data: DeviceOrHostAddress::null(),
+                },
+            }],
+        };
+        let tlas = AccelerationStructure::create(device, info);
+
+        let instance_buffer = Buffer::create(
+            &device,
+            BufferInfo {
+                size: desc.instances.len()
+                    * std::mem::size_of::<vk::AccelerationStructureInstanceKHR>(),
+                usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR
+                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
 
         Self {
             blases,
             tlas,
             device: device.clone(),
-            instance_buffer: Mutex::new(None),
+            instance_buffer: Mutex::new(instance_buffer),
         }
     }
-    pub fn build(&self, ctx: &mut Context, desc: AccelBuildDesc) {
-        // TODO: Heavy validation effort
+    pub fn build(&self, ctx: &mut Context, desc: AccelBuildInfo) {
         for (i, blas) in self.blases.iter().enumerate() {
-            blas.build_blas(ctx, &desc.geometries[i]);
-        }
+            let mut info = blas.info.clone();
+            assert_eq!(info.geometries.len(), 1);
 
+            match &mut info.geometries[0].data {
+                AccelerationStructureGeometryData::Triangles {
+                    index_data,
+                    index_type,
+                    max_vertex,
+                    transform_data,
+                    vertex_data,
+                    vertex_format,
+                    vertex_stride,
+                } => match desc.geometries[i] {
+                    AccelGeometryBuildInfo::Triangles {
+                        triangles,
+                        vertices,
+                    } => {
+                        *index_data =
+                            DeviceOrHostAddress::DeviceAddress(triangles.device_address());
+                        *vertex_data =
+                            DeviceOrHostAddress::DeviceAddress(vertices.device_address());
+                    }
+                },
+                _ => todo!(),
+            }
+
+            blas.build(ctx, &info);
+        }
         let memory_barriers = [vk::MemoryBarrier::builder()
             .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
             .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR)
@@ -350,10 +137,54 @@ impl Accel {
                 &[],
             );
         }
+        let instances = desc
+            .instances
+            .iter()
+            .map(|instance| vk::AccelerationStructureInstanceKHR {
+                transform: vk::TransformMatrixKHR {
+                    matrix: instance.transform,
+                },
+                instance_custom_index_and_mask: vk::Packed24_8::new(0, 0xff),
+                instance_shader_binding_table_record_offset_and_flags: vk::Packed24_8::new(
+                    0,
+                    vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as _,
+                ),
+                acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
+                    device_handle: self.get_blas_device_address(instance.geometry),
+                },
+            })
+            .collect::<Vec<_>>();
 
-        self.tlas.build_tlas(ctx, &desc);
+        log::trace!(
+            "Uploading {n} instances to instance buffer",
+            n = instances.len()
+        );
 
-        *self.instance_buffer.lock().unwrap() = Some(desc.instances);
+        let instance_slice: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                instances.as_ptr() as *const _,
+                std::mem::size_of_val(instances.as_slice()),
+            )
+        };
+        let mut instance_buffer = self.instance_buffer.lock().unwrap();
+        instance_buffer
+            .mapped_slice_mut()
+            .copy_from_slice(instance_slice);
+
+        let mut info = self.tlas.info.clone();
+        assert_eq!(info.geometries.len(), 1);
+
+        match &mut info.geometries[0].data {
+            AccelerationStructureGeometryData::Instances {
+                array_of_pointers,
+                data,
+            } => {
+                *data = DeviceOrHostAddress::DeviceAddress(instance_buffer.device_address());
+            }
+            _ => todo!(),
+        }
+
+        self.tlas.build(ctx, &info);
     }
     pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
         unsafe {
