@@ -180,6 +180,7 @@ fn push_var(v: Var) -> VarRef {
         res.schedule();
         schedule_eval();
     }
+    // TODO: maybe mark variables dirty that have been referenced with RefMut
     res
 }
 
@@ -448,9 +449,11 @@ impl VarRef {
         res
     }
     pub fn get_ref(&self) -> Self {
+        // TODO: maybe do scheduling here?
         self._get_ref(false)
     }
     pub fn get_mut(&self) -> Self {
+        // TODO: maybe do scheduling here?
         self._get_ref(true)
     }
     fn _get_ref(&self, mutable: bool) -> Self {
