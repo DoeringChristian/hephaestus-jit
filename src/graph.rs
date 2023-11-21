@@ -255,104 +255,50 @@ pub struct AccelDesc {
 ///
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
-pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
-    // Step 1: Create topological ordering by DFS, making sure to keep order from schedule
-    let mut topo = vec![];
-    let mut visited = HashMap::<trace::VarId, usize>::default();
-
-    fn visit(
-        trace: &trace::Trace,
-        visited: &mut HashMap<trace::VarId, usize>,
-        topo: &mut Vec<trace::VarId>,
-        id: trace::VarId,
-    ) {
-        if visited.contains_key(&id) {
-            return;
-        }
-
-        for id in trace.var(id).deps.iter() {
-            visit(trace, visited, topo, *id);
-        }
-        visited.insert(id, topo.len());
-        topo.push(id);
-    }
-    for id in refs.iter().map(|r| r.id()) {
-        visit(trace, &mut visited, &mut topo, id);
-    }
-    // TODO: Instruction Reordering to acheive better kernel splitting
-
-    // Step 2: Put scheduled variables that are groupable into a group:
-    let schedule_set = refs.iter().map(|r| r.id()).collect::<HashSet<_>>();
-
-    // TODO: Might be optimizable by using Vec<Range<usize>> instead of Vec<Vec<VarId>>, pointing
-    // into `schedule`
-    let mut groups = vec![];
-    let mut group = vec![];
-
-    // HashMap, tracking the last write (usually scatter) operation to some variable
-    // Mitsuba keeps track using a "dirty" flag in the variable
-    // We might want to do some other tests (same size and inserting sync calls in kernel), which
-    // could reduce the number of kernels generated
-    let mut last_write = HashMap::new();
-
-    for id in topo.iter() {
-        let var = trace.var(*id);
-        if var.op.is_device_op() {
-            // Always split on device op (TODO: find more efficient way)
-            groups.push(std::mem::take(&mut group));
-            groups.push(vec![*id]);
-        } else {
-            if let crate::op::Op::Ref { mutable: write } = var.op {
-                // Split if ref
-                groups.push(std::mem::take(&mut group));
-                if write {
-                    last_write.insert(var.deps[0], *id);
-                }
-            } else if var.deps.iter().any(|dep_id| {
-                // Split when the accessed variable has a write operation pending
-                let split_group = last_write.contains_key(dep_id);
-                last_write.remove(dep_id);
-
-                split_group
-            }) {
-                // Split if trying to access variable, that has been written to
-                groups.push(std::mem::take(&mut group));
-            }
-
-            if schedule_set.contains(id) {
-                group.push(*id);
-            }
-        }
-    }
-    if !group.is_empty() {
-        groups.push(group);
-    }
-    dbg!(&groups);
-
-    // Step 3: subdivide groups by size:
+pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
+    let trace::Schedule {
+        mut vars,
+        mut groups,
+        ..
+    } = schedule;
 
     let groups = groups
         .iter_mut()
         .flat_map(|group| {
-            group.sort_by(|id0, id1| trace.var(*id0).size.cmp(&trace.var(*id1).size));
-            let groups_iter = group
-                .iter()
-                .cloned()
-                .group_by(|id| trace.var(*id).size.clone());
-            groups_iter
-                .into_iter()
-                .map(|(_, group)| group.collect::<Vec<_>>())
-                .collect::<Vec<_>>()
+            vars[group.clone()]
+                .sort_by(|id0, id1| trace.var(id0.id()).size.cmp(&trace.var(id1.id()).size));
+
+            let mut groups = vec![];
+            let mut size = 0;
+            let mut start = group.start;
+
+            for i in group.clone() {
+                if trace.var(vars[i].id()).size != size {
+                    let end = i + 1;
+                    if start != end {
+                        groups.push(start..end);
+                    }
+                    size = trace.var(vars[i].id()).size;
+                    start = end;
+                }
+            }
+            let end = group.end;
+            if start != end {
+                groups.push(start..end);
+            }
+            groups
         })
         .collect::<Vec<_>>();
+    dbg!(&groups);
+    dbg!(&vars);
 
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();
     for group in groups {
-        if trace.var(group[0]).op.is_device_op() {
+        if trace.var(vars[group.start].id()).op.is_device_op() {
             // Handle Device Ops
             assert_eq!(group.len(), 1);
-            let id = group[0];
+            let id = vars[group.start].id();
 
             match trace.var(id).op {
                 op::Op::DeviceOp(op) => match op {
@@ -394,7 +340,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
             // Handle Kernel Ops (compile)
             let mut compiler = compiler::Compiler::default();
 
-            compiler.collect_vars(trace, group.iter().cloned());
+            compiler.collect_vars(trace, group.clone().map(|i| vars[i].id()));
 
             let buffers = compiler
                 .buffers
@@ -417,7 +363,7 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
                 accels,
                 op: PassOp::Kernel {
                     ir: Arc::new(compiler.ir),
-                    size: trace.var(group[0]).size,
+                    size: trace.var(vars[group.start].id()).size,
                 },
             };
             graph_builder.push_pass(pass);
@@ -425,7 +371,8 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
 
         // Clear Dependecies for schedule variables, so that we don't collect to many in the next
         // iteration
-        for id in group {
+        for i in group {
+            let id = vars[i].id();
             let var = trace.var_mut(id);
 
             if var.data.is_buffer() {
@@ -445,6 +392,6 @@ pub fn compile(trace: &mut trace::Trace, refs: Vec<trace::VarRef>) -> Graph {
     }
 
     let mut graph = graph_builder.build();
-    graph.schedule = refs;
+    graph.schedule = vars;
     graph
 }

@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::fmt::Debug;
+use std::ops::Range;
 use std::thread::ThreadId;
 
 use crate::data::Data;
@@ -9,9 +11,31 @@ use crate::{backend, ir};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
+#[derive(Debug, Default)]
+pub struct Schedule {
+    pub var_set: HashSet<VarId>,
+    pub vars: Vec<VarRef>,
+    pub groups: Vec<Range<usize>>,
+    pub start: usize,
+}
+impl Schedule {
+    pub fn new_group(&mut self) {
+        // Clear `dirty` mark on variables
+        for i in self.groups.last().unwrap_or(&(0..0)).clone() {
+            self.vars[i].clear_dirty();
+        }
+        let start = self.start;
+        let end = self.vars.len();
+        if start != end {
+            self.groups.push(start..end);
+            self.start = end;
+        }
+    }
+}
+
 thread_local! {
     pub static TRACE: RefCell<Trace> = RefCell::new(Default::default());
-    pub static SCHEDULE: RefCell<Vec<VarRef>> = RefCell::new(Default::default());
+    pub static SCHEDULE: RefCell<Schedule> = RefCell::new(Default::default());
 }
 
 #[derive(Default, Debug)]
@@ -118,6 +142,8 @@ pub struct Var {
     pub size: usize, // number of elements
     pub rc: usize,
 
+    pub dirty: bool,
+
     // TODO: Unify that with some other member (data or index?)
     pub accel_desc: Option<backend::AccelDesc>,
 
@@ -137,18 +163,39 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     })
 }
 fn push_var(v: Var) -> VarRef {
-    with_trace(|t| VarRef {
+    // Auto schedule_eval device ops
+    let is_device_op = v.op.is_device_op();
+    if is_device_op {
+        schedule_eval();
+    }
+    if with_trace(|trace| v.deps.iter().any(|id| trace.var(*id).dirty)) {
+        schedule_eval();
+    }
+    let res = with_trace(|t| VarRef {
         id: t.push_var(v),
         _thread_id: std::thread::current().id(),
-    })
+    });
+    // Auto schedule_eval device ops
+    if is_device_op {
+        res.schedule();
+        schedule_eval();
+    }
+    res
 }
 
 pub fn compile() -> graph::Graph {
+    schedule_eval();
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
-        let schedule = std::mem::take(s.as_mut());
+        let schedule = std::mem::take(&mut (*s));
         let graph = with_trace(|t| graph::compile(t, schedule));
         graph
+    })
+}
+pub fn schedule_eval() {
+    SCHEDULE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.new_group();
     })
 }
 
@@ -298,13 +345,29 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
 }
 
 impl VarRef {
+    pub fn mark_dirty(&self) {
+        with_trace(|trace| {
+            trace.var_mut(self.id()).dirty = true;
+        })
+    }
+    fn clear_dirty(&self) {
+        with_trace(|trace| {
+            trace.var_mut(self.id()).dirty = false;
+        })
+    }
+    pub fn dirty(&self) -> bool {
+        with_trace(|trace| trace.var(self.id()).dirty)
+    }
     pub fn same_trace(&self, other: &VarRef) -> bool {
         self._thread_id == other._thread_id
     }
     pub fn schedule(&self) {
         SCHEDULE.with(|s| {
             let mut s = s.borrow_mut();
-            s.push(self.clone());
+            if !s.var_set.contains(&self.id()) {
+                s.vars.push(self.clone());
+                s.var_set.insert(self.id());
+            }
         })
     }
     pub fn rc(&self) -> usize {
@@ -325,6 +388,8 @@ impl VarRef {
         })
     }
     pub fn gather(&self, idx: &Self) -> Self {
+        self.schedule();
+        schedule_eval();
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
@@ -337,6 +402,8 @@ impl VarRef {
         })
     }
     pub fn gather_if(&self, idx: &Self, active: &Self) -> Self {
+        self.schedule();
+        schedule_eval();
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
@@ -350,6 +417,7 @@ impl VarRef {
     }
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
         dst.schedule();
+        schedule_eval();
         let size = max_size([self, idx].into_iter());
         let dst_ref = dst.get_mut();
         let res = push_var(Var {
@@ -359,12 +427,13 @@ impl VarRef {
             size,
             ..Default::default()
         });
+        dst.mark_dirty();
         res.schedule(); // Auto schedule
         res
     }
     pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
-        // It is important that dst is schedules
         dst.schedule();
+        schedule_eval();
         let size = max_size([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
         let res = push_var(Var {
@@ -374,6 +443,7 @@ impl VarRef {
             size,
             ..Default::default()
         });
+        dst.mark_dirty();
         res.schedule(); // Auto schedule
         res
     }

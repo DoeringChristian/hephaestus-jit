@@ -1,7 +1,7 @@
 use crate::{backend, tr, vulkan};
 
 #[test]
-fn simple() {
+fn simple1() {
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();
@@ -13,7 +13,15 @@ fn simple() {
 
     j.schedule();
 
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+    tr::SCHEDULE.with(|s| {
+        dbg!(&s);
+    });
+
     let graph = tr::compile();
+    dbg!(&graph);
     graph.launch(&device);
 
     dbg!(graph.n_passes());
@@ -32,22 +40,37 @@ fn simple_u16() {
     let c = tr::sized_literal(1u16, 10);
     c.schedule();
 
-    tr::compile().launch(&device);
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+    tr::SCHEDULE.with(|s| {
+        dbg!(&s);
+    });
+    let graph = tr::compile();
+    dbg!(&graph);
+    graph.launch(&device);
 
     dbg!(c.to_vec::<u16>());
     assert_eq!(c.to_vec::<u16>(), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
 }
 
 #[test]
-fn scatter_chain() {
+fn scatter_chain1() {
     let device = backend::Device::vulkan(0).unwrap();
 
     let b0 = tr::sized_literal(0, 5);
 
-    tr::literal(1).scatter_if(&b0, &tr::index(10), &tr::literal(true));
+    tr::literal(1).scatter(&b0, &tr::index(10));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
+
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+    tr::SCHEDULE.with(|s| {
+        dbg!(&s);
+    });
 
     let graph = tr::compile();
     dbg!(&graph);
