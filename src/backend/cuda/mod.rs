@@ -1,4 +1,5 @@
 mod codegen;
+mod cuda_core;
 mod param_layout;
 
 pub use cudarc::driver::DriverError;

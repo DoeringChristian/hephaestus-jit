@@ -8,8 +8,6 @@ edition = "2021"
 [dependencies]
 
 
-cuda-rs = { git = "https://github.com/DoeringChristian/cuda-rs.git" }
-optix-rs = { git = "https://github.com/DoeringChristian/optix-rs.git" }
 thiserror = "1.0.49"
 enum_dispatch = "0.3.12"
 resource-pool = { git = "https://github.com/DoeringChristian/resource-pool.git" }
@@ -27,7 +25,9 @@ inline-spirv = "0.1.6"
 slotmap = "1.0.6"
 itertools = "0.11.0"
 pretty_env_logger = "0.5.0"
-renderdoc = "0.11.0"
+cuda-rs = { git = "https://github.com/DoeringChristian/cuda-rs.git" }
+optix-rs = { git = "https://github.com/DoeringChristian/optix-rs.git" }
+parking_lot = "0.12.1"
 
 [dev-dependecies]
 rusty-hook = "^0.11.2"
