@@ -28,6 +28,9 @@ pretty_env_logger = "0.5.0"
 cuda-rs = { git = "https://github.com/DoeringChristian/cuda-rs.git" }
 optix-rs = { git = "https://github.com/DoeringChristian/optix-rs.git" }
 parking_lot = "0.12.1"
+winit = "0.27.1"
+raw-window-handle = "0.5"
+ash-window = "0.12.0"
 
 [dev-dependecies]
 rusty-hook = "^0.11.2"

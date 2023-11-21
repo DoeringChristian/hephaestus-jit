@@ -8,6 +8,7 @@ pub enum DeviceOp {
     Max,
     Buffer2Texture { shape: [usize; 3], channels: usize },
     BuildAccel,
+    Present,
 }
 impl DeviceOp {
     pub fn resulting_op(self) -> Op {
@@ -15,6 +16,7 @@ impl DeviceOp {
             DeviceOp::Max => Op::Buffer,
             DeviceOp::Buffer2Texture { shape, channels } => Op::Texture { shape, channels },
             DeviceOp::BuildAccel => Op::Accel,
+            DeviceOp::Present => Op::Nop,
         }
     }
 }

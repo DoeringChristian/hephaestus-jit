@@ -163,6 +163,7 @@ impl PhysicalDevice {
                 .enumerate()
                 .find_map(|(index, info)| {
                     let valid = info.queue_flags.contains(vk::QueueFlags::COMPUTE);
+                    let valid = valid && info.queue_flags.contains(vk::QueueFlags::GRAPHICS);
                     if valid {
                         Some(index as u32)
                     } else {

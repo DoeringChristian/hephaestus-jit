@@ -5,12 +5,11 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
-use ash::extensions::ext::DebugUtils;
 use ash::Entry;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use gpu_allocator::AllocatorDebugSettings;
 
-pub use ash::{extensions::khr, vk};
+pub use ash::{extensions::ext, extensions::khr, vk};
 
 use crate::backend::vulkan::physical_device::{self, PhysicalDevice};
 
@@ -102,7 +101,7 @@ pub struct InternalDevice {
     pub entry: ash::Entry,
     pub instance: ash::Instance,
     pub device: ash::Device,
-    pub debug_utils_loader: DebugUtils,
+    pub debug_utils_loader: ext::DebugUtils,
     pub debug_callback: vk::DebugUtilsMessengerEXT,
     pub physical_device: PhysicalDevice,
 
@@ -115,6 +114,8 @@ pub struct InternalDevice {
     pub fence: vk::Fence,
 
     pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
+    pub surface_ext: Option<khr::Surface>,
+    pub swapchain_ext: Option<khr::Swapchain>,
 }
 impl Debug for InternalDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -139,7 +140,7 @@ impl InternalDevice {
                 [CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0").as_ptr()];
             // let layer_names = [];
 
-            let extension_names = [DebugUtils::name().as_ptr()];
+            let extension_names = [ext::DebugUtils::name().as_ptr()];
 
             let appinfo = vk::ApplicationInfo::builder()
                 .application_name(app_name)
@@ -172,7 +173,7 @@ impl InternalDevice {
                 )
                 .pfn_user_callback(Some(vulkan_debug_callback));
 
-            let debug_utils_loader = DebugUtils::new(&entry, &instance);
+            let debug_utils_loader = ext::DebugUtils::new(&entry, &instance);
             let debug_callback = debug_utils_loader
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
@@ -204,11 +205,14 @@ impl InternalDevice {
             log::trace!("Compatible Devices: {physical_devices:?}");
             let physical_device = physical_devices.into_iter().nth(index).unwrap();
 
+            // TODO: window extension names
             let device_extension_names = [
                 vk::ExtDescriptorIndexingFn::name().as_ptr(),
                 vk::KhrRayQueryFn::name().as_ptr(),
                 vk::KhrAccelerationStructureFn::name().as_ptr(),
                 vk::KhrDeferredHostOperationsFn::name().as_ptr(),
+                vk::KhrSwapchainFn::name().as_ptr(),
+                vk::KhrAccelerationStructureFn::name().as_ptr(),
             ];
 
             let queue_family_index = physical_device.queue_family_index;
@@ -286,6 +290,8 @@ impl InternalDevice {
             // Extensons:
             let acceleration_structure_ext =
                 Some(khr::AccelerationStructure::new(&instance, &device));
+            let swapchain_ext = Some(khr::Swapchain::new(&instance, &device));
+            let surface_ext = Some(khr::Surface::new(&entry, &instance));
 
             Ok(Self {
                 entry,
@@ -300,6 +306,8 @@ impl InternalDevice {
                 command_buffer,
                 fence,
                 acceleration_structure_ext,
+                surface_ext,
+                swapchain_ext,
             })
         }
     }

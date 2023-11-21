@@ -8,6 +8,7 @@ mod glslext;
 mod image;
 mod physical_device;
 mod pipeline;
+mod presenter;
 #[cfg(test)]
 mod test;
 
@@ -116,6 +117,7 @@ impl backend::BackendDevice for VulkanDevice {
         graph: &crate::graph::Graph,
     ) -> backend::Result<()> {
         use crate::graph::PassOp;
+        // TODO: Refactor for better readability
         // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
         // submitted
         // FIX: Add a struct that can collect Arcs to those resources
@@ -217,6 +219,7 @@ impl backend::BackendDevice for VulkanDevice {
 
                             accel.accel.build(ctx, desc);
                         }
+                        DeviceOp::Present => todo!(),
                     },
                     _ => todo!(),
                 }
