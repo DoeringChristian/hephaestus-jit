@@ -1,6 +1,8 @@
 use std::ffi::CStr;
 
+use super::context::Context;
 use super::device::Device;
+use super::image::Image;
 use ash::extensions::khr;
 use ash::vk;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
@@ -10,6 +12,8 @@ use winit::window::{Window, WindowBuilder};
 #[derive(Debug)]
 pub struct Presenter {
     device: Device,
+    window: Window,
+    event_loop: EventLoop<()>,
     surface: vk::SurfaceKHR,
     surface_format: vk::SurfaceFormatKHR,
     surface_capabilities: vk::SurfaceCapabilitiesKHR,
@@ -18,6 +22,8 @@ pub struct Presenter {
     swapchain: vk::SwapchainKHR,
     present_images: Vec<vk::Image>,
     present_image_views: Vec<vk::ImageView>,
+    present_complete_semaphore: vk::Semaphore,
+    rendering_complete_semaphore: vk::Semaphore,
 }
 
 impl Drop for Presenter {
@@ -39,13 +45,17 @@ impl Drop for Presenter {
                 .as_ref()
                 .unwrap()
                 .destroy_swapchain(self.swapchain, None);
+            self.device
+                .destroy_semaphore(self.present_complete_semaphore, None);
+            self.device
+                .destroy_semaphore(self.rendering_complete_semaphore, None);
         }
     }
 }
 
 pub struct PresenterInfo {
-    width: u32,
-    height: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Presenter {
@@ -199,8 +209,23 @@ impl Presenter {
             })
             .collect();
 
+        let semaphore_create_info = vk::SemaphoreCreateInfo::builder();
+
+        let present_complete_semaphore = unsafe {
+            device
+                .create_semaphore(&semaphore_create_info, None)
+                .unwrap()
+        };
+        let rendering_complete_semaphore = unsafe {
+            device
+                .create_semaphore(&semaphore_create_info, None)
+                .unwrap()
+        };
+
         Self {
             device: device.clone(),
+            window,
+            event_loop,
             surface,
             surface_format,
             surface_capabilities,
@@ -209,6 +234,41 @@ impl Presenter {
             swapchain,
             present_images,
             present_image_views,
+            present_complete_semaphore,
+            rendering_complete_semaphore,
         }
+    }
+    pub fn present_image(&self) {
+        let (present_index, _) = unsafe {
+            self.device
+                .swapchain_ext
+                .as_ref()
+                .unwrap()
+                .acquire_next_image(
+                    self.swapchain,
+                    std::u64::MAX,
+                    self.present_complete_semaphore,
+                    vk::Fence::null(),
+                )
+                .unwrap()
+        };
+
+        let wait_semaphores = [self.rendering_complete_semaphore];
+        let swapchains = [self.swapchain];
+        let image_indices = [present_index];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&wait_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+
+        unsafe {
+            self.device
+                .swapchain_ext
+                .as_ref()
+                .unwrap()
+                .queue_present(self.device.queue, &present_info)
+                .unwrap()
+        };
     }
 }
