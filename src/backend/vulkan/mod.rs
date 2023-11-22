@@ -183,6 +183,9 @@ impl backend::BackendDevice for VulkanDevice {
                                 .vulkan()
                                 .unwrap();
 
+                            // WARN: This is potentially very unsafe, since we are just randomly
+                            // accessing the buffers and hoping for them to be index/vertex
+                            // buffers
                             let mut buffers =
                                 pass.buffers.iter().map(|id| graph.buffer(trace, *id));
 
