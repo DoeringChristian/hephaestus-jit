@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::ffi::CStr;
 
 use super::context::Context;
@@ -6,14 +7,16 @@ use super::image::Image;
 use ash::extensions::khr;
 use ash::vk;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use winit::event_loop::EventLoop;
+use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::platform::run_return::EventLoopExtRunReturn;
 use winit::window::{Window, WindowBuilder};
 
 #[derive(Debug)]
 pub struct Presenter {
     device: Device,
     window: Window,
-    event_loop: EventLoop<()>,
+    event_loop: RefCell<EventLoop<()>>,
     surface: vk::SurfaceKHR,
     surface_format: vk::SurfaceFormatKHR,
     surface_capabilities: vk::SurfaceCapabilitiesKHR,
@@ -225,7 +228,7 @@ impl Presenter {
         Self {
             device: device.clone(),
             window,
-            event_loop,
+            event_loop: RefCell::new(event_loop),
             surface,
             surface_format,
             surface_capabilities,
@@ -237,6 +240,34 @@ impl Presenter {
             present_complete_semaphore,
             rendering_complete_semaphore,
         }
+    }
+    pub fn render_loop<F: Fn()>(&self, f: F) {
+        self.event_loop
+            .borrow_mut()
+            .run_return(|event, _, control_flow| {
+                *control_flow = ControlFlow::Poll;
+                match event {
+                    Event::WindowEvent {
+                        event:
+                            WindowEvent::CloseRequested
+                            | WindowEvent::KeyboardInput {
+                                input:
+                                    KeyboardInput {
+                                        state: ElementState::Pressed,
+                                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                                        ..
+                                    },
+                                ..
+                            },
+                        ..
+                    } => *control_flow = ControlFlow::Exit,
+                    Event::MainEventsCleared => {
+                        f();
+                        self.present_image();
+                    }
+                    _ => (),
+                }
+            });
     }
     pub fn present_image(&self) {
         let (present_index, _) = unsafe {
@@ -253,7 +284,7 @@ impl Presenter {
                 .unwrap()
         };
 
-        let wait_semaphores = [self.rendering_complete_semaphore];
+        let wait_semaphores = [self.device.global_end_semaphore];
         let swapchains = [self.swapchain];
         let image_indices = [present_index];
 

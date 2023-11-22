@@ -29,22 +29,22 @@ impl Default for BufferInfo {
         }
     }
 }
-impl Drop for Buffer {
-    fn drop(&mut self) {
-        self.device
-            .allocator
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .free(self.allocation.take().unwrap())
-            .unwrap();
-
-        unsafe {
-            self.device.destroy_buffer(self.buffer, None);
-        }
-    }
-}
+// impl Drop for Buffer {
+//     fn drop(&mut self) {
+//         self.device
+//             .allocator
+//             .as_ref()
+//             .unwrap()
+//             .lock()
+//             .unwrap()
+//             .free(self.allocation.take().unwrap())
+//             .unwrap();
+//
+//         unsafe {
+//             self.device.destroy_buffer(self.buffer, None);
+//         }
+//     }
+// }
 
 impl Buffer {
     pub fn device(&self) -> &Device {

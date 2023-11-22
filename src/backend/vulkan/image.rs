@@ -173,25 +173,25 @@ impl Debug for Image {
     }
 }
 
-impl Drop for Image {
-    fn drop(&mut self) {
-        if let Some(allocation) = self.allocation.take() {
-            unsafe {
-                self.device.destroy_image(self.image, None);
-                self.device.destroy_sampler(self.sampler, None);
-            }
-
-            self.device
-                .allocator
-                .as_ref()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .free(allocation)
-                .unwrap();
-        }
-    }
-}
+// impl Drop for Image {
+//     fn drop(&mut self) {
+//         if let Some(allocation) = self.allocation.take() {
+//             unsafe {
+//                 self.device.destroy_image(self.image, None);
+//                 self.device.destroy_sampler(self.sampler, None);
+//             }
+//
+//             self.device
+//                 .allocator
+//                 .as_ref()
+//                 .unwrap()
+//                 .lock()
+//                 .unwrap()
+//                 .free(allocation)
+//                 .unwrap();
+//         }
+//     }
+// }
 
 #[derive(Clone, Copy, Debug)]
 pub struct ImageInfo {

@@ -74,7 +74,18 @@ impl Device {
 
             let submit_info = vk::SubmitInfo::builder()
                 .command_buffers(&[self.command_buffer])
+                .signal_semaphores(&[self.global_end_semaphore])
                 .build();
+
+            self.queue_submit(self.queue, &[submit_info], vk::Fence::null())
+                .unwrap();
+
+            // clear semaphore
+            let submit_info = vk::SubmitInfo::builder()
+                .wait_semaphores(&[self.global_end_semaphore])
+                .build();
+
+            // self.reset_fences(&[self.fence]).unwrap();
 
             self.queue_submit(self.queue, &[submit_info], self.fence)
                 .unwrap();
@@ -109,6 +120,8 @@ pub struct InternalDevice {
     pub pool: vk::CommandPool,
     pub command_buffer: vk::CommandBuffer,
 
+    pub global_end_semaphore: vk::Semaphore,
+
     pub allocator: Option<Mutex<Allocator>>,
 
     pub fence: vk::Fence,
@@ -140,7 +153,12 @@ impl InternalDevice {
                 [CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0").as_ptr()];
             // let layer_names = [];
 
-            let extension_names = [ext::DebugUtils::name().as_ptr()];
+            let extension_names = [
+                ext::DebugUtils::name().as_ptr(),
+                khr::Surface::name().as_ptr(),
+                khr::WaylandSurface::name().as_ptr(),
+                khr::XlibSurface::name().as_ptr(),
+            ];
 
             let appinfo = vk::ApplicationInfo::builder()
                 .application_name(app_name)
@@ -293,6 +311,12 @@ impl InternalDevice {
             let swapchain_ext = Some(khr::Swapchain::new(&instance, &device));
             let surface_ext = Some(khr::Surface::new(&entry, &instance));
 
+            // Semaphores for global submit
+            let semaphore_create_info = vk::SemaphoreCreateInfo::builder();
+            let global_end_semaphore = device
+                .create_semaphore(&semaphore_create_info, None)
+                .unwrap();
+
             Ok(Self {
                 entry,
                 instance,
@@ -302,6 +326,7 @@ impl InternalDevice {
                 physical_device,
                 queue,
                 pool,
+                global_end_semaphore,
                 allocator: Some(Mutex::new(allocator)),
                 command_buffer,
                 fence,
@@ -320,18 +345,18 @@ impl Deref for InternalDevice {
         &self.device
     }
 }
-impl Drop for InternalDevice {
-    fn drop(&mut self) {
-        unsafe {
-            self.device_wait_idle().unwrap();
-
-            self.allocator.take().unwrap();
-            self.destroy_command_pool(self.pool, None);
-            self.destroy_fence(self.fence, None);
-            self.destroy_device(None);
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_callback, None);
-            self.instance.destroy_instance(None);
-        }
-    }
-}
+// impl Drop for InternalDevice {
+//     fn drop(&mut self) {
+//         unsafe {
+//             self.device_wait_idle().unwrap();
+//
+//             self.allocator.take().unwrap();
+//             self.destroy_command_pool(self.pool, None);
+//             self.destroy_fence(self.fence, None);
+//             self.destroy_device(None);
+//             self.debug_utils_loader
+//                 .destroy_debug_utils_messenger(self.debug_callback, None);
+//             self.instance.destroy_instance(None);
+//         }
+//     }
+// }

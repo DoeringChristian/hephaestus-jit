@@ -24,20 +24,20 @@ pub struct Pipeline {
     pipeline: vk::Pipeline,
 }
 
-impl Drop for Pipeline {
-    fn drop(&mut self) {
-        unsafe {
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_pipeline(self.pipeline, None);
-            self.device.destroy_descriptor_pool(self.desc_pool, None);
-            for desc_set_layout in self.desc_set_layouts.iter() {
-                self.device
-                    .destroy_descriptor_set_layout(*desc_set_layout, None);
-            }
-        }
-    }
-}
+// impl Drop for Pipeline {
+//     fn drop(&mut self) {
+//         unsafe {
+//             self.device
+//                 .destroy_pipeline_layout(self.pipeline_layout, None);
+//             self.device.destroy_pipeline(self.pipeline, None);
+//             self.device.destroy_descriptor_pool(self.desc_pool, None);
+//             for desc_set_layout in self.desc_set_layouts.iter() {
+//                 self.device
+//                     .destroy_descriptor_set_layout(*desc_set_layout, None);
+//             }
+//         }
+//     }
+// }
 
 impl Pipeline {
     pub fn create<'a>(device: &Device, desc: &PipelineDesc<'a>) -> Self {

@@ -8,7 +8,7 @@ mod glslext;
 mod image;
 mod physical_device;
 mod pipeline;
-mod presenter;
+pub mod presenter;
 #[cfg(test)]
 mod test;
 

@@ -38,12 +38,12 @@ impl Context {
     }
 }
 
-impl Drop for Context {
-    fn drop(&mut self) {
-        unsafe {
-            for image_view in self.image_views.drain(..) {
-                self.device.destroy_image_view(image_view, None);
-            }
-        }
-    }
-}
+// impl Drop for Context {
+//     fn drop(&mut self) {
+//         unsafe {
+//             for image_view in self.image_views.drain(..) {
+//                 self.device.destroy_image_view(image_view, None);
+//             }
+//         }
+//     }
+// }

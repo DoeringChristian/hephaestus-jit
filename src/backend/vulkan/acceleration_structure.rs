@@ -273,11 +273,11 @@ impl AccelerationStructure {
 impl Drop for AccelerationStructure {
     fn drop(&mut self) {
         unsafe {
-            self.device
-                .acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .destroy_acceleration_structure(self.accel, None);
+            // self.device
+            //     .acceleration_structure_ext
+            //     .as_ref()
+            //     .unwrap()
+            //     .destroy_acceleration_structure(self.accel, None);
         }
     }
 }
