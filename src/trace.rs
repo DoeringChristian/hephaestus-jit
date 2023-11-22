@@ -134,6 +134,12 @@ impl Drop for VarRef {
     }
 }
 
+// #[derive(Debug, Default)]
+// pub struct Deps {
+//     deps: Vec<VarId>,
+//     var: Var,
+// }
+
 #[derive(Debug, Default)]
 pub struct Var {
     pub op: Op, // Operation used to construct the variable
@@ -162,20 +168,34 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
         f(&mut t)
     })
 }
-fn push_var(v: Var) -> VarRef {
+fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
+    let deps = deps
+        .into_iter()
+        .map(|r| {
+            if is_device_op {
+                r.schedule();
+            }
+            r.id()
+        })
+        .collect::<Vec<_>>();
+    v.deps = deps;
+
+    // Schedule evaluation in some cases
     if is_device_op {
         schedule_eval();
     }
     if with_trace(|trace| v.deps.iter().any(|id| trace.var(*id).dirty)) {
         schedule_eval();
     }
+
+    // Push actual variable
     let res = with_trace(|t| VarRef {
         id: t.push_var(v),
         _thread_id: std::thread::current().id(),
     });
-    // Auto schedule_eval device ops
+    // Auto schedule and schedule evaluation if device op
     if is_device_op {
         res.schedule();
         schedule_eval();
@@ -202,13 +222,15 @@ pub fn schedule_eval() {
 
 // Trace Functions
 pub fn index(size: usize) -> VarRef {
-    push_var(Var {
-        op: Op::KernelOp(ir::Op::Index),
-        deps: vec![],
-        ty: VarType::U32,
-        size,
-        ..Default::default()
-    })
+    push_var(
+        Var {
+            op: Op::KernelOp(ir::Op::Index),
+            ty: VarType::U32,
+            size,
+            ..Default::default()
+        },
+        [],
+    )
 }
 pub fn literal<T: AsVarType>(val: T) -> VarRef {
     sized_literal(val, 0)
@@ -217,13 +239,16 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     let ty = T::var_ty();
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
-    push_var(Var {
-        op: Op::KernelOp(ir::Op::Literal),
-        ty,
-        size,
-        data: Data::Literal(data),
-        ..Default::default()
-    })
+    push_var(
+        Var {
+            op: Op::KernelOp(ir::Op::Literal),
+            ty,
+            size,
+            data: Data::Literal(data),
+            ..Default::default()
+        },
+        [],
+    )
 }
 pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
     let ty = T::var_ty();
@@ -231,13 +256,16 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
     let slice: &[u8] =
         unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const _, slice.len() * ty.size()) };
     let data = device.create_buffer_from_slice(slice).unwrap();
-    push_var(Var {
-        op: Op::Buffer,
-        size,
-        ty,
-        data: Data::Buffer(data),
-        ..Default::default()
-    })
+    push_var(
+        Var {
+            op: Op::Buffer,
+            size,
+            ty,
+            data: Data::Buffer(data),
+            ..Default::default()
+        },
+        [],
+    )
 }
 fn max_size<'a>(refs: impl Iterator<Item = &'a VarRef>) -> usize {
     refs.map(|r| r.size()).reduce(|s0, s1| s0.max(s1)).unwrap()
@@ -249,14 +277,15 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
     log::trace!("Constructing composite struct {ty:?}.");
 
     let size = max_size(refs.iter().map(|r| *r));
-    let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
-    push_var(Var {
-        op: Op::KernelOp(ir::Op::Construct),
-        deps,
-        ty,
-        size,
-        ..Default::default()
-    })
+    push_var(
+        Var {
+            op: Op::KernelOp(ir::Op::Construct),
+            ty,
+            size,
+            ..Default::default()
+        },
+        refs.into_iter().cloned(),
+    )
 }
 pub fn vec(refs: &[&VarRef]) -> VarRef {
     // TODO: validate
@@ -268,14 +297,15 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
         ty: Box::new(ty),
         num: refs.len(),
     };
-    let deps = refs.iter().map(|r| r.id()).collect::<Vec<_>>();
-    push_var(Var {
-        op: Op::KernelOp(ir::Op::Construct),
-        deps,
-        ty,
-        size,
-        ..Default::default()
-    })
+    push_var(
+        Var {
+            op: Op::KernelOp(ir::Op::Construct),
+            ty,
+            size,
+            ..Default::default()
+        },
+        refs.iter().cloned(),
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -303,10 +333,13 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
                 triangles,
                 vertices,
             } => {
-                // NOTE: order in which triangles/vertices are pushed must match how they are
+                // WARN: order in which triangles/vertices are pushed must match how they are
                 // used when building Accel
-                deps.push(triangles.id());
-                deps.push(vertices.id());
+                // triangles.schedule();
+                // vertices.schedule();
+
+                deps.push(triangles);
+                deps.push(vertices);
                 backend::GeometryDesc::Triangles {
                     n_triangles: triangles.size(),
                     n_vertices: vertices.size(),
@@ -314,6 +347,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
             }
         })
         .collect::<Vec<_>>();
+    // schedule_eval();
     let instances = desc
         .instances
         .iter()
@@ -335,14 +369,16 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
         instances,
     };
 
-    push_var(Var {
-        op: Op::DeviceOp(DeviceOp::BuildAccel),
+    push_var(
+        Var {
+            op: Op::DeviceOp(DeviceOp::BuildAccel),
+            ty: VarType::Void,
+            size: 0,
+            accel_desc: Some(create_desc),
+            ..Default::default()
+        },
         deps,
-        ty: VarType::Void,
-        size: 0,
-        accel_desc: Some(create_desc),
-        ..Default::default()
-    })
+    )
 }
 
 impl VarRef {
@@ -380,13 +416,15 @@ impl VarRef {
         assert_eq!(self._thread_id, std::thread::current().id());
         assert_eq!(other._thread_id, std::thread::current().id());
         let info = with_trace(|t| t.var_info(&[self.id(), other.id()]));
-        push_var(Var {
-            op: Op::KernelOp(ir::Op::Bop(ir::Bop::Add)),
-            deps: vec![self.id(), other.id()],
-            ty: info.ty,
-            size: info.size,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Bop(ir::Bop::Add)),
+                ty: info.ty,
+                size: info.size,
+                ..Default::default()
+            },
+            [self, other],
+        )
     }
     pub fn gather(&self, idx: &Self) -> Self {
         self.schedule();
@@ -394,13 +432,15 @@ impl VarRef {
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
-        push_var(Var {
-            op: Op::KernelOp(ir::Op::Gather),
-            deps: vec![src_ref.id(), idx.id()],
-            ty,
-            size,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Gather),
+                ty,
+                size,
+                ..Default::default()
+            },
+            [&src_ref, idx],
+        )
     }
     pub fn gather_if(&self, idx: &Self, active: &Self) -> Self {
         self.schedule();
@@ -408,26 +448,30 @@ impl VarRef {
         let ty = self.ty();
         let size = idx.size();
         let src_ref = self.get_ref();
-        push_var(Var {
-            op: Op::KernelOp(ir::Op::Gather),
-            deps: vec![src_ref.id(), idx.id(), active.id()],
-            ty,
-            size,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Gather),
+                ty,
+                size,
+                ..Default::default()
+            },
+            [&src_ref, idx, active],
+        )
     }
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
         dst.schedule();
         schedule_eval();
         let size = max_size([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(Var {
-            op: Op::KernelOp(ir::Op::Scatter),
-            deps: vec![dst_ref.id(), self.id(), idx.id()],
-            ty: VarType::Void,
-            size,
-            ..Default::default()
-        });
+        let res = push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Scatter),
+                ty: VarType::Void,
+                size,
+                ..Default::default()
+            },
+            [&dst_ref, self, idx],
+        );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
         res
@@ -437,13 +481,15 @@ impl VarRef {
         schedule_eval();
         let size = max_size([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(Var {
-            op: Op::KernelOp(ir::Op::Scatter),
-            deps: vec![dst_ref.id(), self.id(), idx.id(), active.id()],
-            ty: VarType::Void,
-            size,
-            ..Default::default()
-        });
+        let res = push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Scatter),
+                ty: VarType::Void,
+                size,
+                ..Default::default()
+            },
+            [&dst_ref, self, idx, active],
+        );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
         res
@@ -458,13 +504,15 @@ impl VarRef {
     }
     fn _get_ref(&self, mutable: bool) -> Self {
         let ty = self.ty();
-        push_var(Var {
-            op: Op::Ref { mutable },
-            deps: vec![self.id()],
-            ty,
-            size: 0,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::Ref { mutable },
+                ty,
+                size: 0,
+                ..Default::default()
+            },
+            [self],
+        )
     }
     pub fn ty(&self) -> VarType {
         with_trace(|t| t.var(self.id()).ty.clone())
@@ -484,13 +532,15 @@ impl VarRef {
             VarType::Struct { tys } => tys[elem].clone(),
             _ => todo!(),
         };
-        push_var(Var {
-            op: Op::KernelOp(ir::Op::Extract(elem)),
-            deps: vec![self.id()],
-            ty,
-            size,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Extract(elem)),
+                ty,
+                size,
+                ..Default::default()
+            },
+            [self],
+        )
     }
     pub fn select(&self, true_val: &Self, false_val: &Self) -> Self {
         assert_eq!(self.ty(), VarType::Bool);
@@ -500,13 +550,15 @@ impl VarRef {
 
         let size = max_size([self, true_val, false_val].into_iter());
 
-        push_var(Var {
-            op: Op::KernelOp(ir::Op::Select),
-            deps: vec![self.id(), true_val.id(), false_val.id()],
-            ty,
-            size,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Select),
+                ty,
+                size,
+                ..Default::default()
+            },
+            [self, true_val, false_val],
+        )
     }
     pub fn tex_lookup(&self, pos: &[&VarRef]) -> Self {
         assert!(pos.len() >= 1 && pos.len() <= 3);
@@ -524,13 +576,15 @@ impl VarRef {
         };
         let src_ref = self.get_ref();
 
-        let composite = push_var(Var {
-            op: Op::KernelOp(ir::Op::TexLookup),
-            deps: vec![src_ref.id(), pos.id()],
-            ty,
-            size,
-            ..Default::default()
-        });
+        let composite = push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::TexLookup),
+                ty,
+                size,
+                ..Default::default()
+            },
+            [&src_ref, &pos],
+        );
         composite
     }
     pub fn shape_channels(&self) -> ([usize; 3], usize) {
@@ -557,13 +611,15 @@ impl VarRef {
         ];
         log::trace!("Recording Texture with {shape:?}");
 
-        push_var(Var {
-            op: Op::DeviceOp(DeviceOp::Buffer2Texture { shape, channels }),
-            deps: vec![self.id()],
-            ty: VarType::F32,
-            size: 0,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::Buffer2Texture { shape, channels }),
+                ty: VarType::F32,
+                size: 0,
+                ..Default::default()
+            },
+            [self],
+        )
     }
     pub fn trace_ray(&self, o: &Self, d: &Self, tmin: &Self, tmax: &Self) -> Self {
         let size = max_size([o, d, tmin, tmax].into_iter());
@@ -572,12 +628,14 @@ impl VarRef {
 
         let accel_ref = self.get_ref();
 
-        push_var(Var {
-            op: Op::KernelOp(ir::Op::TraceRay),
-            deps: vec![accel_ref.id(), o.id(), d.id(), tmin.id(), tmax.id()],
-            ty,
-            size,
-            ..Default::default()
-        })
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::TraceRay),
+                ty,
+                size,
+                ..Default::default()
+            },
+            [&accel_ref, o, d, tmin, tmax],
+        )
     }
 }
