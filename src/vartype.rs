@@ -117,3 +117,63 @@ as_var_type! {
     f32 => F32;
     f64 => F64;
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn u8u32() {
+        #[derive(Default)]
+        #[repr(C)]
+        struct Reference {
+            a: u8,
+            b: u32,
+        }
+
+        let ty = VarType::Struct {
+            tys: vec![VarType::U8, VarType::U32],
+        };
+
+        assert_eq!(ty.offset(0), bytemuck::offset_of!(Reference, a));
+        assert_eq!(ty.offset(1), bytemuck::offset_of!(Reference, b));
+        assert_eq!(ty.size(), std::mem::size_of::<Reference>());
+    }
+    #[test]
+    fn u32u8() {
+        #[derive(Default)]
+        #[repr(C)]
+        struct Reference {
+            a: u32,
+            b: u8,
+        }
+
+        let ty = VarType::Struct {
+            tys: vec![VarType::U32, VarType::U8],
+        };
+
+        assert_eq!(ty.offset(0), bytemuck::offset_of!(Reference, a));
+        assert_eq!(ty.offset(1), bytemuck::offset_of!(Reference, b));
+        assert_eq!(ty.size(), std::mem::size_of::<Reference>());
+    }
+    #[test]
+    fn u8u16u32u64() {
+        #[derive(Default)]
+        #[repr(C)]
+        struct Reference {
+            a: u8,
+            b: u16,
+            c: u32,
+            d: u64,
+        }
+
+        let ty = VarType::Struct {
+            tys: vec![VarType::U8, VarType::U16, VarType::U32, VarType::U64],
+        };
+
+        assert_eq!(ty.offset(0), bytemuck::offset_of!(Reference, a));
+        assert_eq!(ty.offset(1), bytemuck::offset_of!(Reference, b));
+        assert_eq!(ty.offset(2), bytemuck::offset_of!(Reference, c));
+        assert_eq!(ty.offset(3), bytemuck::offset_of!(Reference, d));
+        assert_eq!(ty.size(), std::mem::size_of::<Reference>());
+    }
+}
