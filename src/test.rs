@@ -296,6 +296,7 @@ fn accel() {
     graph.launch(&device);
 
     dbg!(intersection_ty.to_vec::<i32>());
+    assert_eq!(intersection_ty.to_vec::<i32>(), vec![1, 0]);
     // dbg!(o.to_vec::<f32>());
     // dbg!(d.to_vec::<f32>());
 }
