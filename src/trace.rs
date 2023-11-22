@@ -40,35 +40,41 @@ thread_local! {
 
 #[derive(Default, Debug)]
 pub struct Trace {
-    vars: SlotMap<DefaultKey, Var>,
+    vars: SlotMap<DefaultKey, Entry>,
     // pub device: Option<Device>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
-        &self.vars[id.0]
+        &self.vars[id.0].var
     }
     pub fn var_mut(&mut self, id: VarId) -> &mut Var {
+        &mut self.vars[id.0].var
+    }
+    pub fn entry_mut(&mut self, id: VarId) -> &mut Entry {
         &mut self.vars[id.0]
     }
-    pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
-        self.vars.get(id.0)
+    pub fn deps(&self, id: VarId) -> &[VarId] {
+        &self.vars[id.0].deps
     }
-    pub fn push_var(&mut self, mut v: Var) -> VarId {
-        for dep in v.deps.iter() {
-            self.inc_rc(*dep);
+    pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
+        self.vars.get(id.0).map(|entry| &entry.var)
+    }
+    pub fn push_var(&mut self, var: Var, deps: Vec<VarId>) -> VarId {
+        for id in deps.iter() {
+            self.inc_rc(*id);
         }
-        v.rc = 1;
-        let id = VarId(self.vars.insert(v));
+        let id = VarId(self.vars.insert(Entry { deps, var, rc: 1 }));
         id
     }
     pub fn inc_rc(&mut self, id: VarId) {
-        self.var_mut(id).rc += 1;
+        self.vars[id.0].rc += 1;
     }
     pub fn dec_rc(&mut self, id: VarId) {
         let var = self.var_mut(id);
-        var.rc -= 1;
-        if var.rc == 0 {
-            for dep in var.deps.clone() {
+        let entry = &mut self.vars[id.0];
+        entry.rc -= 1;
+        if entry.rc == 0 {
+            for dep in entry.deps.clone() {
                 self.dec_rc(dep);
             }
             let var = self.var_mut(id);
@@ -134,19 +140,19 @@ impl Drop for VarRef {
     }
 }
 
-// #[derive(Debug, Default)]
-// pub struct Deps {
-//     deps: Vec<VarId>,
-//     var: Var,
-// }
+#[derive(Debug, Default)]
+pub struct Entry {
+    pub(crate) deps: Vec<VarId>,
+    pub(crate) var: Var,
+    pub(crate) rc: usize,
+}
 
 #[derive(Debug, Default)]
 pub struct Var {
     pub op: Op, // Operation used to construct the variable
-    pub deps: Vec<VarId>,
+    // pub deps: Vec<VarId>,
     pub ty: VarType, // Type of the variable
     pub size: usize, // number of elements
-    pub rc: usize,
 
     pub dirty: bool,
 
@@ -168,7 +174,7 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
         f(&mut t)
     })
 }
-fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
+fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
     let deps = deps
@@ -180,19 +186,18 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
             r.id()
         })
         .collect::<Vec<_>>();
-    v.deps = deps;
 
     // Schedule evaluation in some cases
     if is_device_op {
         schedule_eval();
     }
-    if with_trace(|trace| v.deps.iter().any(|id| trace.var(*id).dirty)) {
+    if with_trace(|trace| deps.iter().any(|id| trace.var(*id).dirty)) {
         schedule_eval();
     }
 
     // Push actual variable
     let res = with_trace(|t| VarRef {
-        id: t.push_var(v),
+        id: t.push_var(v, deps),
         _thread_id: std::thread::current().id(),
     });
     // Auto schedule and schedule evaluation if device op
@@ -408,7 +413,7 @@ impl VarRef {
         })
     }
     pub fn rc(&self) -> usize {
-        with_trace(|t| t.var(self.id()).rc)
+        with_trace(|trace| trace.vars[self.id().0].rc)
     }
 }
 impl VarRef {

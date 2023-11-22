@@ -88,7 +88,7 @@ impl Compiler {
         let id = match var.op {
             Op::Ref { .. } => {
                 // When we hit a ref, we just load it as a ref
-                self.collect_data(trace, var.deps[0])
+                self.collect_data(trace, trace.deps(id)[0])
             }
             Op::Buffer => {
                 // When we hit a buffer directly we want to access the elements directly
@@ -121,9 +121,9 @@ impl Compiler {
                     [],
                 ),
                 _ => {
-                    let deps = var
-                        .deps
-                        .iter()
+                    let deps = trace
+                        .deps(id)
+                        .into_iter()
                         .map(|id| self.collect(trace, *id))
                         .collect::<Vec<_>>();
                     self.ir.push_var(

@@ -304,7 +304,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 op::Op::DeviceOp(op) => match op {
                     op::DeviceOp::Max => todo!(),
                     _ => {
-                        let deps = trace.var(id).deps.clone();
+                        let deps = trace.deps(id).to_vec();
 
                         let mut buffers = vec![];
                         let mut textures = vec![];
@@ -383,7 +383,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             // var.dirty = false;
 
             // Clear dependencies:
-            let deps = std::mem::take(&mut var.deps);
+            let deps = std::mem::take(&mut trace.entry_mut(id).deps);
 
             for dep in deps {
                 trace.dec_rc(dep);
