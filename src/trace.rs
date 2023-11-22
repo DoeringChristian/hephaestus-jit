@@ -41,7 +41,6 @@ thread_local! {
 #[derive(Default, Debug)]
 pub struct Trace {
     entries: SlotMap<DefaultKey, Entry>,
-    // pub device: Option<Device>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
@@ -80,17 +79,6 @@ impl Trace {
             let var = self.var_mut(id);
             self.entries.remove(id.0);
         }
-    }
-    pub fn var_info(&self, ids: &[VarId]) -> VarInfo {
-        let ty = self.var(*ids.first().unwrap()).ty.clone(); // TODO: Fix (first non void)
-
-        let size = ids
-            .iter()
-            .map(|id| self.var(*id).size)
-            .reduce(|s0, s1| s0.max(s1))
-            .unwrap()
-            .clone();
-        VarInfo { ty, size }
     }
     pub fn ref_borrow(&mut self, id: VarId) -> VarRef {
         self.inc_rc(id);
@@ -162,12 +150,6 @@ pub struct Var {
     // pub arrays: Option<Array>,
     pub data: Data,
 }
-#[derive(Debug)]
-pub struct VarInfo {
-    pub ty: VarType,
-    pub size: usize,
-}
-
 pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     TRACE.with(|t| {
         let mut t = t.borrow_mut();
@@ -272,8 +254,11 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
         [],
     )
 }
-fn max_size<'a>(refs: impl Iterator<Item = &'a VarRef>) -> usize {
-    refs.map(|r| r.size()).reduce(|s0, s1| s0.max(s1)).unwrap()
+fn max_size<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> usize {
+    refs.into_iter()
+        .map(|r| r.size())
+        .reduce(|s0, s1| s0.max(s1))
+        .unwrap()
 }
 pub fn composite(refs: &[&VarRef]) -> VarRef {
     let tys = refs.iter().map(|r| r.ty()).collect();
@@ -420,12 +405,13 @@ impl VarRef {
     pub fn add(&self, other: &VarRef) -> VarRef {
         assert_eq!(self._thread_id, std::thread::current().id());
         assert_eq!(other._thread_id, std::thread::current().id());
-        let info = with_trace(|t| t.var_info(&[self.id(), other.id()]));
+        let size = max_size([self, other]);
+        let ty = self.ty();
         push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Bop(ir::Bop::Add)),
-                ty: info.ty,
-                size: info.size,
+                size,
+                ty,
                 ..Default::default()
             },
             [self, other],
