@@ -184,7 +184,7 @@ impl backend::BackendDevice for VulkanDevice {
                                 .unwrap();
 
                             let mut buffers =
-                                pass.buffers.iter().rev().map(|id| graph.buffer(trace, *id));
+                                pass.buffers.iter().map(|id| graph.buffer(trace, *id));
 
                             let geometries = accel_desc
                                 .desc

@@ -247,16 +247,11 @@ fn accel() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    let x = tr::array(&[1f32, 0f32, 1f32], &device);
-    let y = tr::array(&[0f32, 1f32, 1f32], &device);
-    let z = tr::array(&[0f32, 0f32, 0f32], &device);
-
-    let vertices = tr::vec(&[&x, &y, &z]);
-    let triangles = tr::vec(&[
-        &tr::sized_literal(0u32, 1),
-        &tr::literal(1u32),
-        &tr::literal(2u32),
-    ]);
+    let vertices = tr::array(
+        &[1f32, 0f32, 0f32, 0f32, 1f32, 0f32, 1f32, 1f32, 0f32],
+        &device,
+    );
+    let triangles = tr::array(&[0u32, 1, 2], &device);
 
     let desc = tr::AccelDesc {
         geometries: vec![tr::GeometryDesc::Triangles {
