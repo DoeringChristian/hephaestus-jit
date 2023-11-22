@@ -138,18 +138,12 @@ pub struct Entry {
 
 #[derive(Debug, Default)]
 pub struct Var {
-    pub op: Op, // Operation used to construct the variable
-    // pub deps: Vec<VarId>,
-    pub ty: VarType, // Type of the variable
-    // pub size: usize, // number of elements
-    pub extent: Extent,
+    pub op: Op,         // Operation used to construct the variable
+    pub ty: VarType,    // Type of the variable
+    pub extent: Extent, // Extent of the variable
 
     pub dirty: bool,
 
-    // TODO: Unify that with some other member (data or index?)
-    pub accel_desc: Option<backend::AccelDesc>,
-
-    // pub arrays: Option<Array>,
     pub data: Data,
 }
 pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
@@ -265,16 +259,7 @@ fn max_size<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> usize {
 fn resulting_extent<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> Extent {
     refs.into_iter()
         .map(|r| r.extent())
-        .fold(Default::default(), |a, b| match (a, b) {
-            (Extent::Size(a), Extent::Size(b)) => Extent::Size(a.max(b)),
-            (Extent::Size(a), Extent::DynSize { capacity, size_dep })
-            | (Extent::DynSize { capacity, size_dep }, Extent::Size(a)) => Extent::DynSize {
-                capacity: a.max(capacity),
-                size_dep,
-            },
-            (Extent::Size(size), _) | (_, Extent::Size(size)) => Extent::Size(size),
-            _ => todo!(),
-        })
+        .fold(Default::default(), |a, b| a.resulting_extent(&b))
 }
 pub fn composite(refs: &[&VarRef]) -> VarRef {
     let tys = refs.iter().map(|r| r.ty()).collect();
@@ -381,7 +366,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
             op: Op::DeviceOp(DeviceOp::BuildAccel),
             ty: VarType::Void,
             extent: Extent::Accel(create_desc.clone()),
-            accel_desc: Some(create_desc),
+            // accel_desc: Some(create_desc),
             ..Default::default()
         },
         deps,

@@ -38,4 +38,23 @@ impl Extent {
             _ => todo!(),
         }
     }
+    pub fn accel_desc(&self) -> &backend::AccelDesc {
+        match self {
+            Extent::Accel(desc) => desc,
+            _ => todo!(),
+        }
+    }
+    pub fn resulting_extent(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Extent::None, other) | (other, Extent::None) => other.clone(),
+            (Extent::Size(a), Extent::Size(b)) => Extent::Size(*a.max(b)),
+            (Extent::Size(a), Extent::DynSize { capacity, size_dep })
+            | (Extent::DynSize { capacity, size_dep }, Extent::Size(a)) => Extent::DynSize {
+                capacity: *a.max(capacity),
+                size_dep: *size_dep,
+            },
+            (Extent::Size(size), _) | (_, Extent::Size(size)) => Extent::Size(*size),
+            _ => todo!(),
+        }
+    }
 }

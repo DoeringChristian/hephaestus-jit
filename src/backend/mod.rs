@@ -217,6 +217,10 @@ pub struct InstanceDesc {
     pub geometry: usize,
     pub transform: [f32; 12],
 }
+/// TODO: At some point we should probably rename this to AccelExtent and have a unified instance
+/// descriptor on the device.
+/// This would allow us to change instance transforms on the fly (necessary for differentiable
+/// rendering)
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccelDesc {
     pub geometries: Vec<GeometryDesc>,

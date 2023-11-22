@@ -53,11 +53,7 @@ impl GraphBuilder {
             // TODO: reevaluate method here. We are loading the instances from buffer => struct
             // layout has to be correct.
 
-            let accel_desc = trace
-                .var(id)
-                .accel_desc
-                .clone()
-                .expect("Expected to find a Accel Descriptor, accociated with this var!");
+            let accel_desc = trace.var(id).extent.accel_desc().clone();
 
             let accel_id = AccelId(self.accels.len());
             self.accels.push(AccelDesc {
