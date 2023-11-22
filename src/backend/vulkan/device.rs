@@ -77,16 +77,6 @@ impl Device {
                 .signal_semaphores(&[self.global_end_semaphore])
                 .build();
 
-            self.queue_submit(self.queue, &[submit_info], vk::Fence::null())
-                .unwrap();
-
-            // clear semaphore
-            let submit_info = vk::SubmitInfo::builder()
-                .wait_semaphores(&[self.global_end_semaphore])
-                .build();
-
-            // self.reset_fences(&[self.fence]).unwrap();
-
             self.queue_submit(self.queue, &[submit_info], self.fence)
                 .unwrap();
 
