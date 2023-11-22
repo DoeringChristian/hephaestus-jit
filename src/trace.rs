@@ -40,45 +40,45 @@ thread_local! {
 
 #[derive(Default, Debug)]
 pub struct Trace {
-    vars: SlotMap<DefaultKey, Entry>,
+    entries: SlotMap<DefaultKey, Entry>,
     // pub device: Option<Device>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
-        &self.vars[id.0].var
+        &self.entries[id.0].var
     }
     pub fn var_mut(&mut self, id: VarId) -> &mut Var {
-        &mut self.vars[id.0].var
+        &mut self.entries[id.0].var
     }
     pub fn entry_mut(&mut self, id: VarId) -> &mut Entry {
-        &mut self.vars[id.0]
+        &mut self.entries[id.0]
     }
     pub fn deps(&self, id: VarId) -> &[VarId] {
-        &self.vars[id.0].deps
+        &self.entries[id.0].deps
     }
     pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
-        self.vars.get(id.0).map(|entry| &entry.var)
+        self.entries.get(id.0).map(|entry| &entry.var)
     }
     pub fn push_var(&mut self, var: Var, deps: Vec<VarId>) -> VarId {
         for id in deps.iter() {
             self.inc_rc(*id);
         }
-        let id = VarId(self.vars.insert(Entry { deps, var, rc: 1 }));
+        let id = VarId(self.entries.insert(Entry { deps, var, rc: 1 }));
         id
     }
     pub fn inc_rc(&mut self, id: VarId) {
-        self.vars[id.0].rc += 1;
+        self.entries[id.0].rc += 1;
     }
     pub fn dec_rc(&mut self, id: VarId) {
         let var = self.var_mut(id);
-        let entry = &mut self.vars[id.0];
+        let entry = &mut self.entries[id.0];
         entry.rc -= 1;
         if entry.rc == 0 {
             for dep in entry.deps.clone() {
                 self.dec_rc(dep);
             }
             let var = self.var_mut(id);
-            self.vars.remove(id.0);
+            self.entries.remove(id.0);
         }
     }
     pub fn var_info(&self, ids: &[VarId]) -> VarInfo {
@@ -102,7 +102,7 @@ impl Trace {
 }
 impl Drop for Trace {
     fn drop(&mut self) {
-        assert_eq!(self.vars.len(), 0, "{self:#?}");
+        assert_eq!(self.entries.len(), 0, "{self:#?}");
     }
 }
 
@@ -413,7 +413,7 @@ impl VarRef {
         })
     }
     pub fn rc(&self) -> usize {
-        with_trace(|trace| trace.vars[self.id().0].rc)
+        with_trace(|trace| trace.entries[self.id().0].rc)
     }
 }
 impl VarRef {
