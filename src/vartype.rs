@@ -68,7 +68,6 @@ impl VarType {
             _ => todo!(),
         }
     }
-    // TODO: Fix allignment
     pub fn alignment(&self) -> usize {
         match self {
             VarType::Void => 0,
