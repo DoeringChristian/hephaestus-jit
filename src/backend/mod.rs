@@ -205,19 +205,19 @@ pub trait BackendAccel {
     type Device: BackendDevice;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GeometryDesc {
     Triangles {
         n_triangles: usize,
         n_vertices: usize,
     },
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InstanceDesc {
     pub geometry: usize,
     pub transform: [f32; 12],
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccelDesc {
     pub geometries: Vec<GeometryDesc>,
     pub instances: Vec<InstanceDesc>,

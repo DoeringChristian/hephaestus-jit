@@ -1,11 +1,12 @@
 pub mod backend;
 mod compiler;
 mod data;
+mod extent;
 mod graph;
 pub mod ir;
 mod op;
 pub mod trace;
-mod vartype;
+pub mod vartype;
 
 #[cfg(test)]
 mod test;

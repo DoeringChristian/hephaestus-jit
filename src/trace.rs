@@ -5,6 +5,7 @@ use std::ops::Range;
 use std::thread::ThreadId;
 
 use crate::data::Data;
+use crate::extent::Extent;
 use crate::op::{DeviceOp, Op};
 use crate::vartype::{AsVarType, VarType};
 use crate::{backend, ir};
@@ -140,7 +141,8 @@ pub struct Var {
     pub op: Op, // Operation used to construct the variable
     // pub deps: Vec<VarId>,
     pub ty: VarType, // Type of the variable
-    pub size: usize, // number of elements
+    // pub size: usize, // number of elements
+    pub extent: Extent,
 
     pub dirty: bool,
 
@@ -213,7 +215,7 @@ pub fn index(size: usize) -> VarRef {
         Var {
             op: Op::KernelOp(ir::Op::Index),
             ty: VarType::U32,
-            size,
+            extent: Extent::Size(size),
             ..Default::default()
         },
         [],
@@ -230,7 +232,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
         Var {
             op: Op::KernelOp(ir::Op::Literal),
             ty,
-            size,
+            extent: Extent::Size(size),
             data: Data::Literal(data),
             ..Default::default()
         },
@@ -246,7 +248,7 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
     push_var(
         Var {
             op: Op::Buffer,
-            size,
+            extent: Extent::Size(size),
             ty,
             data: Data::Buffer(data),
             ..Default::default()
@@ -260,18 +262,32 @@ fn max_size<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> usize {
         .reduce(|s0, s1| s0.max(s1))
         .unwrap()
 }
+fn resulting_extent<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> Extent {
+    refs.into_iter()
+        .map(|r| r.extent())
+        .fold(Default::default(), |a, b| match (a, b) {
+            (Extent::Size(a), Extent::Size(b)) => Extent::Size(a.max(b)),
+            (Extent::Size(a), Extent::DynSize { capacity, size_dep })
+            | (Extent::DynSize { capacity, size_dep }, Extent::Size(a)) => Extent::DynSize {
+                capacity: a.max(capacity),
+                size_dep,
+            },
+            (Extent::Size(size), _) | (_, Extent::Size(size)) => Extent::Size(size),
+            _ => todo!(),
+        })
+}
 pub fn composite(refs: &[&VarRef]) -> VarRef {
     let tys = refs.iter().map(|r| r.ty()).collect();
     let ty = VarType::Struct { tys };
 
     log::trace!("Constructing composite struct {ty:?}.");
 
-    let size = max_size(refs.iter().map(|r| *r));
+    let extent = resulting_extent(refs.iter().map(|r| *r));
     push_var(
         Var {
             op: Op::KernelOp(ir::Op::Construct),
             ty,
-            size,
+            extent,
             ..Default::default()
         },
         refs.into_iter().cloned(),
@@ -281,7 +297,8 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
     // TODO: validate
     //
     let ty = refs[0].ty();
-    let size = max_size(refs.iter().map(|r| *r));
+
+    let extent = resulting_extent(refs.iter().map(|r| *r));
 
     let ty = VarType::Vec {
         ty: Box::new(ty),
@@ -291,7 +308,7 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
         Var {
             op: Op::KernelOp(ir::Op::Construct),
             ty,
-            size,
+            extent,
             ..Default::default()
         },
         refs.iter().cloned(),
@@ -363,7 +380,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
         Var {
             op: Op::DeviceOp(DeviceOp::BuildAccel),
             ty: VarType::Void,
-            size: 0,
+            extent: Extent::Accel(create_desc.clone()),
             accel_desc: Some(create_desc),
             ..Default::default()
         },
@@ -405,12 +422,13 @@ impl VarRef {
     pub fn add(&self, other: &VarRef) -> VarRef {
         assert_eq!(self._thread_id, std::thread::current().id());
         assert_eq!(other._thread_id, std::thread::current().id());
-        let size = max_size([self, other]);
+        let extent = resulting_extent([self, other]);
+
         let ty = self.ty();
         push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Bop(ir::Bop::Add)),
-                size,
+                extent,
                 ty,
                 ..Default::default()
             },
@@ -421,13 +439,13 @@ impl VarRef {
         self.schedule();
         schedule_eval();
         let ty = self.ty();
-        let size = idx.size();
+        let extent = idx.extent();
         let src_ref = self.get_ref();
         push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Gather),
                 ty,
-                size,
+                extent,
                 ..Default::default()
             },
             [&src_ref, idx],
@@ -437,13 +455,13 @@ impl VarRef {
         self.schedule();
         schedule_eval();
         let ty = self.ty();
-        let size = idx.size();
+        let extent = idx.extent();
         let src_ref = self.get_ref();
         push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Gather),
                 ty,
-                size,
+                extent,
                 ..Default::default()
             },
             [&src_ref, idx, active],
@@ -452,13 +470,13 @@ impl VarRef {
     pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
         dst.schedule();
         schedule_eval();
-        let size = max_size([self, idx].into_iter());
+        let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Scatter),
                 ty: VarType::Void,
-                size,
+                extent,
                 ..Default::default()
             },
             [&dst_ref, self, idx],
@@ -470,13 +488,13 @@ impl VarRef {
     pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
         dst.schedule();
         schedule_eval();
-        let size = max_size([self, idx, active].into_iter());
+        let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Scatter),
                 ty: VarType::Void,
-                size,
+                extent,
                 ..Default::default()
             },
             [&dst_ref, self, idx, active],
@@ -499,7 +517,7 @@ impl VarRef {
             Var {
                 op: Op::Ref { mutable },
                 ty,
-                size: 0,
+                extent: Extent::Size(0),
                 ..Default::default()
             },
             [self],
@@ -508,15 +526,24 @@ impl VarRef {
     pub fn ty(&self) -> VarType {
         with_trace(|t| t.var(self.id()).ty.clone())
     }
+    // pub fn size(&self) -> usize {
+    //     with_trace(|t| t.var(self.id()).size)
+    // }
     pub fn size(&self) -> usize {
-        with_trace(|t| t.var(self.id()).size)
+        match self.extent() {
+            Extent::Size(size) => size,
+            _ => todo!(),
+        }
+    }
+    pub fn extent(&self) -> Extent {
+        with_trace(|t| t.var(self.id()).extent.clone())
     }
     pub fn to_vec<T: AsVarType + bytemuck::Pod>(&self) -> Vec<T> {
         assert_eq!(self._thread_id, std::thread::current().id());
         with_trace(|t| t.var(self.id()).data.buffer().unwrap().to_host().unwrap())
     }
     pub fn extract(&self, elem: usize) -> Self {
-        let size = self.size();
+        let extent = self.extent();
         let ty = self.ty();
         let ty = match ty {
             VarType::Vec { ty, .. } => ty.as_ref().clone(),
@@ -527,7 +554,7 @@ impl VarRef {
             Var {
                 op: Op::KernelOp(ir::Op::Extract(elem)),
                 ty,
-                size,
+                extent,
                 ..Default::default()
             },
             [self],
@@ -539,13 +566,13 @@ impl VarRef {
 
         let ty = true_val.ty();
 
-        let size = max_size([self, true_val, false_val].into_iter());
+        let extent = resulting_extent([self, true_val, false_val].into_iter());
 
         push_var(
             Var {
                 op: Op::KernelOp(ir::Op::Select),
                 ty,
-                size,
+                extent,
                 ..Default::default()
             },
             [self, true_val, false_val],
@@ -556,7 +583,7 @@ impl VarRef {
 
         let pos = vec(pos);
 
-        let size = pos.size();
+        let extent = pos.extent();
 
         let (shape, channels) = self.shape_channels();
         assert!(channels <= 4);
@@ -571,7 +598,7 @@ impl VarRef {
             Var {
                 op: Op::KernelOp(ir::Op::TexLookup),
                 ty,
-                size,
+                extent,
                 ..Default::default()
             },
             [&src_ref, &pos],
@@ -606,14 +633,14 @@ impl VarRef {
             Var {
                 op: Op::DeviceOp(DeviceOp::Buffer2Texture { shape, channels }),
                 ty: VarType::F32,
-                size: 0,
+                extent: Extent::Texture { shape, channels },
                 ..Default::default()
             },
             [self],
         )
     }
     pub fn trace_ray(&self, o: &Self, d: &Self, tmin: &Self, tmax: &Self) -> Self {
-        let size = max_size([o, d, tmin, tmax].into_iter());
+        let extent = resulting_extent([o, d, tmin, tmax].into_iter());
 
         let ty = VarType::U32;
 
@@ -623,7 +650,7 @@ impl VarRef {
             Var {
                 op: Op::KernelOp(ir::Op::TraceRay),
                 ty,
-                size,
+                extent,
                 ..Default::default()
             },
             [&accel_ref, o, d, tmin, tmax],

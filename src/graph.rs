@@ -1,6 +1,7 @@
 use crate::backend;
 use crate::backend::Device;
 use crate::data::Data;
+use crate::extent::Extent;
 use crate::{compiler, ir, op, trace};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
@@ -25,7 +26,7 @@ impl GraphBuilder {
             let buffer_id = BufferId(self.buffers.len());
             self.buffers.push(BufferDesc {
                 var: trace.ref_borrow(id),
-                size: trace.var(id).size,
+                size: trace.var(id).extent.capacity(),
             });
             buffer_id
         })
@@ -127,46 +128,6 @@ impl Graph {
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
-    pub fn launch_slow(&self, device: &Device) {
-        trace::with_trace(|t| {
-            self._launch_slow(t, device);
-        })
-    }
-    fn _launch_slow(&self, trace: &mut trace::Trace, device: &Device) {
-        for desc in self.buffers.iter() {
-            let var = trace.var_mut(desc.var.id());
-
-            let size = var.size;
-            let ty_size = var.ty.size();
-            if !var.data.is_storage() {
-                match var.op.resulting_op() {
-                    op::Op::Buffer => {
-                        var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap())
-                    }
-                    op::Op::Texture { shape, channels } => {
-                        var.data = Data::Texture(device.create_texture(shape, channels).unwrap())
-                    }
-                    _ => todo!(),
-                }
-            }
-        }
-        for pass in self.passes.iter() {
-            let buffers = pass
-                .buffers
-                .iter()
-                .map(|id| {
-                    let desc = self.buffer_desc(*id);
-                    trace.var(desc.var.id()).data.buffer().unwrap()
-                })
-                .collect::<Vec<_>>();
-            match &pass.op {
-                PassOp::Kernel { ir, size } => {
-                    device.execute_ir(ir, *size, buffers.as_slice()).unwrap();
-                }
-                _ => todo!(),
-            }
-        }
-    }
     pub fn launch(&self, device: &Device) {
         trace::with_trace(|trace| {
             for desc in self.buffers.iter() {
@@ -174,7 +135,7 @@ impl Graph {
                 let var = trace.var_mut(desc.var.id());
                 // log::trace!("{var:#?}");
 
-                let size = var.size;
+                let size = var.extent.capacity();
                 let ty_size = var.ty.size();
                 log::trace!("Creating Buffer for {desc:?} {size:?} {ty_size:?}");
                 if !var.data.is_storage() {
@@ -265,20 +226,25 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
     let groups = groups
         .iter_mut()
         .flat_map(|group| {
-            vars[group.clone()]
-                .sort_by(|id0, id1| trace.var(id0.id()).size.cmp(&trace.var(id1.id()).size));
+            vars[group.clone()].sort_by(|id0, id1| {
+                trace
+                    .var(id0.id())
+                    .extent
+                    .partial_cmp(&trace.var(id1.id()).extent)
+                    .unwrap()
+            });
 
             let mut groups = vec![];
-            let mut size = 0;
+            let mut size = Extent::default();
             let mut start = group.start;
 
             for i in group.clone() {
-                if trace.var(vars[i].id()).size != size {
+                if trace.var(vars[i].id()).extent != size {
                     let end = i + 1;
                     if start != end {
                         groups.push(start..end);
                     }
-                    size = trace.var(vars[i].id()).size;
+                    size = trace.var(vars[i].id()).extent.clone();
                     start = end;
                 }
             }
@@ -363,7 +329,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 accels,
                 op: PassOp::Kernel {
                     ir: Arc::new(compiler.ir),
-                    size: trace.var(vars[group.start].id()).size,
+                    size: trace.var(vars[group.start].id()).extent.size(),
                 },
             };
             graph_builder.push_pass(pass);
