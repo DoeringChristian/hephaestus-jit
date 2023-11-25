@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
-use crate::backend::{AccelDesc, GeometryDesc, InstanceDesc};
+use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

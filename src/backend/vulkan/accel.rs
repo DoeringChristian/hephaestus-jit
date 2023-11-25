@@ -1,12 +1,15 @@
 use ash::vk;
 use std::sync::Mutex;
 
-use super::acceleration_structure::*;
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
+use super::{acceleration_structure::*, VulkanDevice};
 
-use crate::backend::{AccelDesc, GeometryDesc, InstanceDesc};
+use crate::backend::vulkan::pipeline::{
+    Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
+};
+use crate::backend::{AccelDesc, GeometryDesc};
 
 pub enum AccelGeometryBuildInfo<'a> {
     Triangles {
@@ -16,20 +19,21 @@ pub enum AccelGeometryBuildInfo<'a> {
 }
 pub struct AccelBuildInfo<'a> {
     pub geometries: &'a [AccelGeometryBuildInfo<'a>],
-    pub instances: &'a [InstanceDesc],
+    pub instances: &'a Buffer,
 }
 
 #[derive(Debug)]
 pub struct Accel {
-    device: Device,
+    device: VulkanDevice,
     blases: Vec<AccelerationStructure>,
     tlas: AccelerationStructure,
     instance_buffer: Mutex<Buffer>,
+    info: AccelDesc,
 }
 
 impl Accel {
-    pub fn create(device: &Device, desc: &AccelDesc) -> Self {
-        let blases = desc
+    pub fn create(device: &VulkanDevice, info: &AccelDesc) -> Self {
+        let blases = info
             .geometries
             .iter()
             .map(|desc| match desc {
@@ -59,11 +63,11 @@ impl Accel {
             })
             .collect::<Vec<_>>();
 
-        let info = AccelerationStructureInfo {
+        let create_info = AccelerationStructureInfo {
             ty: vk::AccelerationStructureTypeKHR::TOP_LEVEL,
             flags: vk::BuildAccelerationStructureFlagsKHR::empty(),
             geometries: vec![AccelerationStructureGeometry {
-                max_primitive_count: desc.instances.len() as _,
+                max_primitive_count: info.instances as _,
                 flags: vk::GeometryFlagsKHR::empty(),
                 data: AccelerationStructureGeometryData::Instances {
                     array_of_pointers: false,
@@ -71,13 +75,12 @@ impl Accel {
                 },
             }],
         };
-        let tlas = AccelerationStructure::create(device, info);
+        let tlas = AccelerationStructure::create(device, create_info);
 
         let instance_buffer = Buffer::create(
             &device,
             BufferInfo {
-                size: desc.instances.len()
-                    * std::mem::size_of::<vk::AccelerationStructureInstanceKHR>(),
+                size: info.instances * std::mem::size_of::<vk::AccelerationStructureInstanceKHR>(),
                 usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR
                     | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                 memory_location: MemoryLocation::CpuToGpu,
@@ -90,6 +93,7 @@ impl Accel {
             tlas,
             device: device.clone(),
             instance_buffer: Mutex::new(instance_buffer),
+            info: info.clone(),
         }
     }
     pub fn build(&self, ctx: &mut Context, desc: AccelBuildInfo) {
@@ -137,39 +141,98 @@ impl Accel {
                 &[],
             );
         }
-        let instances = desc
-            .instances
+
+        // Create references buffer
+        let references = self
+            .blases
             .iter()
-            .map(|instance| vk::AccelerationStructureInstanceKHR {
-                transform: vk::TransformMatrixKHR {
-                    matrix: instance.transform,
-                },
-                instance_custom_index_and_mask: vk::Packed24_8::new(0, 0xff),
-                instance_shader_binding_table_record_offset_and_flags: vk::Packed24_8::new(
-                    0,
-                    vk::GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as _,
-                ),
-                acceleration_structure_reference: vk::AccelerationStructureReferenceKHR {
-                    device_handle: self.get_blas_device_address(instance.geometry),
-                },
+            .map(|blas| unsafe {
+                self.device
+                    .acceleration_structure_ext
+                    .as_ref()
+                    .unwrap()
+                    .get_acceleration_structure_device_address(
+                        &vk::AccelerationStructureDeviceAddressInfoKHR::builder()
+                            .acceleration_structure(blas.accel),
+                    )
             })
             .collect::<Vec<_>>();
 
-        log::trace!(
-            "Uploading {n} instances to instance buffer",
-            n = instances.len()
+        let cb = ctx.cb;
+
+        let references_buffer = ctx.buffer_mut(BufferInfo {
+            size: std::mem::size_of::<u64>() * references.len(),
+            usage: vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::CpuToGpu,
+            ..Default::default()
+        });
+
+        references_buffer
+            .mapped_slice_mut()
+            .copy_from_slice(bytemuck::cast_slice(&references));
+
+        let copy2instances = self.device.get_pipeline(&PipelineDesc {
+            code: inline_spirv::include_spirv!(
+                "src/backend/vulkan/kernels/copy2instances.glsl",
+                comp
+            ),
+            desc_set_layouts: &[DescSetLayout {
+                bindings: &[
+                    Binding {
+                        binding: 0,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 1,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 2,
+                        count: 1,
+                    },
+                ],
+            }],
+        });
+
+        let instance_buffer = self.instance_buffer.lock().unwrap();
+
+        copy2instances.submit(
+            cb,
+            &self.device,
+            &[WriteSet {
+                set: 0,
+                binding: 0,
+                buffers: &[
+                    BufferWriteInfo {
+                        buffer: &desc.instances,
+                    },
+                    BufferWriteInfo {
+                        buffer: &references_buffer,
+                    },
+                    BufferWriteInfo {
+                        buffer: &instance_buffer,
+                    },
+                ],
+            }],
+            (self.info.instances as _, 1, 1),
         );
 
-        let instance_slice: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                instances.as_ptr() as *const _,
-                std::mem::size_of_val(instances.as_slice()),
-            )
-        };
-        let mut instance_buffer = self.instance_buffer.lock().unwrap();
-        instance_buffer
-            .mapped_slice_mut()
-            .copy_from_slice(instance_slice);
+        // Memory Barrierr
+        let memory_barriers = [vk::MemoryBarrier::builder()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .build()];
+        unsafe {
+            ctx.cmd_pipeline_barrier(
+                ctx.cb,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &memory_barriers,
+                &[],
+                &[],
+            );
+        }
 
         let mut info = self.tlas.info.clone();
         assert_eq!(info.geometries.len(), 1);

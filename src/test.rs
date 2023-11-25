@@ -258,19 +258,22 @@ fn accel() {
         &tr::literal(2u32),
     ]);
 
+    let instances = tr::array(
+        &[
+            1f32, 0f32, 0f32, 0f32, //
+            0f32, 1f32, 0f32, 0f32, //
+            0f32, 0f32, 1f32, 0f32, //
+            0f32, // WARN: This is 0x00000000 in bytes
+        ],
+        &device,
+    );
+
     let desc = tr::AccelDesc {
         geometries: vec![tr::GeometryDesc::Triangles {
             triangles,
             vertices,
         }],
-        instances: vec![tr::InstanceDesc {
-            geometry: 0,
-            transform: [
-                1.0, 0.0, 0.0, 0.0, //
-                0.0, 1.0, 0.0, 0.0, //
-                0.0, 0.0, 1.0, 0.0, //
-            ],
-        }],
+        instances,
     };
 
     let accel = tr::accel(&desc);

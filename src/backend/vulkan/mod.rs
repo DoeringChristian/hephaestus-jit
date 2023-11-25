@@ -189,6 +189,8 @@ impl backend::BackendDevice for VulkanDevice {
                             let mut buffers =
                                 pass.buffers.iter().map(|id| graph.buffer(trace, *id));
 
+                            let instances = &buffers.next().unwrap().vulkan().unwrap().buffer;
+
                             let geometries = accel_desc
                                 .desc
                                 .geometries
@@ -215,7 +217,7 @@ impl backend::BackendDevice for VulkanDevice {
 
                             let desc = accel::AccelBuildInfo {
                                 geometries: &geometries,
-                                instances: &accel_desc.desc.instances,
+                                instances,
                             };
 
                             accel.accel.build(ctx, desc);

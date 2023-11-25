@@ -33,6 +33,11 @@ impl Context {
             .push(buffer::Buffer::create(&self.device, info));
         self.buffers.last().unwrap()
     }
+    pub fn buffer_mut(&mut self, info: buffer::BufferInfo) -> &mut buffer::Buffer {
+        self.buffers
+            .push(buffer::Buffer::create(&self.device, info));
+        self.buffers.last_mut().unwrap()
+    }
     pub fn create_image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
         unsafe { self.device.create_image_view(info, None).unwrap() }
     }

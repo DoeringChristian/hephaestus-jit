@@ -305,18 +305,14 @@ pub enum GeometryDesc {
     Triangles { triangles: VarRef, vertices: VarRef },
 }
 #[derive(Debug, Clone)]
-pub struct InstanceDesc {
-    pub geometry: usize,
-    pub transform: [f32; 12],
-}
-#[derive(Debug, Clone)]
 pub struct AccelDesc {
     pub geometries: Vec<GeometryDesc>,
-    pub instances: Vec<InstanceDesc>,
+    pub instances: VarRef,
 }
 
 pub fn accel(desc: &AccelDesc) -> VarRef {
     let mut deps = vec![];
+    deps.push(&desc.instances);
     let geometries = desc
         .geometries
         .iter()
@@ -340,25 +336,9 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
         })
         .collect::<Vec<_>>();
     // schedule_eval();
-    let instances = desc
-        .instances
-        .iter()
-        .cloned()
-        .map(
-            |InstanceDesc {
-                 geometry,
-                 transform,
-             }| {
-                backend::InstanceDesc {
-                    geometry,
-                    transform,
-                }
-            },
-        )
-        .collect::<Vec<_>>();
     let create_desc = backend::AccelDesc {
         geometries,
-        instances,
+        instances: desc.instances.size(),
     };
 
     push_var(
