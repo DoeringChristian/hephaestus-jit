@@ -277,7 +277,7 @@ fn accel() {
                 0f32, 0f32, 1f32, 0f32, //
             ],
             geometry: 0,
-        }; 2],
+        }],
         &device,
     );
 

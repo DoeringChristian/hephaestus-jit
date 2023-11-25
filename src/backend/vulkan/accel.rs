@@ -83,7 +83,7 @@ impl Accel {
                 size: info.instances * std::mem::size_of::<vk::AccelerationStructureInstanceKHR>(),
                 usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR
                     | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                memory_location: MemoryLocation::CpuToGpu,
+                memory_location: MemoryLocation::GpuOnly,
                 ..Default::default()
             },
         );
