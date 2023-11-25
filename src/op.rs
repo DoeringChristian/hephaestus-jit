@@ -45,6 +45,14 @@ impl Op {
             _ => false,
         }
     }
+    pub fn evaluated(self) -> bool {
+        match self {
+            // Op::Nop => todo!(),
+            // Op::Ref { mutable } => todo!(),
+            Op::Buffer | Op::Texture { .. } | Op::Accel => true,
+            _ => false,
+        }
+    }
     /// Gives the Operation/Variable Type, this operation should evaluate to
     pub fn resulting_op(self) -> Self {
         match self {

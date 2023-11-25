@@ -104,12 +104,8 @@ impl Accel {
             match &mut info.geometries[0].data {
                 AccelerationStructureGeometryData::Triangles {
                     index_data,
-                    index_type,
-                    max_vertex,
-                    transform_data,
                     vertex_data,
-                    vertex_format,
-                    vertex_stride,
+                    ..
                 } => match desc.geometries[i] {
                     AccelGeometryBuildInfo::Triangles {
                         triangles,
@@ -162,7 +158,11 @@ impl Accel {
 
         let references_buffer = ctx.buffer_mut(BufferInfo {
             size: std::mem::size_of::<u64>() * references.len(),
-            usage: vk::BufferUsageFlags::STORAGE_BUFFER,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
             memory_location: MemoryLocation::CpuToGpu,
             ..Default::default()
         });

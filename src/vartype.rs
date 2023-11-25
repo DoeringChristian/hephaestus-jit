@@ -24,6 +24,15 @@ pub enum VarType {
         ty: Box<VarType>,
         num: usize,
     },
+    Array {
+        ty: Box<VarType>,
+        num: usize,
+    },
+    Mat {
+        ty: Box<VarType>,
+        rows: usize,
+        cols: usize,
+    },
     Struct {
         tys: Vec<VarType>,
     },
@@ -53,6 +62,8 @@ impl VarType {
                 }
                 return align_up(offset + tys.last().unwrap().size(), self.alignment());
             }
+            VarType::Mat { ty, cols, rows } => ty.size() * cols * rows,
+            VarType::Array { ty, num } => ty.size() * num,
         }
     }
     pub fn offset(&self, elem: usize) -> usize {
@@ -82,8 +93,10 @@ impl VarType {
             VarType::U64 => 8,
             VarType::F32 => 4,
             VarType::F64 => 8,
-            VarType::Vec { ty, num } => ty.size() * num,
+            VarType::Vec { ty, num } => ty.alignment(),
             VarType::Struct { tys } => tys.iter().map(|ty| ty.alignment()).max().unwrap(),
+            VarType::Mat { ty, cols, rows } => ty.size() * rows,
+            VarType::Array { ty, num } => ty.alignment(),
         }
     }
 }
@@ -115,6 +128,28 @@ as_var_type! {
     u64 => U64;
     f32 => F32;
     f64 => F64;
+}
+
+/// Instance Type used for Ray Tracing
+#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Instance {
+    pub transform: [f32; 12],
+    pub geometry: u32,
+}
+
+impl AsVarType for Instance {
+    fn var_ty() -> VarType {
+        VarType::Struct {
+            tys: vec![
+                VarType::Array {
+                    ty: Box::new(VarType::F32),
+                    num: 12,
+                },
+                VarType::U32,
+            ],
+        }
+    }
 }
 
 #[cfg(test)]
@@ -174,5 +209,13 @@ mod test {
         assert_eq!(ty.offset(2), bytemuck::offset_of!(Reference, c));
         assert_eq!(ty.offset(3), bytemuck::offset_of!(Reference, d));
         assert_eq!(ty.size(), std::mem::size_of::<Reference>());
+    }
+    #[test]
+    fn instance() {
+        let ty = Instance::var_ty();
+
+        assert_eq!(ty.offset(0), bytemuck::offset_of!(Instance, transform));
+        assert_eq!(ty.offset(1), bytemuck::offset_of!(Instance, geometry));
+        assert_eq!(ty.size(), std::mem::size_of::<Instance>());
     }
 }

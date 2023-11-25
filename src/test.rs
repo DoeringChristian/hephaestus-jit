@@ -1,3 +1,4 @@
+use crate::vartype::Instance;
 use crate::{backend, tr, vulkan};
 
 #[test]
@@ -268,6 +269,20 @@ fn accel() {
         &device,
     );
 
+    let instances = tr::array(
+        &[Instance {
+            transform: [
+                1f32, 0f32, 0f32, 0f32, //
+                0f32, 1f32, 0f32, 0f32, //
+                0f32, 0f32, 1f32, 0f32, //
+            ],
+            geometry: 0,
+        }; 2],
+        &device,
+    );
+
+    dbg!(instances.to_vec::<u32>());
+
     let desc = tr::AccelDesc {
         geometries: vec![tr::GeometryDesc::Triangles {
             triangles,
@@ -285,7 +300,11 @@ fn accel() {
     let z = tr::array(&[0.1f32, 0.1f32], &device);
 
     let o = tr::vec(&[&x, &y, &z]);
-    let d = tr::vec(&[&tr::literal(0f32), &tr::literal(0f32), &tr::literal(-1f32)]);
+    let d = tr::vec(&[
+        &tr::sized_literal(0f32, 2),
+        &tr::literal(0f32),
+        &tr::literal(-1f32),
+    ]);
     let tmin = tr::literal(0f32);
     let tmax = tr::literal(10_000f32);
 
@@ -294,6 +313,19 @@ fn accel() {
 
     let intersection_ty = accel.trace_ray(&o, &d, &tmin, &tmax);
     intersection_ty.schedule();
+
+    tr::with_trace(|trace| {
+        dbg!(&trace);
+    });
+    tr::SCHEDULE.with(|s| {
+        let s = s.borrow();
+        dbg!(&s);
+        for v in s.vars.iter() {
+            tr::with_trace(|trace| {
+                dbg!(trace.var(v.id()));
+            })
+        }
+    });
 
     let graph = tr::compile();
     graph.launch(&device);

@@ -335,7 +335,6 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
             }
         })
         .collect::<Vec<_>>();
-    // schedule_eval();
     let create_desc = backend::AccelDesc {
         geometries,
         instances: desc.instances.size(),
@@ -371,6 +370,9 @@ impl VarRef {
         self._thread_id == other._thread_id
     }
     pub fn schedule(&self) {
+        if self.evaluated() {
+            return;
+        }
         SCHEDULE.with(|s| {
             let mut s = s.borrow_mut();
             if !s.var_set.contains(&self.id()) {
@@ -378,6 +380,9 @@ impl VarRef {
                 s.var_set.insert(self.id());
             }
         })
+    }
+    pub fn evaluated(&self) -> bool {
+        with_trace(|trace| trace.var(self.id()).op.evaluated())
     }
     pub fn rc(&self) -> usize {
         with_trace(|trace| trace.entries[self.id().0].rc)

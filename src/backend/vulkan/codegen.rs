@@ -289,7 +289,7 @@ impl SpirvBuilder {
             VarType::F32 => self.type_float(32),
             VarType::F64 => self.type_float(64),
             VarType::Vec { ty, num } => {
-                let ty = self.spirv_ty(&ty);
+                let ty = self.spirv_ty(ty);
                 self.type_vector(ty, *num as _)
             }
             VarType::Struct { tys } => {
@@ -303,8 +303,27 @@ impl SpirvBuilder {
                         spirv::Decoration::Offset,
                         [dr::Operand::LiteralInt32(offset as _)],
                     );
+                    match tys[i] {
+                        VarType::Mat { .. } => {
+                            self.member_decorate(struct_ty, i as _, spirv::Decoration::RowMajor, [])
+                        }
+                        _ => {}
+                    }
                 }
                 struct_ty
+            }
+            VarType::Mat { ty, cols, rows } => {
+                let vec_ty = self.spirv_ty(&VarType::Vec {
+                    ty: ty.clone(),
+                    num: *rows,
+                });
+                self.type_matrix(vec_ty, *cols as _)
+            }
+            VarType::Array { ty, num } => {
+                let ty = self.spirv_ty(ty);
+                let u32_ty = self.type_int(32, 0);
+                let num = self.constant_u32(u32_ty, *num as _);
+                self.type_array(ty, num)
             }
         }
     }
