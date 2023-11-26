@@ -1,14 +1,32 @@
 use crate::backend::{self, AccelDesc};
 use crate::graph::{Pass, PassOp};
 use crate::op::DeviceOp;
+use crate::vartype::VarType;
 
 use super::accel::Accel;
 use super::buffer::Buffer;
 use super::context::Context;
 use super::{accel, VulkanDevice};
 
+pub fn glsl_ty(ty: &VarType) -> &'static str {
+    match ty {
+        VarType::Bool => "bool",
+        VarType::I8 => todo!(),
+        VarType::U8 => todo!(),
+        VarType::I16 => todo!(),
+        VarType::U16 => todo!(),
+        VarType::I32 => todo!(),
+        VarType::U32 => todo!(),
+        VarType::I64 => todo!(),
+        VarType::U64 => todo!(),
+        VarType::F32 => todo!(),
+        VarType::F64 => todo!(),
+        _ => todo!(),
+    }
+}
+
 impl VulkanDevice {
-    pub fn reduce(&self) {
+    pub fn reduce(&self, op: DeviceOp, ty: &VarType) {
         todo!()
     }
     pub fn build_accel<'a>(

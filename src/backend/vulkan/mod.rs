@@ -177,10 +177,10 @@ impl backend::BackendDevice for VulkanDevice {
                     }
                     PassOp::DeviceOp(op) => match op {
                         DeviceOp::Max => todo!(),
-                        DeviceOp::Buffer2Texture { .. } => {
-                            let src = graph.buffer(trace, pass.buffers[0]).vulkan().unwrap();
-                            let dst = graph.texture(trace, pass.textures[0]).vulkan().unwrap();
-                            dst.copy_from_buffer(ctx, &src.buffer);
+                        DeviceOp::Buffer2Texture => {
+                            let src = buffers[0];
+                            let dst = images[0];
+                            dst.copy_from_buffer(ctx, &src);
                         }
                         DeviceOp::BuildAccel => {
                             let accel_desc = graph.accel_desc(pass.accels[0]);
