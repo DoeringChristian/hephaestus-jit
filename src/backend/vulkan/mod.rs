@@ -184,52 +184,12 @@ impl backend::BackendDevice for VulkanDevice {
                         }
                         DeviceOp::BuildAccel => {
                             let accel_desc = graph.accel_desc(pass.accels[0]);
-                            let accel = trace
-                                .var(accel_desc.var.id())
-                                .data
-                                .accel()
-                                .unwrap()
-                                .vulkan()
-                                .unwrap();
-
-                            // WARN: This is potentially very unsafe, since we are just randomly
-                            // accessing the buffers and hoping for them to be index/vertex
-                            // buffers
-                            let mut buffers =
-                                pass.buffers.iter().map(|id| graph.buffer(trace, *id));
-
-                            let instances = &buffers.next().unwrap().vulkan().unwrap().buffer;
-
-                            let geometries = accel_desc
-                                .desc
-                                .geometries
-                                .iter()
-                                .map(|g| match g {
-                                    backend::GeometryDesc::Triangles { .. } => {
-                                        accel::AccelGeometryBuildInfo::Triangles {
-                                            triangles: &buffers
-                                                .next()
-                                                .unwrap()
-                                                .vulkan()
-                                                .unwrap()
-                                                .buffer,
-                                            vertices: &buffers
-                                                .next()
-                                                .unwrap()
-                                                .vulkan()
-                                                .unwrap()
-                                                .buffer,
-                                        }
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-
-                            let desc = accel::AccelBuildInfo {
-                                geometries: &geometries,
-                                instances,
-                            };
-
-                            accel.accel.build(ctx, desc);
+                            self.build_accel(
+                                ctx,
+                                &accel_desc.desc,
+                                &accels[0],
+                                buffers.into_iter(),
+                            );
                         }
                     },
                     _ => todo!(),
