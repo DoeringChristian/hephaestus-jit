@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use ash::vk;
+use text_placeholder::Template;
 
 use super::shader_cache::ShaderKind;
 
@@ -48,8 +51,13 @@ impl VulkanDevice {
             DeviceOp::Max => "max(a, b)",
             _ => todo!(),
         };
+        let ty = glsl_ty(ty);
 
-        let shader = self.get_shader_glsl(include_str!("kernels/reduce.glsl"), ShaderKind::Compute);
+        let template = Template::new(include_str!("kernels/reduce.glsl"));
+        let defines = HashMap::from([("REDUCE", reduction), ("TYPE", ty)]);
+
+        let shader =
+            self.get_shader_glsl(&template.fill_with_hashmap(&defines), ShaderKind::Compute);
         let pipeline = self.get_pipeline(&PipelineDesc {
             code: &shader,
             desc_set_layouts: &[DescSetLayout {
@@ -59,8 +67,6 @@ impl VulkanDevice {
                 }],
             }],
         });
-
-        // let n =
 
         for i in (1..((num - 1).ilog(32) + 1)).rev() {
             pipeline.submit(
