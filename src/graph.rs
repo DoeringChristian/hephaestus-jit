@@ -32,10 +32,7 @@ impl GraphBuilder {
         })
     }
     pub fn push_texture(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> TextureId {
-        let (shape, channels) = match trace.var(id).op.resulting_op() {
-            op::Op::Texture { shape, channels } => (shape, channels),
-            _ => todo!(),
-        };
+        let (shape, channels) = trace.var(id).extent.shape_and_channles();
         // TODO: use better method to get VarRef
         *self.id2texture.entry(id).or_insert_with(|| {
             let texture_id = TextureId(self.textures.len());
@@ -141,10 +138,7 @@ impl Graph {
             for desc in self.textures.iter() {
                 let var = trace.var_mut(desc.var.id());
 
-                let (shape, channels) = match var.op {
-                    op::Op::Texture { shape, channels } => (shape, channels),
-                    _ => todo!(),
-                };
+                let (shape, channels) = var.extent.shape_and_channles();
 
                 if !var.data.is_storage() {
                     var.data = Data::Texture(device.create_texture(shape, channels).unwrap());

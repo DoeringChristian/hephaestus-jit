@@ -556,7 +556,7 @@ impl VarRef {
 
         let extent = pos.extent();
 
-        let (shape, channels) = self.shape_channels();
+        let (shape, channels) = self.extent().shape_and_channles();
         assert!(channels <= 4);
         let ty = self.ty();
         let ty = VarType::Vec {
@@ -575,12 +575,6 @@ impl VarRef {
             [&src_ref, &pos],
         );
         composite
-    }
-    pub fn shape_channels(&self) -> ([usize; 3], usize) {
-        with_trace(|trace| match trace.var(self.id()).op.resulting_op() {
-            Op::Texture { shape, channels } => (shape, channels),
-            _ => todo!(),
-        })
     }
 }
 
@@ -602,7 +596,7 @@ impl VarRef {
 
         push_var(
             Var {
-                op: Op::DeviceOp(DeviceOp::Buffer2Texture { shape, channels }),
+                op: Op::DeviceOp(DeviceOp::Buffer2Texture),
                 ty: VarType::F32,
                 extent: Extent::Texture { shape, channels },
                 ..Default::default()

@@ -57,4 +57,10 @@ impl Extent {
             _ => todo!(),
         }
     }
+    pub fn shape_and_channles(&self) -> ([usize; 3], usize) {
+        match self {
+            Extent::Texture { shape, channels } => (*shape, *channels),
+            _ => todo!(),
+        }
+    }
 }

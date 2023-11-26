@@ -6,14 +6,14 @@ use crate::ir;
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
     Max,
-    Buffer2Texture { shape: [usize; 3], channels: usize },
+    Buffer2Texture,
     BuildAccel,
 }
 impl DeviceOp {
     pub fn resulting_op(self) -> Op {
         match self {
             DeviceOp::Max => Op::Buffer,
-            DeviceOp::Buffer2Texture { shape, channels } => Op::Texture { shape, channels },
+            DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
         }
     }
@@ -30,10 +30,7 @@ pub enum Op {
     },
     // TODO: Split into Evaluated, DeviceOp, KernelOp?
     Buffer,
-    Texture {
-        shape: [usize; 3],
-        channels: usize,
-    },
+    Texture,
     Accel,
     DeviceOp(DeviceOp),
     KernelOp(ir::Op),
