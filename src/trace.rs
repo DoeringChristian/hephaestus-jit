@@ -7,7 +7,7 @@ use std::thread::ThreadId;
 use crate::data::Data;
 use crate::extent::Extent;
 use crate::op::{DeviceOp, Op};
-use crate::vartype::{AsVarType, VarType};
+use crate::vartype::{AsVarType, Instance, VarType};
 use crate::{backend, ir};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
@@ -311,6 +311,7 @@ pub struct AccelDesc {
 }
 
 pub fn accel(desc: &AccelDesc) -> VarRef {
+    assert_eq!(desc.instances.ty(), Instance::var_ty());
     let mut deps = vec![];
     deps.push(&desc.instances);
     let geometries = desc

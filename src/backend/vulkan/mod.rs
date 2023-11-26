@@ -8,11 +8,14 @@ mod glslext;
 mod image;
 mod physical_device;
 mod pipeline;
+mod shader_cache;
 #[cfg(test)]
 mod test;
+mod vkdevice;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
 use crate::backend;
@@ -26,12 +29,14 @@ use image::{Image, ImageInfo};
 
 use self::context::Context;
 use self::pipeline::PipelineDesc;
+use self::shader_cache::{ShaderCache, ShaderKind};
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
 pub struct InternalVkDevice {
     device: Device,
     pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
+    shader_cache: Mutex<ShaderCache>,
 }
 impl InternalVkDevice {
     fn compile_ir(&self, ir: &IR) -> Arc<pipeline::Pipeline> {
@@ -50,6 +55,9 @@ impl InternalVkDevice {
             .or_insert_with(|| Arc::new(pipeline::Pipeline::create(&self.device, desc)))
             .clone()
     }
+    fn get_shader_glsl(&self, src: &str, kind: ShaderKind) -> Arc<Vec<u32>> {
+        self.shader_cache.lock().unwrap().lease_glsl(src, kind)
+    }
 }
 impl std::ops::Deref for InternalVkDevice {
     type Target = Device;
@@ -66,6 +74,7 @@ impl VulkanDevice {
         Ok(Self(Arc::new(InternalVkDevice {
             device: Device::create(id),
             pipeline_cache: Default::default(),
+            shader_cache: Default::default(),
         })))
     }
 }
