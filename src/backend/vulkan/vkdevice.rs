@@ -35,16 +35,37 @@ pub fn glsl_ty(ty: &VarType) -> &'static str {
         _ => todo!(),
     }
 }
+pub fn round_pow2(x: u32) -> u32 {
+    let mut x = x;
+    x -= 1;
+    x |= x.overflowing_shr(1).0;
+    x |= x.overflowing_shr(2).0;
+    x |= x.overflowing_shr(4).0;
+    x |= x.overflowing_shr(8).0;
+    x |= x.overflowing_shr(16).0;
+    x |= x.overflowing_shr(32).0;
+    return x + 1;
+}
 
 impl VulkanDevice {
-    pub fn reduce(&self, ctx: &mut Context, op: DeviceOp, ty: &VarType) {
+    pub fn reduce(
+        &self,
+        ctx: &mut Context,
+        op: DeviceOp,
+        ty: &VarType,
+        src: &Buffer,
+        dst: &Buffer,
+    ) {
         let num: usize = 1024;
+        let ty_size = ty.size();
 
         let scratch_buffer = ctx.buffer(BufferInfo {
-            size: todo!(),
-            alignment: todo!(),
-            usage: todo!(),
+            size: round_pow2((num * ty.size()) as u32) as usize,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
             memory_location: todo!(),
+            ..Default::default()
         });
 
         let reduction = match op {
@@ -67,6 +88,35 @@ impl VulkanDevice {
                 }],
             }],
         });
+
+        unsafe {
+            ctx.cmd_copy_buffer(
+                ctx.cb,
+                src.buffer(),
+                scratch_buffer.buffer(),
+                &[vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: vk::WHOLE_SIZE,
+                }],
+            )
+        };
+
+        let memory_barriers = [vk::MemoryBarrier::builder()
+            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .build()];
+        unsafe {
+            ctx.cmd_pipeline_barrier(
+                ctx.cb,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &memory_barriers,
+                &[],
+                &[],
+            );
+        }
 
         for i in (1..((num - 1).ilog(32) + 1)).rev() {
             pipeline.submit(
@@ -97,8 +147,20 @@ impl VulkanDevice {
                     &[],
                 );
             }
-            todo!();
         }
+
+        unsafe {
+            ctx.cmd_copy_buffer(
+                ctx.cb,
+                scratch_buffer.buffer(),
+                dst.buffer(),
+                &[vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: ty_size as _,
+                }],
+            )
+        };
 
         todo!()
     }
