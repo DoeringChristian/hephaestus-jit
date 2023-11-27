@@ -14,9 +14,6 @@ pub use ash::{extensions::khr, vk};
 
 use crate::backend::vulkan::physical_device::{self, PhysicalDevice};
 
-use super::buffer;
-use super::context::Context;
-
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("{0}")]
@@ -59,7 +56,7 @@ impl Device {
     pub fn create(index: usize) -> Self {
         Self(Arc::new(InternalDevice::create(index).unwrap()))
     }
-    pub fn submit_global<'a, F: FnOnce(&mut Context)>(&'a self, f: F) {
+    pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(&'a self, f: F) {
         unsafe {
             self.reset_fences(&[self.fence]).unwrap();
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
@@ -67,9 +64,7 @@ impl Device {
             self.begin_command_buffer(self.command_buffer, &command_buffer_begin_info)
                 .unwrap();
 
-            let mut ctx = Context::new(self, self.command_buffer);
-
-            f(&mut ctx);
+            f(&self, self.command_buffer);
 
             self.end_command_buffer(self.command_buffer).unwrap();
 
@@ -81,7 +76,6 @@ impl Device {
                 .unwrap();
 
             self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
-            drop(ctx);
         }
     }
 }

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
-use super::{acceleration_structure::*, VulkanDevice};
+use super::{acceleration_structure::*, rgraph, VulkanDevice};
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -96,7 +96,7 @@ impl Accel {
             info: info.clone(),
         }
     }
-    pub fn build(&self, ctx: &mut Context, desc: AccelBuildInfo) {
+    pub fn build(&self, rgraph: &mut rgraph::RGraph, desc: AccelBuildInfo) {
         for (i, blas) in self.blases.iter().enumerate() {
             let mut info = blas.info.clone();
             assert_eq!(info.geometries.len(), 1);
@@ -120,22 +120,7 @@ impl Accel {
                 _ => todo!(),
             }
 
-            blas.build(ctx, &info);
-        }
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
-            .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR)
-            .build()];
-        unsafe {
-            ctx.cmd_pipeline_barrier(
-                ctx.cb,
-                vk::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
+            blas.build(rgraph, &info);
         }
 
         // Create references buffer
@@ -154,9 +139,7 @@ impl Accel {
             })
             .collect::<Vec<_>>();
 
-        let cb = ctx.cb;
-
-        let references_buffer = ctx.buffer_mut(BufferInfo {
+        let references_buffer = rgraph.resource(BufferInfo {
             size: std::mem::size_of::<u64>() * references.len(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -166,10 +149,6 @@ impl Accel {
             memory_location: MemoryLocation::CpuToGpu,
             ..Default::default()
         });
-
-        references_buffer
-            .mapped_slice_mut()
-            .copy_from_slice(bytemuck::cast_slice(&references));
 
         let copy2instances = self.device.get_pipeline(&PipelineDesc {
             code: inline_spirv::include_spirv!(
@@ -196,43 +175,69 @@ impl Accel {
 
         let instance_buffer = self.instance_buffer.lock().unwrap();
 
-        copy2instances.submit(
-            cb,
-            &self.device,
-            &[WriteSet {
-                set: 0,
-                binding: 0,
-                buffers: &[
-                    BufferWriteInfo {
-                        buffer: &desc.instances,
-                    },
-                    BufferWriteInfo {
-                        buffer: &references_buffer,
-                    },
-                    BufferWriteInfo {
-                        buffer: &instance_buffer,
-                    },
-                ],
-            }],
-            (self.info.instances as _, 1, 1),
-        );
+        rgraph.pass().exec(|rgraph, cb| {
+            let references_buffer = rgraph.buffer(references_buffer);
 
-        // Memory Barrierr
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            ctx.cmd_pipeline_barrier(
-                ctx.cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
+            references_buffer
+                .mapped_slice_mut()
+                .copy_from_slice(bytemuck::cast_slice(&references));
+
+            let memory_barriers = [vk::MemoryBarrier::builder()
+                .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
+                .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR)
+                .build()];
+            unsafe {
+                self.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::DependencyFlags::empty(),
+                    &memory_barriers,
+                    &[],
+                    &[],
+                );
+            }
+
+            copy2instances.submit(
+                cb,
+                &self.device,
+                &[WriteSet {
+                    set: 0,
+                    binding: 0,
+                    buffers: &[
+                        BufferWriteInfo {
+                            buffer: &desc.instances,
+                        },
+                        BufferWriteInfo {
+                            buffer: &references_buffer,
+                        },
+                        BufferWriteInfo {
+                            buffer: &instance_buffer,
+                        },
+                    ],
+                }],
+                (self.info.instances as _, 1, 1),
             );
-        }
+        });
+
+        rgraph.pass().exec(|rgraph, cb| {
+            // Memory Barrierr
+            let memory_barriers = [vk::MemoryBarrier::builder()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .build()];
+            unsafe {
+                rgraph.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::DependencyFlags::empty(),
+                    &memory_barriers,
+                    &[],
+                    &[],
+                );
+            }
+        });
 
         let mut info = self.tlas.info.clone();
         assert_eq!(info.geometries.len(), 1);
@@ -247,7 +252,7 @@ impl Accel {
             _ => todo!(),
         }
 
-        self.tlas.build(ctx, &info);
+        self.tlas.build(rgraph, &info);
     }
     pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
         unsafe {

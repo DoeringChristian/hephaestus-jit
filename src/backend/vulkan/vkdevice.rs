@@ -17,7 +17,7 @@ use crate::vartype::VarType;
 use super::accel::Accel;
 use super::buffer::Buffer;
 use super::context::Context;
-use super::{accel, VulkanDevice};
+use super::{accel, rgraph, VulkanDevice};
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {
     match ty {
@@ -50,7 +50,7 @@ pub fn round_pow2(x: u32) -> u32 {
 impl VulkanDevice {
     pub fn reduce(
         &self,
-        ctx: &mut Context,
+        rgraph: &mut rgraph::RGraph,
         op: DeviceOp,
         ty: &VarType,
         num: usize,
@@ -59,7 +59,7 @@ impl VulkanDevice {
     ) {
         let ty_size = ty.size();
 
-        let scratch_buffer = ctx.buffer(BufferInfo {
+        let scratch_buffer = rgraph.resource(BufferInfo {
             size: round_pow2((num * ty.size()) as u32) as usize,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -89,82 +89,88 @@ impl VulkanDevice {
             }],
         });
 
-        unsafe {
-            ctx.cmd_copy_buffer(
-                ctx.cb,
-                src.buffer(),
-                scratch_buffer.buffer(),
-                &[vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: vk::WHOLE_SIZE,
-                }],
-            )
-        };
+        rgraph.pass().exec(|rgraph, cb| {
+            unsafe {
+                rgraph.cmd_copy_buffer(
+                    cb,
+                    src.buffer(),
+                    rgraph.buffer(scratch_buffer).buffer(),
+                    &[vk::BufferCopy {
+                        src_offset: 0,
+                        dst_offset: 0,
+                        size: vk::WHOLE_SIZE,
+                    }],
+                )
+            };
+        });
 
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            ctx.cmd_pipeline_barrier(
-                ctx.cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
-        }
+        // let memory_barriers = [vk::MemoryBarrier::builder()
+        //     .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+        //     .dst_access_mask(vk::AccessFlags::SHADER_READ)
+        //     .build()];
+        // unsafe {
+        //     ctx.cmd_pipeline_barrier(
+        //         ctx.cb,
+        //         vk::PipelineStageFlags::ALL_COMMANDS,
+        //         vk::PipelineStageFlags::ALL_COMMANDS,
+        //         vk::DependencyFlags::empty(),
+        //         &memory_barriers,
+        //         &[],
+        //         &[],
+        //     );
+        // }
 
         for i in (1..((num - 1).ilog(32) + 1)).rev() {
-            pipeline.submit(
-                ctx.cb,
-                &ctx,
-                &[WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
+            rgraph.pass().exec(|rgraph, cb| {
+                pipeline.submit(
+                    cb,
+                    rgraph,
+                    &[WriteSet {
+                        set: 0,
+                        binding: 0,
+                        buffers: &[BufferWriteInfo {
+                            buffer: &rgraph.buffer(scratch_buffer),
+                        }],
                     }],
-                }],
-                (i, 1, 1),
-            );
-
-            let memory_barriers = [vk::MemoryBarrier::builder()
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                .build()];
-            unsafe {
-                ctx.cmd_pipeline_barrier(
-                    ctx.cb,
-                    vk::PipelineStageFlags::ALL_COMMANDS,
-                    vk::PipelineStageFlags::ALL_COMMANDS,
-                    vk::DependencyFlags::empty(),
-                    &memory_barriers,
-                    &[],
-                    &[],
+                    (i, 1, 1),
                 );
-            }
+            });
+
+            // let memory_barriers = [vk::MemoryBarrier::builder()
+            //     .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            //     .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            //     .build()];
+            // unsafe {
+            //     ctx.cmd_pipeline_barrier(
+            //         ctx.cb,
+            //         vk::PipelineStageFlags::ALL_COMMANDS,
+            //         vk::PipelineStageFlags::ALL_COMMANDS,
+            //         vk::DependencyFlags::empty(),
+            //         &memory_barriers,
+            //         &[],
+            //         &[],
+            //     );
+            // }
         }
 
-        unsafe {
-            ctx.cmd_copy_buffer(
-                ctx.cb,
-                scratch_buffer.buffer(),
-                dst.buffer(),
-                &[vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: ty_size as _,
-                }],
-            )
-        };
+        rgraph.pass().exec(|rgraph, cb| {
+            unsafe {
+                rgraph.cmd_copy_buffer(
+                    cb,
+                    rgraph.buffer(scratch_buffer).buffer(),
+                    dst.buffer(),
+                    &[vk::BufferCopy {
+                        src_offset: 0,
+                        dst_offset: 0,
+                        size: ty_size as _,
+                    }],
+                )
+            };
+        });
     }
     pub fn build_accel<'a>(
         &'a self,
-        ctx: &mut Context,
+        rgraph: &mut rgraph::RGraph,
         accel_desc: &AccelDesc,
         accel: &Accel,
         buffers: impl IntoIterator<Item = &'a Buffer>,
@@ -195,6 +201,6 @@ impl VulkanDevice {
             instances,
         };
 
-        accel.build(ctx, desc);
+        accel.build(rgraph, desc);
     }
 }

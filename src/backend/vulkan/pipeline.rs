@@ -11,6 +11,7 @@ use super::buffer::Buffer;
 use super::context::Context;
 use super::device::Device;
 use super::image::Image;
+use super::rgraph::{self, Pass};
 use ash::vk;
 
 #[derive(Debug)]
@@ -289,9 +290,9 @@ impl Pipeline {
             device.cmd_dispatch(cb, extent.0, extent.1, extent.2);
         }
     }
-    pub fn submit_to_cbuffer(
+    pub fn submit_to_rgraph(
         &self,
-        ctx: &mut Context,
+        rgraph: &mut rgraph::RGraph,
         num: usize,
         buffers: &[&Buffer],
         images: &[&Image],
@@ -316,7 +317,8 @@ impl Pipeline {
                         base_array_layer: 0,
                         layer_count: 1,
                     });
-                ctx.create_image_view(&info)
+                rgraph.resource(info.build())
+                // ctx.create_image_view(&info)
             })
             .collect::<Vec<_>>();
 
@@ -325,7 +327,7 @@ impl Pipeline {
             .enumerate()
             .map(|(i, image)| vk::DescriptorImageInfo {
                 sampler: image.default_sampler(),
-                image_view: image_views[i],
+                image_view: *rgraph.image_view(image_views[i]),
                 image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             })
             .collect::<Vec<_>>();
@@ -390,20 +392,20 @@ impl Pipeline {
         .flat_map(|s| s)
         .collect::<Vec<_>>();
 
-        unsafe {
-            self.device.update_descriptor_sets(&write_desc_sets, &[]);
+        rgraph.pass().exec(|graph, cb| unsafe {
+            graph.update_descriptor_sets(&write_desc_sets, &[]);
 
-            ctx.cmd_bind_pipeline(ctx.cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
-            ctx.cmd_bind_descriptor_sets(
-                ctx.cb,
+            graph.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            graph.cmd_bind_descriptor_sets(
+                cb,
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
                 0,
                 &self.desc_sets,
                 &[],
             );
-            ctx.cmd_dispatch(ctx.cb, num as _, 1, 1);
-        }
+            graph.cmd_dispatch(cb, num as _, 1, 1);
+        });
     }
     // pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
     //     self.device.submit_global(|device, cb| {

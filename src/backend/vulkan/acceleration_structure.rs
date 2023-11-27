@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::context::Context;
 use super::device::Device;
+use super::rgraph;
 use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
 
@@ -211,62 +212,65 @@ impl AccelerationStructure {
             info,
         }
     }
-    pub fn build(&self, ctx: &mut Context, info: &AccelerationStructureInfo) {
+    pub fn build(&self, rgraph: &mut rgraph::RGraph, info: &AccelerationStructureInfo) {
         log::trace!("Building AccelerationStructure with {info:#?}");
-        let scratch_buffer = ctx.buffer(BufferInfo {
+        let scratch_buffer = rgraph.resource(BufferInfo {
             size: self.sizes.build_scratch_size as _,
             usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
             memory_location: MemoryLocation::GpuOnly,
             ..Default::default()
         });
-        let scratch_buffer = scratch_buffer.device_address();
+        rgraph.pass().exec(|rgraph, cb| {
+            let scratch_buffer = rgraph.buffer(scratch_buffer).device_address();
 
-        let (geometries, build_ranges): (Vec<_>, Vec<_>) = info
-            .geometries
-            .iter()
-            .map(|info| {
-                let (geometry_type, geometry) = info.data.to_vulkan();
-                (
-                    vk::AccelerationStructureGeometryKHR {
-                        geometry_type,
-                        geometry,
-                        flags: info.flags,
-                        ..Default::default()
-                    },
-                    vk::AccelerationStructureBuildRangeInfoKHR {
-                        primitive_count: info.max_primitive_count,
-                        primitive_offset: 0,
-                        first_vertex: 0,
-                        transform_offset: 0,
-                    },
-                )
-            })
-            .unzip();
+            let (geometries, build_ranges): (Vec<_>, Vec<_>) = info
+                .geometries
+                .iter()
+                .map(|info| {
+                    let (geometry_type, geometry) = info.data.to_vulkan();
+                    (
+                        vk::AccelerationStructureGeometryKHR {
+                            geometry_type,
+                            geometry,
+                            flags: info.flags,
+                            ..Default::default()
+                        },
+                        vk::AccelerationStructureBuildRangeInfoKHR {
+                            primitive_count: info.max_primitive_count,
+                            primitive_offset: 0,
+                            first_vertex: 0,
+                            transform_offset: 0,
+                        },
+                    )
+                })
+                .unzip();
 
-        let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-            .ty(self.info.ty)
-            .flags(self.info.flags)
-            .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
-            .dst_acceleration_structure(self.accel)
-            .geometries(&geometries)
-            .scratch_data(vk::DeviceOrHostAddressKHR {
-                device_address: scratch_buffer,
-            })
-            .build();
+            let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
+                .ty(self.info.ty)
+                .flags(self.info.flags)
+                .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
+                .dst_acceleration_structure(self.accel)
+                .geometries(&geometries)
+                .scratch_data(vk::DeviceOrHostAddressKHR {
+                    device_address: scratch_buffer,
+                })
+                .build();
 
-        log::trace!("Using geometry info {geometry_info:#?}");
+            log::trace!("Using geometry info {geometry_info:#?}");
 
-        unsafe {
-            ctx.acceleration_structure_ext
-                .as_ref()
-                .unwrap()
-                .cmd_build_acceleration_structures(ctx.cb, &[geometry_info], &[&build_ranges]);
-        }
-        log::trace!(
-            "Built AccelerationStructure with handle {handle:?}",
-            handle = self.accel
-        );
+            unsafe {
+                rgraph
+                    .acceleration_structure_ext
+                    .as_ref()
+                    .unwrap()
+                    .cmd_build_acceleration_structures(cb, &[geometry_info], &[&build_ranges]);
+            }
+            log::trace!(
+                "Built AccelerationStructure with handle {handle:?}",
+                handle = self.accel
+            );
+        })
     }
 }
 
