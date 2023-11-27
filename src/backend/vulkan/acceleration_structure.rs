@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
-use super::context::Context;
+use super::pool::Pool;
 use super::device::Device;
 use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
@@ -211,9 +211,9 @@ impl AccelerationStructure {
             info,
         }
     }
-    pub fn build(&self, ctx: &mut Context, info: &AccelerationStructureInfo) {
+    pub fn build(&self, cb: vk::CommandBuffer, pool: &mut Pool, info: &AccelerationStructureInfo) {
         log::trace!("Building AccelerationStructure with {info:#?}");
-        let scratch_buffer = ctx.buffer(BufferInfo {
+        let scratch_buffer = pool.buffer(BufferInfo {
             size: self.sizes.build_scratch_size as _,
             usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
@@ -258,10 +258,11 @@ impl AccelerationStructure {
         log::trace!("Using geometry info {geometry_info:#?}");
 
         unsafe {
-            ctx.acceleration_structure_ext
+            self.device
+                .acceleration_structure_ext
                 .as_ref()
                 .unwrap()
-                .cmd_build_acceleration_structures(ctx.cb, &[geometry_info], &[&build_ranges]);
+                .cmd_build_acceleration_structures(cb, &[geometry_info], &[&build_ranges]);
         }
         log::trace!(
             "Built AccelerationStructure with handle {handle:?}",

@@ -8,7 +8,7 @@ use crate::ir::IR;
 
 use super::accel::Accel;
 use super::buffer::Buffer;
-use super::context::Context;
+use super::pool::Pool;
 use super::device::Device;
 use super::image::Image;
 use ash::vk;
@@ -291,7 +291,8 @@ impl Pipeline {
     }
     pub fn submit_to_cbuffer(
         &self,
-        ctx: &mut Context,
+        cb: vk::CommandBuffer,
+        pool: &mut Pool,
         num: usize,
         buffers: &[&Buffer],
         images: &[&Image],
@@ -316,7 +317,7 @@ impl Pipeline {
                         base_array_layer: 0,
                         layer_count: 1,
                     });
-                ctx.create_image_view(&info)
+                pool.image_view(&info)
             })
             .collect::<Vec<_>>();
 
@@ -393,16 +394,17 @@ impl Pipeline {
         unsafe {
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
 
-            ctx.cmd_bind_pipeline(ctx.cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
-            ctx.cmd_bind_descriptor_sets(
-                ctx.cb,
+            self.device
+                .cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            self.device.cmd_bind_descriptor_sets(
+                cb,
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
                 0,
                 &self.desc_sets,
                 &[],
             );
-            ctx.cmd_dispatch(ctx.cb, num as _, 1, 1);
+            self.device.cmd_dispatch(cb, num as _, 1, 1);
         }
     }
     // pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {

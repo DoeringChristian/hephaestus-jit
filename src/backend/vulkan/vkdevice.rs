@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use ash::vk;
 use text_placeholder::Template;
 
+use super::pool::Pool;
 use super::shader_cache::ShaderKind;
 
 use crate::backend::vulkan::buffer::{BufferInfo, MemoryLocation};
@@ -16,7 +17,6 @@ use crate::vartype::VarType;
 
 use super::accel::Accel;
 use super::buffer::Buffer;
-use super::context::Context;
 use super::{accel, VulkanDevice};
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {
@@ -50,7 +50,9 @@ pub fn round_pow2(x: u32) -> u32 {
 impl VulkanDevice {
     pub fn reduce(
         &self,
-        ctx: &mut Context,
+        device: &VulkanDevice,
+        cb: vk::CommandBuffer,
+        pool: &mut Pool,
         op: DeviceOp,
         ty: &VarType,
         num: usize,
@@ -59,7 +61,7 @@ impl VulkanDevice {
     ) {
         let ty_size = ty.size();
 
-        let scratch_buffer = ctx.buffer(BufferInfo {
+        let scratch_buffer = pool.buffer(BufferInfo {
             size: round_pow2((num * ty.size()) as u32) as usize,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -90,8 +92,8 @@ impl VulkanDevice {
         });
 
         unsafe {
-            ctx.cmd_copy_buffer(
-                ctx.cb,
+            device.cmd_copy_buffer(
+                cb,
                 src.buffer(),
                 scratch_buffer.buffer(),
                 &[vk::BufferCopy {
@@ -107,8 +109,8 @@ impl VulkanDevice {
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
             .build()];
         unsafe {
-            ctx.cmd_pipeline_barrier(
-                ctx.cb,
+            device.cmd_pipeline_barrier(
+                cb,
                 vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::DependencyFlags::empty(),
@@ -120,8 +122,8 @@ impl VulkanDevice {
 
         for i in (1..((num - 1).ilog(32) + 1)).rev() {
             pipeline.submit(
-                ctx.cb,
-                &ctx,
+                cb,
+                &device,
                 &[WriteSet {
                     set: 0,
                     binding: 0,
@@ -137,8 +139,8 @@ impl VulkanDevice {
                 .dst_access_mask(vk::AccessFlags::SHADER_READ)
                 .build()];
             unsafe {
-                ctx.cmd_pipeline_barrier(
-                    ctx.cb,
+                device.cmd_pipeline_barrier(
+                    cb,
                     vk::PipelineStageFlags::ALL_COMMANDS,
                     vk::PipelineStageFlags::ALL_COMMANDS,
                     vk::DependencyFlags::empty(),
@@ -150,8 +152,8 @@ impl VulkanDevice {
         }
 
         unsafe {
-            ctx.cmd_copy_buffer(
-                ctx.cb,
+            device.cmd_copy_buffer(
+                cb,
                 scratch_buffer.buffer(),
                 dst.buffer(),
                 &[vk::BufferCopy {
@@ -164,7 +166,8 @@ impl VulkanDevice {
     }
     pub fn build_accel<'a>(
         &'a self,
-        ctx: &mut Context,
+        cb: vk::CommandBuffer,
+        pool: &mut Pool,
         accel_desc: &AccelDesc,
         accel: &Accel,
         buffers: impl IntoIterator<Item = &'a Buffer>,
@@ -195,6 +198,6 @@ impl VulkanDevice {
             instances,
         };
 
-        accel.build(ctx, desc);
+        accel.build(cb, pool, desc);
     }
 }

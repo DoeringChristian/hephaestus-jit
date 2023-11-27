@@ -2,7 +2,7 @@ use ash::vk;
 use std::sync::Mutex;
 
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
-use super::context::Context;
+use super::pool::Pool;
 use super::device::Device;
 use super::{acceleration_structure::*, VulkanDevice};
 
@@ -96,7 +96,7 @@ impl Accel {
             info: info.clone(),
         }
     }
-    pub fn build(&self, ctx: &mut Context, desc: AccelBuildInfo) {
+    pub fn build(&self, cb: vk::CommandBuffer, pool: &mut Pool, desc: AccelBuildInfo) {
         for (i, blas) in self.blases.iter().enumerate() {
             let mut info = blas.info.clone();
             assert_eq!(info.geometries.len(), 1);
@@ -120,15 +120,15 @@ impl Accel {
                 _ => todo!(),
             }
 
-            blas.build(ctx, &info);
+            blas.build(cb, pool, &info);
         }
         let memory_barriers = [vk::MemoryBarrier::builder()
             .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
             .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR)
             .build()];
         unsafe {
-            ctx.cmd_pipeline_barrier(
-                ctx.cb,
+            self.device.cmd_pipeline_barrier(
+                cb,
                 vk::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR,
                 vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::DependencyFlags::empty(),
@@ -154,9 +154,7 @@ impl Accel {
             })
             .collect::<Vec<_>>();
 
-        let cb = ctx.cb;
-
-        let references_buffer = ctx.buffer_mut(BufferInfo {
+        let references_buffer = pool.buffer_mut(BufferInfo {
             size: std::mem::size_of::<u64>() * references.len(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -223,8 +221,8 @@ impl Accel {
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
             .build()];
         unsafe {
-            ctx.cmd_pipeline_barrier(
-                ctx.cb,
+            self.device.cmd_pipeline_barrier(
+                cb,
                 vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::DependencyFlags::empty(),
@@ -247,7 +245,7 @@ impl Accel {
             _ => todo!(),
         }
 
-        self.tlas.build(ctx, &info);
+        self.tlas.build(cb, pool, &info);
     }
     pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
         unsafe {

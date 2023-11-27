@@ -2,12 +2,12 @@ mod accel;
 mod acceleration_structure;
 mod buffer;
 mod codegen;
-mod context;
 mod device;
 mod glslext;
 mod image;
 mod physical_device;
 mod pipeline;
+mod pool;
 mod shader_cache;
 #[cfg(test)]
 mod test;
@@ -19,6 +19,7 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
 use crate::backend;
+use crate::backend::vulkan::pool::Pool;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use ash::vk;
@@ -27,7 +28,6 @@ use device::Device;
 use gpu_allocator::MemoryLocation;
 use image::{Image, ImageInfo};
 
-use self::context::Context;
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
 
@@ -128,7 +128,8 @@ impl backend::BackendDevice for VulkanDevice {
         // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
         // submitted
         // FIX: Add a struct that can collect Arcs to those resources
-        self.submit_global(|ctx| {
+        self.submit_global(|device, cb| {
+            let mut pool = Pool::new(device);
             for pass in graph.passes.iter() {
                 let buffers = pass
                     .buffers
@@ -163,8 +164,8 @@ impl backend::BackendDevice for VulkanDevice {
                             .dst_access_mask(vk::AccessFlags::SHADER_READ)
                             .build()];
                         unsafe {
-                            ctx.cmd_pipeline_barrier(
-                                ctx.cb,
+                            device.cmd_pipeline_barrier(
+                                cb,
                                 vk::PipelineStageFlags::ALL_COMMANDS,
                                 vk::PipelineStageFlags::ALL_COMMANDS,
                                 vk::DependencyFlags::empty(),
@@ -173,7 +174,8 @@ impl backend::BackendDevice for VulkanDevice {
                                 &[],
                             );
                         }
-                        pipeline.submit_to_cbuffer(ctx, *size, &buffers, &images, &accels);
+                        pipeline
+                            .submit_to_cbuffer(cb, &mut pool, *size, &buffers, &images, &accels);
                     }
                     PassOp::DeviceOp(op) => match op {
                         DeviceOp::Max => {
@@ -187,17 +189,18 @@ impl backend::BackendDevice for VulkanDevice {
                                 .var(graph.buffer_desc(pass.buffers[0]).var.id())
                                 .extent
                                 .size();
-                            self.reduce(ctx, *op, &ty, size, src, dst);
+                            self.reduce(&self, cb, &mut pool, *op, &ty, size, src, dst);
                         }
                         DeviceOp::Buffer2Texture => {
                             let src = buffers[0];
                             let dst = images[0];
-                            dst.copy_from_buffer(ctx, &src);
+                            dst.copy_from_buffer(cb, &src);
                         }
                         DeviceOp::BuildAccel => {
                             let accel_desc = graph.accel_desc(pass.accels[0]);
                             self.build_accel(
-                                ctx,
+                                cb,
+                                &mut pool,
                                 &accel_desc.desc,
                                 &accels[0],
                                 buffers.into_iter(),
@@ -275,13 +278,13 @@ impl backend::BackendDevice for VulkanDevice {
         };
         let mut staging = Buffer::create(&self.device, info);
         staging.mapped_slice_mut().copy_from_slice(slice);
-        self.device.submit_global(|ctx| unsafe {
+        self.device.submit_global(|device, cb| unsafe {
             let region = vk::BufferCopy {
                 src_offset: 0,
                 dst_offset: 0,
                 size: size as _,
             };
-            ctx.cmd_copy_buffer(ctx.cb, staging.buffer(), buffer.buffer.buffer(), &[region]);
+            device.cmd_copy_buffer(cb, staging.buffer(), buffer.buffer.buffer(), &[region]);
         });
         Ok(buffer)
     }
@@ -318,13 +321,13 @@ impl backend::BackendBuffer for VulkanBuffer {
             memory_location: MemoryLocation::GpuToCpu,
         };
         let staging = Buffer::create(&self.device, info);
-        self.device.submit_global(|ctx| unsafe {
+        self.device.submit_global(|device, cb| unsafe {
             let region = vk::BufferCopy {
                 src_offset: 0,
                 dst_offset: 0,
                 size: self.size() as _,
             };
-            ctx.cmd_copy_buffer(ctx.cb, self.buffer.buffer(), staging.buffer(), &[region]);
+            device.cmd_copy_buffer(cb, self.buffer.buffer(), staging.buffer(), &[region]);
         });
         Ok(bytemuck::cast_slice(staging.mapped_slice()).to_vec())
     }
@@ -350,9 +353,9 @@ impl backend::BackendTexture for VulkanTexture {
 }
 
 impl VulkanTexture {
-    fn copy_from_buffer(&self, ctx: &Context, src: &Buffer) {
+    fn copy_from_buffer(&self, cb: vk::CommandBuffer, src: &Buffer) {
         assert!(self.channels <= 4);
-        self.image.copy_from_buffer(ctx, src);
+        self.image.copy_from_buffer(cb, src);
     }
 }
 

@@ -4,14 +4,13 @@ use super::buffer;
 use super::Device;
 use ash::vk;
 
-pub struct Context {
+pub struct Pool {
     pub device: Device,
-    pub cb: vk::CommandBuffer,
     pub buffers: Vec<buffer::Buffer>,
     pub image_views: Vec<vk::ImageView>,
 }
 
-impl Deref for Context {
+impl Deref for Pool {
     type Target = Device;
 
     fn deref(&self) -> &Self::Target {
@@ -19,11 +18,10 @@ impl Deref for Context {
     }
 }
 
-impl Context {
-    pub fn new(device: &Device, cb: vk::CommandBuffer) -> Self {
+impl Pool {
+    pub fn new(device: &Device) -> Self {
         Self {
             device: device.clone(),
-            cb,
             buffers: vec![],
             image_views: vec![],
         }
@@ -43,12 +41,12 @@ impl Context {
             .push(buffer::Buffer::create(&self.device, info));
         self.buffers.last_mut().unwrap()
     }
-    pub fn create_image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
+    pub fn image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
         unsafe { self.device.create_image_view(info, None).unwrap() }
     }
 }
 
-impl Drop for Context {
+impl Drop for Pool {
     fn drop(&mut self) {
         unsafe {
             for image_view in self.image_views.drain(..) {

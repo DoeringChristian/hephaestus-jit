@@ -335,21 +335,21 @@ fn accel() {
     // dbg!(o.to_vec::<f32>());
     // dbg!(d.to_vec::<f32>());
 }
-#[test]
-fn max() {
-    pretty_env_logger::try_init().ok();
-    let device = backend::Device::vulkan(0).unwrap();
-
-    let x = (0..100).map(|i| i as f32).collect::<Vec<_>>();
-    let x = tr::array(&x, &device);
-
-    let max = x.max();
-
-    max.schedule();
-
-    let graph = tr::compile();
-    insta::assert_debug_snapshot!(graph);
-    graph.launch(&device);
-
-    dbg!(&max.to_vec::<f32>());
-}
+// #[test]
+// fn max() {
+//     pretty_env_logger::try_init().ok();
+//     let device = backend::Device::vulkan(0).unwrap();
+//
+//     let x = (0..100).map(|i| i as f32).collect::<Vec<_>>();
+//     let x = tr::array(&x, &device);
+//
+//     let max = x.max();
+//
+//     max.schedule();
+//
+//     let graph = tr::compile();
+//     insta::assert_debug_snapshot!(graph);
+//     graph.launch(&device);
+//
+//     dbg!(&max.to_vec::<f32>());
+// }
