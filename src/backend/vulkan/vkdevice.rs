@@ -5,7 +5,7 @@ use text_placeholder::Template;
 
 use super::shader_cache::ShaderKind;
 
-use crate::backend::vulkan::buffer::BufferInfo;
+use crate::backend::vulkan::buffer::{BufferInfo, MemoryLocation};
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
 };
@@ -53,10 +53,10 @@ impl VulkanDevice {
         ctx: &mut Context,
         op: DeviceOp,
         ty: &VarType,
+        num: usize,
         src: &Buffer,
         dst: &Buffer,
     ) {
-        let num: usize = 1024;
         let ty_size = ty.size();
 
         let scratch_buffer = ctx.buffer(BufferInfo {
@@ -64,7 +64,7 @@ impl VulkanDevice {
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: todo!(),
+            memory_location: MemoryLocation::GpuOnly,
             ..Default::default()
         });
 
@@ -161,8 +161,6 @@ impl VulkanDevice {
                 }],
             )
         };
-
-        todo!()
     }
     pub fn build_accel<'a>(
         &'a self,

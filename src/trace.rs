@@ -622,3 +622,19 @@ impl VarRef {
         )
     }
 }
+// Reduction Operations
+impl VarRef {
+    pub fn max(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::Max),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+}

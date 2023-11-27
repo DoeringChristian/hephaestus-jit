@@ -176,7 +176,19 @@ impl backend::BackendDevice for VulkanDevice {
                         pipeline.submit_to_cbuffer(ctx, *size, &buffers, &images, &accels);
                     }
                     PassOp::DeviceOp(op) => match op {
-                        DeviceOp::Max => todo!(),
+                        DeviceOp::Max => {
+                            let dst = buffers[0];
+                            let src = buffers[1];
+                            let ty = trace
+                                .var(graph.buffer_desc(pass.buffers[0]).var.id())
+                                .ty
+                                .clone();
+                            let size = trace
+                                .var(graph.buffer_desc(pass.buffers[0]).var.id())
+                                .extent
+                                .size();
+                            self.reduce(ctx, *op, &ty, size, src, dst);
+                        }
                         DeviceOp::Buffer2Texture => {
                             let src = buffers[0];
                             let dst = images[0];

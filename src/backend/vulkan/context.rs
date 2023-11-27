@@ -33,6 +33,11 @@ impl Context {
             .push(buffer::Buffer::create(&self.device, info));
         self.buffers.last().unwrap()
     }
+    pub fn vk_buffer(&mut self, info: buffer::BufferInfo) -> vk::Buffer {
+        self.buffers
+            .push(buffer::Buffer::create(&self.device, info));
+        self.buffers.last().unwrap().buffer()
+    }
     pub fn buffer_mut(&mut self, info: buffer::BufferInfo) -> &mut buffer::Buffer {
         self.buffers
             .push(buffer::Buffer::create(&self.device, info));

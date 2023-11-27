@@ -1,0 +1,56 @@
+---
+source: src/test.rs
+expression: graph
+---
+Graph {
+    passes: [
+        Pass {
+            buffers: [
+                BufferId(
+                    0,
+                ),
+                BufferId(
+                    1,
+                ),
+            ],
+            textures: [],
+            accels: [],
+            op: DeviceOp(
+                Max,
+            ),
+        },
+    ],
+    buffers: [
+        BufferDesc {
+            size: 1,
+            var: VarRef {
+                id: VarId(
+                    DefaultKey(
+                        2v1,
+                    ),
+                ),
+            },
+        },
+        BufferDesc {
+            size: 100,
+            var: VarRef {
+                id: VarId(
+                    DefaultKey(
+                        1v1,
+                    ),
+                ),
+            },
+        },
+    ],
+    textures: [],
+    accels: [],
+    schedule: [
+        VarRef {
+            id: VarId(
+                DefaultKey(
+                    2v1,
+                ),
+            ),
+        },
+    ],
+}

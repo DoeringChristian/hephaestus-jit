@@ -258,7 +258,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
 
             match trace.var(id).op {
                 op::Op::DeviceOp(op) => match op {
-                    op::DeviceOp::Max => todo!(),
+                    // op::DeviceOp::Max => todo!(),
                     _ => {
                         let deps = trace.deps(id).to_vec();
 
