@@ -22,6 +22,8 @@ pub struct ShaderCache(HashMap<u64, Arc<Vec<u32>>>);
 
 impl ShaderCache {
     pub fn lease_glsl(&mut self, src: &str, kind: ShaderKind) -> Arc<Vec<u32>> {
+        log::trace!("Creating shader with the following source:");
+        log::trace!("{}", src);
         let mut hasher = DefaultHasher::new();
         src.hash(&mut hasher);
         kind.hash(&mut hasher);

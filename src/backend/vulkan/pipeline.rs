@@ -8,9 +8,9 @@ use crate::ir::IR;
 
 use super::accel::Accel;
 use super::buffer::Buffer;
-use super::pool::Pool;
 use super::device::Device;
 use super::image::Image;
+use super::pool::Pool;
 use ash::vk;
 
 #[derive(Debug)]
@@ -244,6 +244,7 @@ impl Pipeline {
         write_sets: &[WriteSet],
         extent: (u32, u32, u32),
     ) {
+        log::trace!("Recording Pipeline pass with extent {extent:?}");
         let buffer_infos = write_sets
             .iter()
             .map(|write_set| {

@@ -61,8 +61,11 @@ impl VulkanDevice {
     ) {
         let ty_size = ty.size();
 
-        let scratch_buffer = pool.buffer(BufferInfo {
-            size: round_pow2((num * ty.size()) as u32) as usize,
+        let n_passes = (num - 1).ilog(32) + 1;
+        let scratch_size = 32u32.pow(n_passes);
+
+        let scratch_buffer1 = pool.buffer(BufferInfo {
+            size: scratch_size as usize * ty_size,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
@@ -77,7 +80,11 @@ impl VulkanDevice {
         let ty = glsl_ty(ty);
 
         let template = Template::new(include_str!("kernels/reduce.glsl"));
-        let defines = HashMap::from([("REDUCE", reduction), ("TYPE", ty)]);
+        let defines = HashMap::from([
+            ("REDUCE", reduction),
+            ("TYPE", ty),
+            ("WORK_GROUP_SIZE", "32"),
+        ]);
 
         let shader =
             self.get_shader_glsl(&template.fill_with_hashmap(&defines), ShaderKind::Compute);
@@ -90,16 +97,17 @@ impl VulkanDevice {
                 }],
             }],
         });
+        log::trace!("Created templated pipeline.");
 
         unsafe {
             device.cmd_copy_buffer(
                 cb,
                 src.buffer(),
-                scratch_buffer.buffer(),
+                scratch_buffer1.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
-                    size: vk::WHOLE_SIZE,
+                    size: src.info().size as _,
                 }],
             )
         };
@@ -120,7 +128,10 @@ impl VulkanDevice {
             );
         }
 
-        for i in (1..((num - 1).ilog(32) + 1)).rev() {
+        log::trace!("Reducing {num} elements with {reduction}");
+        log::trace!("Launching {n_passes} shader passes");
+        log::trace!("Scratch Buffer size: {scratch_size}");
+        for i in (0..n_passes).rev() {
             pipeline.submit(
                 cb,
                 &device,
@@ -128,10 +139,10 @@ impl VulkanDevice {
                     set: 0,
                     binding: 0,
                     buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
+                        buffer: &scratch_buffer1,
                     }],
                 }],
-                (i, 1, 1),
+                (i + 1, 1, 1),
             );
 
             let memory_barriers = [vk::MemoryBarrier::builder()
@@ -154,7 +165,7 @@ impl VulkanDevice {
         unsafe {
             device.cmd_copy_buffer(
                 cb,
-                scratch_buffer.buffer(),
+                scratch_buffer1.buffer(),
                 dst.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,

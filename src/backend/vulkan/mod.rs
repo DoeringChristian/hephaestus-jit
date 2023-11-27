@@ -128,8 +128,8 @@ impl backend::BackendDevice for VulkanDevice {
         // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
         // submitted
         // FIX: Add a struct that can collect Arcs to those resources
+        let mut pool = Pool::new(&self);
         self.submit_global(|device, cb| {
-            let mut pool = Pool::new(device);
             for pass in graph.passes.iter() {
                 let buffers = pass
                     .buffers
@@ -185,11 +185,11 @@ impl backend::BackendDevice for VulkanDevice {
                                 .var(graph.buffer_desc(pass.buffers[0]).var.id())
                                 .ty
                                 .clone();
-                            let size = trace
-                                .var(graph.buffer_desc(pass.buffers[0]).var.id())
+                            let num = trace
+                                .var(graph.buffer_desc(pass.buffers[1]).var.id())
                                 .extent
                                 .size();
-                            self.reduce(&self, cb, &mut pool, *op, &ty, size, src, dst);
+                            self.reduce(&self, cb, &mut pool, *op, &ty, num, src, dst);
                         }
                         DeviceOp::Buffer2Texture => {
                             let src = buffers[0];

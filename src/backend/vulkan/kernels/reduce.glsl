@@ -1,3 +1,5 @@
+#version 450
+
 #extension GL_EXT_shader_explicit_arithmetic_types: require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8: require
 #extension GL_EXT_shader_explicit_arithmetic_types_int16: require
@@ -25,10 +27,10 @@ void main(){
     memoryBarrierShared();
     barrier();
 
-    for (uint s = group_size/2; s > 0; s/=2){
+    for (uint s = group_size/2; s > 0; s>>=1){
         if (local_id < s){
             {{TYPE}} a = shared_data[local_id];
-            {{TYPE}} b = shared_data[local_id + shared];
+            {{TYPE}} b = shared_data[local_id + s];
             {{TYPE}} result = {{REDUCE}};
             shared_data[local_id] = result;
         }
