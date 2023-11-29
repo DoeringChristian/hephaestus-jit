@@ -154,7 +154,7 @@ impl Accel {
             })
             .collect::<Vec<_>>();
 
-        let references_buffer = pool.buffer(BufferInfo {
+        let mut references_buffer = pool.buffer(BufferInfo {
             size: std::mem::size_of::<u64>() * references.len(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -166,7 +166,6 @@ impl Accel {
         });
 
         references_buffer
-            .borrow_mut()
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&references));
 
@@ -206,7 +205,7 @@ impl Accel {
                         buffer: &desc.instances,
                     },
                     BufferWriteInfo {
-                        buffer: &references_buffer.borrow(),
+                        buffer: &references_buffer,
                     },
                     BufferWriteInfo {
                         buffer: &instance_buffer,

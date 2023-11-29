@@ -220,7 +220,7 @@ impl AccelerationStructure {
             memory_location: MemoryLocation::GpuOnly,
             ..Default::default()
         });
-        let scratch_buffer = scratch_buffer.borrow().device_address();
+        let scratch_buffer = scratch_buffer.device_address();
 
         let (geometries, build_ranges): (Vec<_>, Vec<_>) = info
             .geometries

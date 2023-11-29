@@ -103,7 +103,7 @@ impl VulkanDevice {
             device.cmd_copy_buffer(
                 cb,
                 src.buffer(),
-                scratch_buffer1.borrow().buffer(),
+                scratch_buffer1.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
@@ -139,7 +139,7 @@ impl VulkanDevice {
                     set: 0,
                     binding: 0,
                     buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer1.borrow(),
+                        buffer: &scratch_buffer1,
                     }],
                 }],
                 (i + 1, 1, 1),
@@ -165,7 +165,7 @@ impl VulkanDevice {
         unsafe {
             device.cmd_copy_buffer(
                 cb,
-                scratch_buffer1.borrow().buffer(),
+                scratch_buffer1.buffer(),
                 dst.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,

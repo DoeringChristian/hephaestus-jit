@@ -12,7 +12,7 @@ pub struct Buffer {
 
     info: BufferInfo,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct BufferInfo {
     pub size: usize,
     pub alignment: usize,
