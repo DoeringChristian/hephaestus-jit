@@ -79,15 +79,15 @@ impl VulkanDevice {
         };
         let ty = glsl_ty(ty);
 
-        let template = Template::new(include_str!("kernels/reduce.glsl"));
-        let defines = HashMap::from([
-            ("REDUCE", reduction),
-            ("TYPE", ty),
-            ("WORK_GROUP_SIZE", "32"),
-        ]);
-
-        let shader =
-            self.get_shader_glsl(&template.fill_with_hashmap(&defines), ShaderKind::Compute);
+        let shader = self.get_static_glsl_templated(
+            include_str!("kernels/reduce.glsl"),
+            &[
+                ("REDUCE", reduction),
+                ("TYPE", ty),
+                ("WORK_GROUP_SIZE", "32"),
+            ],
+            ShaderKind::Compute,
+        );
         let pipeline = self.get_pipeline(&PipelineDesc {
             code: &shader,
             desc_set_layouts: &[DescSetLayout {
@@ -103,7 +103,7 @@ impl VulkanDevice {
             device.cmd_copy_buffer(
                 cb,
                 src.buffer(),
-                scratch_buffer1.buffer(),
+                scratch_buffer1.borrow().buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
@@ -139,7 +139,7 @@ impl VulkanDevice {
                     set: 0,
                     binding: 0,
                     buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer1,
+                        buffer: &scratch_buffer1.borrow(),
                     }],
                 }],
                 (i + 1, 1, 1),
@@ -165,7 +165,7 @@ impl VulkanDevice {
         unsafe {
             device.cmd_copy_buffer(
                 cb,
-                scratch_buffer1.buffer(),
+                scratch_buffer1.borrow().buffer(),
                 dst.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,

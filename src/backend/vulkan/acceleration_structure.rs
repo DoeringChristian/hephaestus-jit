@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
-use super::pool::Pool;
 use super::device::Device;
+use super::pool::Pool;
 use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
 
@@ -220,7 +220,7 @@ impl AccelerationStructure {
             memory_location: MemoryLocation::GpuOnly,
             ..Default::default()
         });
-        let scratch_buffer = scratch_buffer.device_address();
+        let scratch_buffer = scratch_buffer.borrow().device_address();
 
         let (geometries, build_ranges): (Vec<_>, Vec<_>) = info
             .geometries

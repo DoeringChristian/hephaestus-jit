@@ -58,6 +58,17 @@ impl InternalVkDevice {
     fn get_shader_glsl(&self, src: &str, kind: ShaderKind) -> Arc<Vec<u32>> {
         self.shader_cache.lock().unwrap().lease_glsl(src, kind)
     }
+    fn get_static_glsl_templated(
+        &self,
+        template: &'static str,
+        table: &[(&'static str, &'static str)],
+        kind: ShaderKind,
+    ) -> Arc<Vec<u32>> {
+        self.shader_cache
+            .lock()
+            .unwrap()
+            .lease_static_glsl_templated(template, table, kind)
+    }
 }
 impl std::ops::Deref for InternalVkDevice {
     type Target = Device;

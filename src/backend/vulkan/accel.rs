@@ -2,8 +2,8 @@ use ash::vk;
 use std::sync::Mutex;
 
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
-use super::pool::Pool;
 use super::device::Device;
+use super::pool::Pool;
 use super::{acceleration_structure::*, VulkanDevice};
 
 use crate::backend::vulkan::pipeline::{
@@ -154,7 +154,7 @@ impl Accel {
             })
             .collect::<Vec<_>>();
 
-        let references_buffer = pool.buffer_mut(BufferInfo {
+        let references_buffer = pool.buffer(BufferInfo {
             size: std::mem::size_of::<u64>() * references.len(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -166,6 +166,7 @@ impl Accel {
         });
 
         references_buffer
+            .borrow_mut()
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&references));
 
@@ -205,7 +206,7 @@ impl Accel {
                         buffer: &desc.instances,
                     },
                     BufferWriteInfo {
-                        buffer: &references_buffer,
+                        buffer: &references_buffer.borrow(),
                     },
                     BufferWriteInfo {
                         buffer: &instance_buffer,

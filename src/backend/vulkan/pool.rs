@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::ops::Deref;
+use std::rc::Rc;
 
 use super::buffer;
 use super::Device;
@@ -6,7 +8,7 @@ use ash::vk;
 
 pub struct Pool {
     pub device: Device,
-    pub buffers: Vec<buffer::Buffer>,
+    pub buffers: Vec<Rc<RefCell<buffer::Buffer>>>,
     pub image_views: Vec<vk::ImageView>,
 }
 
@@ -26,21 +28,24 @@ impl Pool {
             image_views: vec![],
         }
     }
-    pub fn buffer(&mut self, info: buffer::BufferInfo) -> &buffer::Buffer {
+    pub fn buffer(&mut self, info: buffer::BufferInfo) -> Rc<RefCell<buffer::Buffer>> {
         self.buffers
-            .push(buffer::Buffer::create(&self.device, info));
-        self.buffers.last().unwrap()
+            .push(Rc::new(RefCell::new(buffer::Buffer::create(
+                &self.device,
+                info,
+            ))));
+        self.buffers.last().unwrap().clone()
     }
-    pub fn vk_buffer(&mut self, info: buffer::BufferInfo) -> vk::Buffer {
-        self.buffers
-            .push(buffer::Buffer::create(&self.device, info));
-        self.buffers.last().unwrap().buffer()
-    }
-    pub fn buffer_mut(&mut self, info: buffer::BufferInfo) -> &mut buffer::Buffer {
-        self.buffers
-            .push(buffer::Buffer::create(&self.device, info));
-        self.buffers.last_mut().unwrap()
-    }
+    // pub fn vk_buffer(&mut self, info: buffer::BufferInfo) -> vk::Buffer {
+    //     self.buffers
+    //         .push(buffer::Buffer::create(&self.device, info));
+    //     self.buffers.last().unwrap().buffer()
+    // }
+    // pub fn buffer_mut(&mut self, info: buffer::BufferInfo) -> &mut buffer::Buffer {
+    //     self.buffers
+    //         .push(buffer::Buffer::create(&self.device, info));
+    //     self.buffers.last_mut().unwrap()
+    // }
     pub fn image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
         unsafe { self.device.create_image_view(info, None).unwrap() }
     }
