@@ -142,7 +142,7 @@ impl VulkanDevice {
                         buffer: &scratch_buffer1,
                     }],
                 }],
-                (i + 1, 1, 1),
+                (32u32.pow(i), 1, 1),
             );
 
             let memory_barriers = [vk::MemoryBarrier::builder()
