@@ -64,7 +64,7 @@ impl VulkanDevice {
         let n_passes = (num - 1).ilog(32) + 1;
         let scratch_size = 32u32.pow(n_passes);
 
-        let scratch_buffer1 = pool.buffer(BufferInfo {
+        let mut in_buffer = pool.buffer(BufferInfo {
             size: scratch_size as usize * ty_size,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -72,17 +72,45 @@ impl VulkanDevice {
             memory_location: MemoryLocation::GpuOnly,
             ..Default::default()
         });
+        let mut out_buffer = pool.buffer(BufferInfo {
+            size: scratch_size as usize * ty_size,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::GpuOnly,
+            ..Default::default()
+        });
+        let mut size_buffer = pool.buffer(BufferInfo {
+            size: std::mem::size_of::<u64>(),
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::CpuToGpu,
+            ..Default::default()
+        });
+        size_buffer
+            .mapped_slice_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[num as u64]));
 
         let reduction = match op {
             DeviceOp::Max => "max(a, b)",
             _ => todo!(),
         };
+        let init = match op {
+            DeviceOp::Max => match ty {
+                VarType::F32 => "float32_t(-1.0/0.0)",
+                _ => todo!(),
+            },
+            _ => todo!(),
+        };
+
         let ty = glsl_ty(ty);
 
         let shader = self.get_static_glsl_templated(
             include_str!("kernels/reduce.glsl"),
             &[
                 ("REDUCE", reduction),
+                ("INIT", init),
                 ("TYPE", ty),
                 ("WORK_GROUP_SIZE", "32"),
             ],
@@ -91,10 +119,20 @@ impl VulkanDevice {
         let pipeline = self.get_pipeline(&PipelineDesc {
             code: &shader,
             desc_set_layouts: &[DescSetLayout {
-                bindings: &[Binding {
-                    binding: 0,
-                    count: 1,
-                }],
+                bindings: &[
+                    Binding {
+                        binding: 0,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 1,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 2,
+                        count: 1,
+                    },
+                ],
             }],
         });
         log::trace!("Created templated pipeline.");
@@ -103,7 +141,7 @@ impl VulkanDevice {
             device.cmd_copy_buffer(
                 cb,
                 src.buffer(),
-                scratch_buffer1.buffer(),
+                in_buffer.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
@@ -135,13 +173,27 @@ impl VulkanDevice {
             pipeline.submit(
                 cb,
                 &device,
-                &[WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer1,
-                    }],
-                }],
+                &[
+                    WriteSet {
+                        set: 0,
+                        binding: 0,
+                        buffers: &[BufferWriteInfo { buffer: &in_buffer }],
+                    },
+                    WriteSet {
+                        set: 0,
+                        binding: 1,
+                        buffers: &[BufferWriteInfo {
+                            buffer: &out_buffer,
+                        }],
+                    },
+                    WriteSet {
+                        set: 0,
+                        binding: 2,
+                        buffers: &[BufferWriteInfo {
+                            buffer: &size_buffer,
+                        }],
+                    },
+                ],
                 (32u32.pow(i), 1, 1),
             );
 
@@ -160,12 +212,14 @@ impl VulkanDevice {
                     &[],
                 );
             }
+            // Swap In/Out buffers
+            std::mem::swap(&mut in_buffer, &mut out_buffer);
         }
 
         unsafe {
             device.cmd_copy_buffer(
                 cb,
-                scratch_buffer1.buffer(),
+                in_buffer.buffer(),
                 dst.buffer(),
                 &[vk::BufferCopy {
                     src_offset: 0,

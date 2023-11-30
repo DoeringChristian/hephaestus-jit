@@ -340,7 +340,7 @@ fn max() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
-    let x = (0..100).map(|i| (i - 1000) as f32).collect::<Vec<_>>();
+    let x = (-1000..-900).map(|i| i as f32).collect::<Vec<_>>();
     let x = tr::array(&x, &device);
 
     let max = x.max();

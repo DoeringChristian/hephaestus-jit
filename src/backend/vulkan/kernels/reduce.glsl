@@ -9,8 +9,17 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_float32: require
 #extension GL_EXT_shader_explicit_arithmetic_types_float64: require
 
-layout(set = 0, binding = 0) buffer Global{
-    {{TYPE}} global_data[];
+
+// TODO: Optimization
+
+layout(set = 0, binding = 0) buffer Input{
+    {{TYPE}} in_data[];
+};
+layout(set = 0, binding = 1) buffer Output{
+    {{TYPE}} out_data[];
+};
+layout(set = 0, binding = 2) buffer Size{
+    uint64_t size;
 };
 
 shared {{TYPE}} shared_data[{{WORK_GROUP_SIZE}}];
@@ -22,7 +31,7 @@ void main(){
     uint group_id = uint(gl_WorkGroupID.x);
     uint group_size = uint({{WORK_GROUP_SIZE}});
 
-    shared_data[local_id] = global_data[global_id];
+    shared_data[local_id] = global_id < size ? in_data[global_id]: {{INIT}};
     
     memoryBarrierShared();
     barrier();
@@ -36,5 +45,5 @@ void main(){
         }
     }
 
-    if (local_id == 0) global_data[group_id] = shared_data[0];
+    if (local_id == 0) out_data[group_id] = shared_data[0];
 }
