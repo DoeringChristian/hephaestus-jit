@@ -267,7 +267,7 @@ impl Pipeline {
                     .dst_set(self.desc_sets[write_set.set as usize])
                     .buffer_info(&buffer_infos[i])
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .dst_binding(0)
+                    .dst_binding(write_set.binding)
                     .build()
             })
             .collect::<Vec<_>>();
