@@ -98,7 +98,17 @@ impl VulkanDevice {
         };
         let init = match op {
             DeviceOp::Max => match ty {
+                // VarType::Bool => todo!(),
+                VarType::I8 => "int8_t(-0x80)",
+                VarType::U8 => "uint8_t(0)",
+                VarType::I16 => "int16_t(-0x8000)",
+                VarType::U16 => "uint16_t(0)",
+                VarType::I32 => "int32_t(-0x80000000)",
+                VarType::U32 => "uint32_t(0)",
+                VarType::I64 => "int64_t(-0x8000000000000000)",
+                VarType::U64 => "uint32_t(0)",
                 VarType::F32 => "float32_t(-1.0/0.0)",
+                VarType::F64 => "float64_t(-1.0/0.0)",
                 _ => todo!(),
             },
             _ => todo!(),

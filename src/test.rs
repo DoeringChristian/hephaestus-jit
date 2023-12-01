@@ -340,16 +340,23 @@ fn max() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
-    let x = (100..200).rev().map(|i| i as f32).collect::<Vec<_>>();
-    let x = tr::array(&x, &device);
+    macro_rules! max_test {
+        ($ty:ident, $iter:expr) => {
+            let x = ($iter).map(|i| i as $ty).collect::<Vec<_>>();
+            let reduced = x.to_vec().into_iter().reduce(|a, b| a.max(b)).unwrap();
 
-    let max = x.max();
+            // Launch Kernels:
+            let x = tr::array(&x, &device);
+            let max = x.max();
+            max.schedule();
+            let graph = tr::compile();
+            graph.launch(&device);
 
-    max.schedule();
+            assert_eq!(max.to_vec::<$ty>()[0], reduced)
+        };
+    }
 
-    let graph = tr::compile();
-    // insta::assert_debug_snapshot!(graph);
-    graph.launch(&device);
-
-    dbg!(&max.to_vec::<f32>());
+    max_test!(u8, 0..0xff);
+    // max_test!(i8, -128..127);
+    max_test!(f32, 0..100);
 }
