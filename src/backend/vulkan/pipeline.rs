@@ -16,9 +16,9 @@ use ash::vk;
 #[derive(Debug)]
 pub struct Pipeline {
     device: Device,
-    desc_sets: Vec<vk::DescriptorSet>,
+    // desc_sets: Vec<vk::DescriptorSet>,
     desc_set_layouts: Vec<vk::DescriptorSetLayout>,
-    desc_pool: vk::DescriptorPool,
+    // desc_pool: vk::DescriptorPool,
     // descriptor_pool: vk::DescriptorPool,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
@@ -30,7 +30,7 @@ impl Drop for Pipeline {
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device.destroy_pipeline(self.pipeline, None);
-            self.device.destroy_descriptor_pool(self.desc_pool, None);
+            // self.device.destroy_descriptor_pool(self.desc_pool, None);
             for desc_set_layout in self.desc_set_layouts.iter() {
                 self.device
                     .destroy_descriptor_set_layout(*desc_set_layout, None);
@@ -48,16 +48,10 @@ impl Pipeline {
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
-            let desc_sizes = [vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 2 ^ 16,
-            }];
-            let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
-                .pool_sizes(&desc_sizes)
-                .max_sets(desc.desc_set_layouts.len() as _);
-            let desc_pool = device
-                .create_descriptor_pool(&desc_pool_info, None)
-                .unwrap();
+            // let desc_sizes = [vk::DescriptorPoolSize {
+            //     ty: vk::DescriptorType::STORAGE_BUFFER,
+            //     descriptor_count: 2 ^ 16,
+            // }];
 
             // Create Layout
             let desc_set_layouts = desc
@@ -83,13 +77,19 @@ impl Pipeline {
                 })
                 .collect::<Vec<_>>();
 
-            // Allocate Descriptor Sets
-            let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(desc_pool)
-                .set_layouts(&desc_set_layouts);
-            let desc_sets = device
-                .allocate_descriptor_sets(&desc_sets_allocation_info)
-                .unwrap();
+            // let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            //     .pool_sizes(&desc_sizes)
+            //     .max_sets(desc.desc_set_layouts.len() as _);
+            // let desc_pool = device
+            //     .create_descriptor_pool(&desc_pool_info, None)
+            //     .unwrap();
+            // // Allocate Descriptor Sets
+            // let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
+            //     .descriptor_pool(desc_pool)
+            //     .set_layouts(&desc_set_layouts);
+            // let desc_sets = device
+            //     .allocate_descriptor_sets(&desc_sets_allocation_info)
+            //     .unwrap();
 
             // Create Pipeline
             let pipeline_layout_info =
@@ -119,11 +119,11 @@ impl Pipeline {
 
             Self {
                 device: device.clone(),
-                desc_sets,
+                // desc_sets,
                 pipeline_layout,
                 pipeline: compute_pipeline,
                 desc_set_layouts,
-                desc_pool,
+                // desc_pool,
             }
         }
     }
@@ -141,26 +141,26 @@ impl Pipeline {
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
-            let desc_sizes = [
-                vk::DescriptorPoolSize {
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                    descriptor_count: num_buffers.max(1) as _,
-                },
-                vk::DescriptorPoolSize {
-                    ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: num_textures.max(1) as _,
-                },
-                vk::DescriptorPoolSize {
-                    ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-                    descriptor_count: num_accels.max(1) as _,
-                },
-            ];
-            let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
-                .pool_sizes(&desc_sizes)
-                .max_sets(1);
-            let desc_pool = device
-                .create_descriptor_pool(&desc_pool_info, None)
-                .unwrap();
+            // let desc_sizes = [
+            //     vk::DescriptorPoolSize {
+            //         ty: vk::DescriptorType::STORAGE_BUFFER,
+            //         descriptor_count: num_buffers.max(1) as _,
+            //     },
+            //     vk::DescriptorPoolSize {
+            //         ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            //         descriptor_count: num_textures.max(1) as _,
+            //     },
+            //     vk::DescriptorPoolSize {
+            //         ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+            //         descriptor_count: num_accels.max(1) as _,
+            //     },
+            // ];
+            // let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            //     .pool_sizes(&desc_sizes)
+            //     .max_sets(1);
+            // let desc_pool = device
+            //     .create_descriptor_pool(&desc_pool_info, None)
+            //     .unwrap();
 
             // Create Layout
             let desc_layout_bindings = [
@@ -194,12 +194,12 @@ impl Pipeline {
                 .unwrap()];
 
             // Allocate Descriptor Sets
-            let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(desc_pool)
-                .set_layouts(&desc_set_layouts);
-            let desc_sets = device
-                .allocate_descriptor_sets(&desc_sets_allocation_info)
-                .unwrap();
+            // let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
+            //     .descriptor_pool(desc_pool)
+            //     .set_layouts(&desc_set_layouts);
+            // let desc_sets = device
+            //     .allocate_descriptor_sets(&desc_sets_allocation_info)
+            //     .unwrap();
 
             // Create Pipeline
             let pipeline_layout_info =
@@ -229,21 +229,23 @@ impl Pipeline {
 
             Self {
                 device: device.clone(),
-                desc_sets,
+                // desc_sets,
                 pipeline_layout,
                 pipeline: compute_pipeline,
                 desc_set_layouts,
-                desc_pool,
+                // desc_pool,
             }
         }
     }
     pub fn submit(
         &self,
         cb: vk::CommandBuffer,
+        pool: &mut Pool,
         device: &Device,
         write_sets: &[WriteSet],
         extent: (u32, u32, u32),
     ) {
+        let desc_sets = pool.desc_sets(&self.desc_set_layouts);
         log::trace!("Recording Pipeline pass with extent {extent:?}");
         let buffer_infos = write_sets
             .iter()
@@ -264,7 +266,7 @@ impl Pipeline {
             .enumerate()
             .map(|(i, write_set)| {
                 vk::WriteDescriptorSet::builder()
-                    .dst_set(self.desc_sets[write_set.set as usize])
+                    .dst_set(desc_sets[write_set.set as usize])
                     .buffer_info(&buffer_infos[i])
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                     .dst_binding(write_set.binding)
@@ -283,7 +285,7 @@ impl Pipeline {
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
                 0,
-                &self.desc_sets,
+                &desc_sets,
                 &[],
             );
             log::trace!("Dispatching Pipeline.");
@@ -299,6 +301,7 @@ impl Pipeline {
         images: &[&Image],
         accels: &[&Accel],
     ) {
+        let desc_sets = pool.desc_sets(&self.desc_set_layouts).to_vec();
         let image_views = images
             .iter()
             .map(|image| {
@@ -353,7 +356,7 @@ impl Pipeline {
             if !desc_buffer_infos.is_empty() {
                 Some(
                     vk::WriteDescriptorSet::builder()
-                        .dst_set(self.desc_sets[0])
+                        .dst_set(desc_sets[0])
                         .buffer_info(&desc_buffer_infos)
                         .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                         .dst_binding(0)
@@ -365,7 +368,7 @@ impl Pipeline {
             if !desc_image_infos.is_empty() {
                 Some(
                     vk::WriteDescriptorSet::builder()
-                        .dst_set(self.desc_sets[0])
+                        .dst_set(desc_sets[0])
                         .image_info(&desc_image_infos)
                         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                         .dst_binding(1)
@@ -376,7 +379,7 @@ impl Pipeline {
             },
             if !acceleration_structures.is_empty() {
                 let mut write_desc_set = vk::WriteDescriptorSet::builder()
-                    .dst_set(self.desc_sets[0])
+                    .dst_set(desc_sets[0])
                     .dst_binding(2)
                     .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
                     .push_next(&mut desc_accel_infos)
@@ -402,7 +405,7 @@ impl Pipeline {
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
                 0,
-                &self.desc_sets,
+                &desc_sets,
                 &[],
             );
             self.device.cmd_dispatch(cb, num as _, 1, 1);

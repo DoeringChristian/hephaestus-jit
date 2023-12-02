@@ -36,6 +36,13 @@ impl<R: Resource> DerefMut for Lease<R> {
     }
 }
 
+impl<R: Resource> Drop for Lease<R> {
+    fn drop(&mut self) {
+        let resource = self.resource.take().unwrap();
+        self.cache.borrow_mut().push(resource);
+    }
+}
+
 pub struct ResourcePool<R: Resource> {
     pub resources: HashMap<R::Info, Cache<R>>,
 }
@@ -78,6 +85,8 @@ pub struct Pool {
     pub device: Device,
     pub buffers: ResourcePool<Buffer>,
     pub image_views: Vec<vk::ImageView>,
+    pub desc_sets: Vec<vk::DescriptorSet>,
+    pub desc_pools: Vec<vk::DescriptorPool>,
 }
 
 impl Deref for Pool {
@@ -94,6 +103,9 @@ impl Pool {
             device: device.clone(),
             buffers: Default::default(),
             image_views: vec![],
+            desc_sets: vec![],
+            desc_pools: vec![],
+            // desc_pool,
         }
     }
     pub fn buffer(&mut self, info: buffer::BufferInfo) -> Lease<Buffer> {
@@ -102,6 +114,43 @@ impl Pool {
     pub fn image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
         unsafe { self.device.create_image_view(info, None).unwrap() }
     }
+    pub fn desc_sets(&mut self, set_layouts: &[vk::DescriptorSetLayout]) -> &[vk::DescriptorSet] {
+        let desc_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 2 ^ 16,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 2 ^ 16,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+                descriptor_count: 2 ^ 16,
+            },
+        ];
+        let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            .pool_sizes(&desc_sizes)
+            .max_sets(set_layouts.len() as _);
+        let desc_pool = unsafe {
+            self.device
+                .create_descriptor_pool(&desc_pool_info, None)
+                .unwrap()
+        };
+        self.desc_pools.push(desc_pool);
+
+        let desc_set_allocation_info = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(desc_pool)
+            .set_layouts(set_layouts);
+        let desc_sets = unsafe {
+            self.device
+                .allocate_descriptor_sets(&desc_set_allocation_info)
+                .unwrap()
+        };
+        let start = self.desc_sets.len();
+        self.desc_sets.extend_from_slice(&desc_sets);
+        &self.desc_sets[start..]
+    }
 }
 
 impl Drop for Pool {
@@ -109,6 +158,9 @@ impl Drop for Pool {
         unsafe {
             for image_view in self.image_views.drain(..) {
                 self.device.destroy_image_view(image_view, None);
+            }
+            for pool in self.desc_pools.drain(..) {
+                self.device.destroy_descriptor_pool(pool, None);
             }
         }
     }

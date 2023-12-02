@@ -180,8 +180,10 @@ impl VulkanDevice {
         log::trace!("Launching {n_passes} shader passes");
         log::trace!("Scratch Buffer size: {scratch_size}");
         for i in (0..n_passes).rev() {
+            log::trace!("Launching shader");
             pipeline.submit(
                 cb,
+                pool,
                 &device,
                 &[
                     WriteSet {

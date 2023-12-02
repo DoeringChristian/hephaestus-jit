@@ -196,6 +196,7 @@ impl Accel {
 
         copy2instances.submit(
             cb,
+            pool,
             &self.device,
             &[WriteSet {
                 set: 0,
