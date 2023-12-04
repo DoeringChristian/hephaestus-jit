@@ -101,7 +101,7 @@ impl VarType {
     }
 }
 
-pub trait AsVarType {
+pub trait AsVarType: Copy {
     fn var_ty() -> VarType;
 }
 macro_rules! as_var_type {

@@ -6,6 +6,7 @@ use cudarc::driver::{self as core, sys, DevicePtr, LaunchAsync, LaunchConfig};
 use std::sync::Arc;
 
 use crate::backend::{self, AccelDesc, BackendBuffer, BackendDevice};
+use crate::vartype::AsVarType;
 
 #[derive(Clone, Debug)]
 pub struct CudaDevice {
@@ -95,13 +96,15 @@ impl BackendDevice for CudaDevice {
 impl BackendBuffer for CudaBuffer {
     type Device = CudaDevice;
 
-    fn to_host<T: bytemuck::Pod>(&self) -> backend::Result<Vec<T>> {
+    fn to_host<T: AsVarType>(&self) -> backend::Result<Vec<T>> {
         let len = self.size() / std::mem::size_of::<T>();
         let mut dst = Vec::<T>::with_capacity(len);
         unsafe { dst.set_len(len) };
         self.device
             .device
-            .dtoh_sync_copy_into(&self.buffer, bytemuck::cast_slice_mut::<_, u8>(&mut dst))?;
+            .dtoh_sync_copy_into(&self.buffer, unsafe {
+                std::slice::from_raw_parts_mut(dst.as_mut_ptr() as *mut u8, self.size())
+            })?;
         Ok(dst)
     }
 

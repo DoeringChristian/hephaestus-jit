@@ -500,7 +500,7 @@ impl VarRef {
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
     }
-    pub fn to_vec<T: AsVarType + bytemuck::Pod>(&self) -> Vec<T> {
+    pub fn to_vec<T: AsVarType>(&self) -> Vec<T> {
         assert_eq!(self._thread_id, std::thread::current().id());
         with_trace(|t| t.var(self.id()).data.buffer().unwrap().to_host().unwrap())
     }

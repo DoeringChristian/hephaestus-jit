@@ -22,6 +22,7 @@ use crate::backend;
 use crate::backend::vulkan::pool::Pool;
 use crate::ir::IR;
 use crate::op::DeviceOp;
+use crate::vartype::AsVarType;
 use ash::vk;
 use buffer::{Buffer, BufferInfo};
 use device::Device;
@@ -323,7 +324,7 @@ impl Debug for VulkanBuffer {
 impl backend::BackendBuffer for VulkanBuffer {
     type Device = VulkanDevice;
 
-    fn to_host<T: bytemuck::Pod>(&self) -> backend::Result<Vec<T>> {
+    fn to_host<T: AsVarType + Copy>(&self) -> backend::Result<Vec<T>> {
         let size = self.size();
         let info = BufferInfo {
             size,
@@ -340,7 +341,12 @@ impl backend::BackendBuffer for VulkanBuffer {
             };
             device.cmd_copy_buffer(cb, self.buffer.buffer(), staging.buffer(), &[region]);
         });
-        Ok(bytemuck::cast_slice(staging.mapped_slice()).to_vec())
+        let len = size / std::mem::size_of::<T>();
+        Ok(
+            unsafe { std::slice::from_raw_parts(staging.mapped_slice().as_ptr() as *const T, len) }
+                .to_vec(),
+        )
+        // Ok(bytemuck::cast_slice(staging.mapped_slice()).to_vec())
     }
 
     fn size(&self) -> usize {

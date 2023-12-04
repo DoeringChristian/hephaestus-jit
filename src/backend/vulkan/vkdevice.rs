@@ -21,7 +21,7 @@ use super::{accel, VulkanDevice};
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {
     match ty {
-        // VarType::Bool => "bool",
+        VarType::Bool => "uint8_t", // NOTE: use uint8_t for bool
         VarType::I8 => "int8_t",
         VarType::U8 => "uint8_t",
         VarType::I16 => "int16_t",
@@ -97,6 +97,8 @@ impl VulkanDevice {
             ReduceOp::Min => "min(a, b)",
             ReduceOp::Sum => "(a + b)",
             ReduceOp::Prod => "(a * b)",
+            ReduceOp::And => "(a & b)",
+            ReduceOp::Or => "(a | b)",
             _ => todo!(),
         };
         let init = match op {
@@ -154,6 +156,22 @@ impl VulkanDevice {
                 VarType::U64 => "uint64_t(1)",
                 VarType::F32 => "float32_t(1)",
                 VarType::F64 => "float64_t(1)",
+                _ => todo!(),
+            },
+            ReduceOp::And => match ty {
+                VarType::Bool => "uint8_t(1)",
+                VarType::U8 => "uint8_t(0xff)",
+                VarType::U16 => "uint16_t(0xffff)",
+                VarType::U32 => "uint32_t(0xffffffff)",
+                VarType::U64 => "uint64_t(0xfffffffffffffffful)",
+                _ => todo!(),
+            },
+            ReduceOp::Or => match ty {
+                VarType::Bool => "uint8_t(0)",
+                VarType::U8 => "uint8_t(0x0)",
+                VarType::U16 => "uint16_t(0x0)",
+                VarType::U32 => "uint32_t(0x0)",
+                VarType::U64 => "uint64_t(0x0)",
                 _ => todo!(),
             },
             _ => todo!(),

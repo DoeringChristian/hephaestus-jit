@@ -114,7 +114,7 @@ impl Buffer {
             Buffer::VulkanBuffer(buffer) => buffer.size(),
         }
     }
-    pub fn to_host<T: bytemuck::Pod + AsVarType>(&self) -> Result<Vec<T>> {
+    pub fn to_host<T: AsVarType>(&self) -> Result<Vec<T>> {
         match self {
             Self::CudaBuffer(buffer) => Ok(buffer.to_host()?),
             Self::VulkanBuffer(buffer) => Ok(buffer.to_host()?),
@@ -183,7 +183,7 @@ pub trait BackendDevice: Clone {
 
 pub trait BackendBuffer {
     type Device: BackendDevice;
-    fn to_host<T: bytemuck::Pod>(&self) -> Result<Vec<T>>;
+    fn to_host<T: AsVarType>(&self) -> Result<Vec<T>>;
     fn size(&self) -> usize;
     fn device(&self) -> &Self::Device;
 }
