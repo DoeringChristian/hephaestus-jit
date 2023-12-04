@@ -250,12 +250,6 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
         [],
     )
 }
-fn max_size<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> usize {
-    refs.into_iter()
-        .map(|r| r.size())
-        .reduce(|s0, s1| s0.max(s1))
-        .unwrap()
-}
 fn resulting_extent<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> Extent {
     refs.into_iter()
         .map(|r| r.extent())
