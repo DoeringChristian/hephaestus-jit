@@ -22,7 +22,7 @@ use super::{accel, VulkanDevice};
 pub fn glsl_ty(ty: &VarType) -> &'static str {
     match ty {
         // VarType::Bool => "bool",
-        VarType::I8 => "uint8_t",
+        VarType::I8 => "int8_t",
         VarType::U8 => "uint8_t",
         VarType::I16 => "int16_t",
         VarType::U16 => "uint16_t",

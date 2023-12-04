@@ -45,11 +45,13 @@ impl ShaderCache {
         self.0
             .entry(hash)
             .or_insert_with(|| {
-                log::trace!("    Compiling Template Kernel.");
+                log::trace!("    Compiling Template Kernel");
                 let template = Template::new(template);
 
                 let table = table.into_iter().cloned().collect::<HashMap<_, _>>();
                 let src = template.fill_with_hashmap(&table);
+
+                log::trace!("GLSL: \n{src}");
 
                 let compiler = shaderc::Compiler::new().unwrap();
                 let options = shaderc::CompileOptions::new().unwrap();

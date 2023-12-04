@@ -357,6 +357,6 @@ fn max() {
     }
 
     max_test!(u8, 0..0xff);
-    // max_test!(i8, -128..127);
+    max_test!(i8, -128..127);
     max_test!(f32, 0..100);
 }
