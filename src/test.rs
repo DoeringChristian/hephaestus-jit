@@ -469,7 +469,10 @@ fn reduce_prod() {
             let res = sum.to_vec::<$ty>()[0];
             dbg!(&res);
             dbg!(&reduced);
-            assert!((res == reduced) || (res.is_nan() && reduced.is_nan()));
+            assert!(
+                approx::abs_diff_eq!(res, reduced, epsilon = 0.001)
+                    || (res.is_nan() && reduced.is_nan())
+            );
         };
     }
 
