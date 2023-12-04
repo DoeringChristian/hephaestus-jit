@@ -12,7 +12,7 @@ use crate::backend::vulkan::pipeline::{
 };
 use crate::backend::{self, AccelDesc};
 use crate::graph::{Pass, PassOp};
-use crate::op::DeviceOp;
+use crate::op::{DeviceOp, ReduceOp};
 use crate::vartype::VarType;
 
 use super::accel::Accel;
@@ -53,7 +53,7 @@ impl VulkanDevice {
         device: &VulkanDevice,
         cb: vk::CommandBuffer,
         pool: &mut Pool,
-        op: DeviceOp,
+        op: ReduceOp,
         ty: &VarType,
         num: usize,
         src: &Buffer,
@@ -93,11 +93,12 @@ impl VulkanDevice {
             .copy_from_slice(bytemuck::cast_slice(&[num as u64]));
 
         let reduction = match op {
-            DeviceOp::Max => "max(a, b)",
+            ReduceOp::Max => "max(a, b)",
+            ReduceOp::Min => "min(a, b)",
             _ => todo!(),
         };
         let init = match op {
-            DeviceOp::Max => match ty {
+            ReduceOp::Max => match ty {
                 // VarType::Bool => todo!(),
                 VarType::I8 => "int8_t(-0x80)",
                 VarType::U8 => "uint8_t(0)",
@@ -105,10 +106,24 @@ impl VulkanDevice {
                 VarType::U16 => "uint16_t(0)",
                 VarType::I32 => "int32_t(-0x80000000)",
                 VarType::U32 => "uint32_t(0)",
-                VarType::I64 => "int64_t(-0x8000000000000000)",
-                VarType::U64 => "uint32_t(0)",
+                VarType::I64 => "int64_t(-0x8000000000000000l)",
+                VarType::U64 => "uint64_t(0ul)",
                 VarType::F32 => "float32_t(-1.0/0.0)",
                 VarType::F64 => "float64_t(-1.0/0.0)",
+                _ => todo!(),
+            },
+            ReduceOp::Min => match ty {
+                // VarType::Bool => todo!(),
+                VarType::I8 => "int8_t(0x7f)",
+                VarType::U8 => "uint8_t(0xff)",
+                VarType::I16 => "int16_t(0x7fff)",
+                VarType::U16 => "uint16_t(0xffff)",
+                VarType::I32 => "int32_t(0x7fffffff)",
+                VarType::U32 => "uint32_t(0xffffffff)",
+                VarType::I64 => "int64_t(0x7fffffffffffffffl)",
+                VarType::U64 => "uint64_t(0xfffffffffffffffful)",
+                VarType::F32 => "float32_t(1.0/0.0)",
+                VarType::F64 => "float64_t(1.0/0.0)",
                 _ => todo!(),
             },
             _ => todo!(),

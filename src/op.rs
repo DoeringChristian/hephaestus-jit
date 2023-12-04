@@ -1,18 +1,28 @@
 use crate::ir;
 
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum ReduceOp {
+    Max,
+    Min,
+    Sum,
+    Prod,
+    Or,
+    And,
+}
+
 /// TODO: Find better name for this kind of operation
 /// Operations like creating textures and reduction operations,
 /// that need their own kernels
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
-    Max,
+    ReduceOp(ReduceOp),
     Buffer2Texture,
     BuildAccel,
 }
 impl DeviceOp {
     pub fn resulting_op(self) -> Op {
         match self {
-            DeviceOp::Max => Op::Buffer,
+            DeviceOp::ReduceOp(_) => Op::Buffer,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
         }

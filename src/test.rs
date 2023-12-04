@@ -336,7 +336,7 @@ fn accel() {
     // dbg!(d.to_vec::<f32>());
 }
 #[test]
-fn max() {
+fn reduce_max() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -347,7 +347,7 @@ fn max() {
 
             // Launch Kernels:
             let x = tr::array(&x, &device);
-            let max = x.max();
+            let max = x.reduce_max();
             max.schedule();
             let graph = tr::compile();
             graph.launch(&device);
@@ -358,5 +358,32 @@ fn max() {
 
     max_test!(u8, 0..0xff);
     max_test!(i8, -128..127);
+    max_test!(f32, 0..100);
+}
+#[test]
+fn reduce_min() {
+    pretty_env_logger::try_init().ok();
+    let device = backend::Device::vulkan(0).unwrap();
+
+    macro_rules! max_test {
+        ($ty:ident, $iter:expr) => {
+            let x = ($iter).map(|i| i as $ty).collect::<Vec<_>>();
+            let reduced = x.to_vec().into_iter().reduce(|a, b| a.min(b)).unwrap();
+
+            // Launch Kernels:
+            let x = tr::array(&x, &device);
+            let min = x.reduce_min();
+            min.schedule();
+            let graph = tr::compile();
+            graph.launch(&device);
+
+            assert_eq!(min.to_vec::<$ty>()[0], reduced)
+        };
+    }
+
+    max_test!(u8, 0..0xff);
+    max_test!(i8, -128..127);
+    max_test!(i64, -128..127);
+    max_test!(u64, -128..127);
     max_test!(f32, 0..100);
 }

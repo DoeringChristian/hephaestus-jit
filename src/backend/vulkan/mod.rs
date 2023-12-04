@@ -189,7 +189,7 @@ impl backend::BackendDevice for VulkanDevice {
                             .submit_to_cbuffer(cb, &mut pool, *size, &buffers, &images, &accels);
                     }
                     PassOp::DeviceOp(op) => match op {
-                        DeviceOp::Max => {
+                        DeviceOp::ReduceOp(op) => {
                             let dst = buffers[0];
                             let src = buffers[1];
                             let ty = trace

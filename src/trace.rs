@@ -6,7 +6,7 @@ use std::thread::ThreadId;
 
 use crate::data::Data;
 use crate::extent::Extent;
-use crate::op::{DeviceOp, Op};
+use crate::op::{DeviceOp, Op, ReduceOp};
 use crate::vartype::{AsVarType, Instance, VarType};
 use crate::{backend, ir};
 use crate::{compiler, graph};
@@ -491,9 +491,6 @@ impl VarRef {
     pub fn ty(&self) -> VarType {
         with_trace(|t| t.var(self.id()).ty.clone())
     }
-    // pub fn size(&self) -> usize {
-    //     with_trace(|t| t.var(self.id()).size)
-    // }
     pub fn size(&self) -> usize {
         match self.extent() {
             Extent::Size(size) => size,
@@ -550,7 +547,7 @@ impl VarRef {
 
         let extent = pos.extent();
 
-        let (shape, channels) = self.extent().shape_and_channles();
+        let (_, channels) = self.extent().shape_and_channles();
         assert!(channels <= 4);
         let ty = self.ty();
         let ty = VarType::Vec {
@@ -618,12 +615,78 @@ impl VarRef {
 }
 // Reduction Operations
 impl VarRef {
-    pub fn max(&self) -> Self {
+    pub fn reduce_max(&self) -> Self {
         let extent = Extent::Size(1);
         let ty = self.ty();
         push_var(
             Var {
-                op: Op::DeviceOp(DeviceOp::Max),
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Max)),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+    pub fn reduce_min(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Min)),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+    pub fn reduce_sum(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Sum)),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+    pub fn reduce_prod(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Prod)),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+    pub fn reduce_or(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Or)),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+
+    pub fn reduce_and(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::And)),
                 ty,
                 extent,
                 ..Default::default()
