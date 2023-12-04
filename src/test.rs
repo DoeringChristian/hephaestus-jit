@@ -394,19 +394,19 @@ fn reduce_sum() {
     let device = backend::Device::vulkan(0).unwrap();
     use rand::Rng;
 
-    macro_rules! sum_test {
-        ($ty:ident, $range:expr, $num:expr, $add:expr) => {
+    macro_rules! rng_test {
+        ($ty:ident, $range:expr, $num:expr, $red:expr, $jit_red:ident) => {
             let mut rng = rand::thread_rng();
 
             let x = (0..$num)
                 .map(|_| rng.gen_range($range))
                 .map(|i| i as $ty)
                 .collect::<Vec<_>>();
-            let reduced = x.to_vec().into_iter().reduce(|a, b| $add(a, b)).unwrap();
+            let reduced = x.to_vec().into_iter().reduce(|a, b| $red(a, b)).unwrap();
 
             // Launch Kernels:
             let x = tr::array(&x, &device);
-            let sum = x.reduce_sum();
+            let sum = x.$jit_red();
             sum.schedule();
             let graph = tr::compile();
             graph.launch(&device);
@@ -415,9 +415,72 @@ fn reduce_sum() {
         };
     }
 
-    sum_test!(u8, 0..0xff, 1_000, u8::wrapping_add);
-    sum_test!(i8, -128..127, 1_000, i8::wrapping_add);
-    sum_test!(i64, -128..127, 1_000, i64::wrapping_add);
-    sum_test!(u64, 0..0xff, 1_000, u64::wrapping_add);
-    sum_test!(f32, 0..100, 1_000, std::ops::Add::add);
+    rng_test!(u8, 0..0xff, 1_000, u8::wrapping_add, reduce_sum);
+    rng_test!(i8, -128..127, 1_000, i8::wrapping_add, reduce_sum);
+    rng_test!(i64, -128..127, 1_000, i64::wrapping_add, reduce_sum);
+    rng_test!(u64, 0..0xff, 1_000, u64::wrapping_add, reduce_sum);
+    rng_test!(f32, 0..100, 1_000, std::ops::Add::add, reduce_sum);
+}
+
+#[test]
+fn reduce_prod() {
+    pretty_env_logger::try_init().ok();
+    let device = backend::Device::vulkan(0).unwrap();
+    use rand::Rng;
+
+    macro_rules! rng_test {
+        ($ty:ident, $range:expr, $num:expr, $red:expr, $jit_red:ident) => {
+            let mut rng = rand::thread_rng();
+
+            let x = (0..$num)
+                .map(|_| rng.gen_range($range))
+                .map(|i| i as $ty)
+                .collect::<Vec<_>>();
+            let reduced = x.to_vec().into_iter().reduce(|a, b| $red(a, b)).unwrap();
+
+            // Launch Kernels:
+            let x = tr::array(&x, &device);
+            let sum = x.$jit_red();
+            sum.schedule();
+            let graph = tr::compile();
+            graph.launch(&device);
+
+            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+        };
+    }
+    macro_rules! rng_test_float {
+        ($ty:ident, $range:expr, $num:expr, $map:expr , $red:expr, $jit_red:ident) => {
+            let mut rng = rand::thread_rng();
+
+            let x = (0..$num)
+                .map(|_| rng.gen_range($range))
+                .map(|x| x as $ty)
+                .map(|x| $map(x))
+                .collect::<Vec<_>>();
+            let reduced = x.to_vec().into_iter().reduce(|a, b| $red(a, b)).unwrap();
+
+            // Launch Kernels:
+            let x = tr::array(&x, &device);
+            let sum = x.$jit_red();
+            sum.schedule();
+            let graph = tr::compile();
+            graph.launch(&device);
+
+            let res = sum.to_vec::<$ty>()[0];
+            assert!((res == reduced) || (res.is_nan() && reduced.is_nan()));
+        };
+    }
+
+    rng_test!(u8, 0..0xff, 1_000, u8::wrapping_mul, reduce_prod);
+    rng_test!(i8, -128..127, 1_000, i8::wrapping_mul, reduce_prod);
+    rng_test!(i64, -128..127, 1_000, i64::wrapping_mul, reduce_prod);
+    rng_test!(u64, 0..0xff, 1_000, u64::wrapping_mul, reduce_prod);
+    rng_test_float!(
+        f32,
+        1..1000,
+        1_000,
+        |x: f32| (x * 0.01).log2(),
+        std::ops::Mul::mul,
+        reduce_prod
+    );
 }
