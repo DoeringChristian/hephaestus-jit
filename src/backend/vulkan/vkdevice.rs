@@ -95,6 +95,7 @@ impl VulkanDevice {
         let reduction = match op {
             ReduceOp::Max => "max(a, b)",
             ReduceOp::Min => "min(a, b)",
+            ReduceOp::Sum => "(a + b)",
             _ => todo!(),
         };
         let init = match op {
@@ -124,6 +125,20 @@ impl VulkanDevice {
                 VarType::U64 => "uint64_t(0xfffffffffffffffful)",
                 VarType::F32 => "float32_t(1.0/0.0)",
                 VarType::F64 => "float64_t(1.0/0.0)",
+                _ => todo!(),
+            },
+            ReduceOp::Sum => match ty {
+                // VarType::Bool => todo!(),
+                VarType::I8 => "int8_t(0)",
+                VarType::U8 => "uint8_t(0)",
+                VarType::I16 => "int16_t(0)",
+                VarType::U16 => "uint16_t(0)",
+                VarType::I32 => "int32_t(0)",
+                VarType::U32 => "uint32_t(0)",
+                VarType::I64 => "int64_t(0)",
+                VarType::U64 => "uint64_t(0)",
+                VarType::F32 => "float32_t(0)",
+                VarType::F64 => "float64_t(0)",
                 _ => todo!(),
             },
             _ => todo!(),

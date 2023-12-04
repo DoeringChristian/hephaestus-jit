@@ -365,7 +365,7 @@ fn reduce_min() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
-    macro_rules! max_test {
+    macro_rules! min_test {
         ($ty:ident, $iter:expr) => {
             let x = ($iter).map(|i| i as $ty).collect::<Vec<_>>();
             let reduced = x.to_vec().into_iter().reduce(|a, b| a.min(b)).unwrap();
@@ -381,9 +381,43 @@ fn reduce_min() {
         };
     }
 
-    max_test!(u8, 0..0xff);
-    max_test!(i8, -128..127);
-    max_test!(i64, -128..127);
-    max_test!(u64, -128..127);
-    max_test!(f32, 0..100);
+    min_test!(u8, 0..0xff);
+    min_test!(i8, -128..127);
+    min_test!(i64, -128..127);
+    min_test!(u64, 0..0xffff);
+    min_test!(f32, 0..100);
+}
+
+#[test]
+fn reduce_sum() {
+    pretty_env_logger::try_init().ok();
+    let device = backend::Device::vulkan(0).unwrap();
+    use rand::Rng;
+
+    macro_rules! sum_test {
+        ($ty:ident, $range:expr, $num:expr, $add:expr) => {
+            let mut rng = rand::thread_rng();
+
+            let x = (0..$num)
+                .map(|_| rng.gen_range($range))
+                .map(|i| i as $ty)
+                .collect::<Vec<_>>();
+            let reduced = x.to_vec().into_iter().reduce(|a, b| $add(a, b)).unwrap();
+
+            // Launch Kernels:
+            let x = tr::array(&x, &device);
+            let sum = x.reduce_sum();
+            sum.schedule();
+            let graph = tr::compile();
+            graph.launch(&device);
+
+            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+        };
+    }
+
+    sum_test!(u8, 0..0xff, 1_000, u8::wrapping_add);
+    sum_test!(i8, -128..127, 1_000, i8::wrapping_add);
+    sum_test!(i64, -128..127, 1_000, i64::wrapping_add);
+    sum_test!(u64, 0..0xff, 1_000, u64::wrapping_add);
+    sum_test!(f32, 0..100, 1_000, std::ops::Add::add);
 }
