@@ -1,6 +1,6 @@
 use crate::backend;
 
-/// Represents a variables extent
+/// Represents a Variables Extent.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum Extent {
     #[default]
@@ -8,7 +8,7 @@ pub enum Extent {
     Size(usize),
     DynSize {
         capacity: usize,
-        size_dep: usize,
+        size_dep: usize, // TODO: Need a better way to track size var
     },
     Texture {
         shape: [usize; 3],
