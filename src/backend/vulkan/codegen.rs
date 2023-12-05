@@ -696,7 +696,6 @@ impl SpirvBuilder {
                     let img = deps[0];
                     let coord = self.reg(deps[1]);
 
-                    // TODO: Where do we get that from?
                     let dim = match ir.var(img).op {
                         Op::TextureRef { dim } => match dim {
                             1 => spirv::Dim::Dim1D,
