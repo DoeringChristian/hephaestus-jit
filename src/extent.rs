@@ -63,4 +63,9 @@ impl Extent {
             _ => todo!(),
         }
     }
+    pub fn texture_dim(&self) -> usize {
+        let (shape, _) = self.shape_and_channles();
+        let dim = shape.iter().take_while(|d| **d > 0).count();
+        dim
+    }
 }

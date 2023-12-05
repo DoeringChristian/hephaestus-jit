@@ -115,7 +115,11 @@ impl SpirvBuilder {
         self.capability(spirv::Capability::Float16);
         self.capability(spirv::Capability::Float64);
 
-        self.capability(spirv::Capability::RayQueryKHR);
+        // Add ray query capability only if it is needed
+        // TODO: Refactor into properties?
+        if ir.vars.iter().any(|var| var.op == Op::TraceRay) {
+            self.capability(spirv::Capability::RayQueryKHR);
+        }
 
         self.capability(spirv::Capability::StorageUniformBufferBlock16);
 
@@ -693,7 +697,15 @@ impl SpirvBuilder {
                     let coord = self.reg(deps[1]);
 
                     // TODO: Where do we get that from?
-                    let dim = spirv::Dim::Dim2D;
+                    let dim = match ir.var(img).op {
+                        Op::TextureRef { dim } => match dim {
+                            1 => spirv::Dim::Dim1D,
+                            2 => spirv::Dim::Dim2D,
+                            3 => spirv::Dim::Dim3D,
+                            _ => todo!(),
+                        },
+                        _ => todo!(),
+                    };
 
                     let img_idx = ir.var(img).data;
 

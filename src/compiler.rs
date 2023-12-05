@@ -162,9 +162,10 @@ impl Compiler {
             }
             Op::Texture => {
                 let texture_id = self.push_texture(id);
+                let dim = trace.var(id).extent.texture_dim();
                 self.ir.push_var(
                     ir::Var {
-                        op: ir::Op::TextureRef,
+                        op: ir::Op::TextureRef { dim },
                         ty: var.ty.clone(),
                         data: texture_id as _,
                         ..Default::default()

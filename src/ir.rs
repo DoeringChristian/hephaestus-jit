@@ -48,7 +48,9 @@ pub enum Op {
 
     // Operations that are only available in IR
     BufferRef,
-    TextureRef,
+    TextureRef {
+        dim: usize,
+    }, // not sure if it's a good idea to put it here
     AccelRef,
 }
 
