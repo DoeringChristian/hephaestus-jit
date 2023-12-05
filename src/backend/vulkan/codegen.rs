@@ -8,6 +8,10 @@ use crate::vartype::VarType;
 use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
 
+pub const BUFFER_BINDING: u32 = 0;
+pub const TEXTURE_BINDING: u32 = 1;
+pub const ACCEL_BINDING: u32 = 2;
+
 // fn ty(ty: &VarType) ->
 
 // #[derive(Debug, thiserror::Error)]
@@ -44,6 +48,12 @@ fn isint(ty: &VarType) -> bool {
     }
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct SamplerDesc {
+    ty: VarType,
+    dim: spirv::Dim,
+}
+
 #[derive(Default)]
 /// A wrapper arround `dr::Builder` to generate spriv code.
 ///
@@ -52,11 +62,21 @@ fn isint(ty: &VarType) -> bool {
 /// * `glsl_ext`: GLSL_EXT libarary loaded by default
 struct SpirvBuilder {
     b: dr::Builder,
-    // spirv_vars: Vec<u32>,
     spriv_regs: HashMap<VarId, u32>,
+
+    buffer_arrays: HashMap<u32, u32>,
+    accel_var: Option<u32>,
+    samplers: HashMap<SamplerDesc, u32>,
+
     glsl_ext: u32,
     function_block: usize,
     interface_vars: Vec<u32>,
+
+    types: HashMap<VarType, u32>,
+
+    n_buffers: usize,
+    n_textures: usize,
+    n_accels: usize,
 }
 impl Deref for SpirvBuilder {
     type Target = dr::Builder;
@@ -78,6 +98,9 @@ impl SpirvBuilder {
     pub fn assemble(&mut self, ir: &IR, entry_point: &str) -> Result<(), dr::Error> {
         // let param_layout = ParamLayout::generate(trace);
         // dbg!(&param_layout);
+        self.n_buffers = ir.n_buffers;
+        self.n_textures = ir.n_textures;
+        self.n_accels = ir.n_accels;
 
         self.id();
 
@@ -118,8 +141,7 @@ impl SpirvBuilder {
             [dr::Operand::BuiltIn(spirv::BuiltIn::GlobalInvocationId)],
         );
 
-        let storage_vars = self.assemble_storage_vars(ir);
-        let samplers = self.assemble_samplers(ir);
+        // let storage_vars = self.assemble_storage_vars(ir);
 
         let func = self.begin_function(
             void,
@@ -138,8 +160,6 @@ impl SpirvBuilder {
 
         let interface = [global_invocation_id]
             .into_iter()
-            .chain(storage_vars.into_iter())
-            .chain(samplers.into_iter())
             .chain(self.interface_vars.drain(..))
             .collect::<Vec<_>>();
 
@@ -275,189 +295,202 @@ impl SpirvBuilder {
         Ok(())
     }
     fn spirv_ty(&mut self, ty: &VarType) -> u32 {
-        match ty {
-            VarType::Void => self.type_void(),
-            VarType::Bool => self.type_bool(),
-            VarType::I8 => self.type_int(8, 1),
-            VarType::U8 => self.type_int(8, 0),
-            VarType::I16 => self.type_int(16, 1),
-            VarType::U16 => self.type_int(16, 0),
-            VarType::I32 => self.type_int(32, 1),
-            VarType::U32 => self.type_int(32, 0),
-            VarType::I64 => self.type_int(64, 1),
-            VarType::U64 => self.type_int(64, 0),
-            VarType::F32 => self.type_float(32),
-            VarType::F64 => self.type_float(64),
-            VarType::Vec { ty, num } => {
-                let ty = self.spirv_ty(ty);
-                self.type_vector(ty, *num as _)
-            }
-            VarType::Struct { tys } => {
-                let spv_tys = tys.iter().map(|ty| self.spirv_ty(ty)).collect::<Vec<_>>();
-                let struct_ty = self.type_struct(spv_tys);
-                for i in 0..tys.len() {
-                    let offset = ty.offset(i);
-                    self.member_decorate(
-                        struct_ty,
-                        i as _,
-                        spirv::Decoration::Offset,
-                        [dr::Operand::LiteralInt32(offset as _)],
-                    );
-                    match tys[i] {
-                        VarType::Mat { .. } => {
-                            self.member_decorate(struct_ty, i as _, spirv::Decoration::RowMajor, [])
-                        }
-                        _ => {}
-                    }
+        // Deduplicate types
+        if let Some(ty) = self.types.get(ty) {
+            *ty
+        } else {
+            let spirv_ty = match ty {
+                VarType::Void => self.type_void(),
+                VarType::Bool => self.type_bool(),
+                VarType::I8 => self.type_int(8, 1),
+                VarType::U8 => self.type_int(8, 0),
+                VarType::I16 => self.type_int(16, 1),
+                VarType::U16 => self.type_int(16, 0),
+                VarType::I32 => self.type_int(32, 1),
+                VarType::U32 => self.type_int(32, 0),
+                VarType::I64 => self.type_int(64, 1),
+                VarType::U64 => self.type_int(64, 0),
+                VarType::F32 => self.type_float(32),
+                VarType::F64 => self.type_float(64),
+                VarType::Vec { ty, num } => {
+                    let ty = self.spirv_ty(ty);
+                    self.type_vector(ty, *num as _)
                 }
-                struct_ty
-            }
-            VarType::Mat { ty, cols, rows } => {
-                let vec_ty = self.spirv_ty(&VarType::Vec {
-                    ty: ty.clone(),
-                    num: *rows,
-                });
-                self.type_matrix(vec_ty, *cols as _)
-            }
-            VarType::Array { ty, num } => {
-                let ty = self.spirv_ty(ty);
-                let u32_ty = self.type_int(32, 0);
-                let num = self.constant_u32(u32_ty, *num as _);
-                self.type_array(ty, num)
-            }
-        }
-    }
-    fn assemble_samplers(&mut self, ir: &IR) -> Vec<u32> {
-        // TODO: no longer sure why this has it's own function
-        ir.var_ids()
-            .filter_map(|varid| {
-                let var = ir.var(varid);
-                match var.op {
-                    Op::TextureRef => {
-                        let ty = self.spirv_ty(&var.ty);
-                        let ty_image = self.type_image(
-                            ty,
-                            spirv::Dim::Dim2D,
-                            0,
-                            0,
-                            0,
-                            1,
-                            spirv::ImageFormat::Unknown,
-                            None,
-                        );
-                        let ty_sampled_image = self.type_sampled_image(ty_image);
-
-                        let ty_int = self.type_int(32, 0);
-                        let length = self.constant_u32(ty_int, ir.n_textures as _);
-
-                        let ty_array = self.type_array(ty_sampled_image, length);
-                        let ty_ptr =
-                            self.type_pointer(None, spirv::StorageClass::UniformConstant, ty_array);
-
-                        let res =
-                            self.variable(ty_ptr, None, spirv::StorageClass::UniformConstant, None);
-
-                        self.decorate(
-                            res,
-                            spirv::Decoration::DescriptorSet,
-                            [dr::Operand::LiteralInt32(0)],
-                        );
-                        self.decorate(
-                            res,
-                            spirv::Decoration::Binding,
-                            [dr::Operand::LiteralInt32(1)],
-                        );
-
-                        self.spriv_regs.insert(varid, res);
-                        dbg!(res);
-                        Some(res)
-                    }
-                    _ => None,
-                }
-            })
-            .collect()
-    }
-    fn assemble_storage_vars(&mut self, ir: &IR) -> Vec<u32> {
-        ir.var_ids()
-            .filter_map(|varid| {
-                let var = ir.var(varid);
-                match var.op {
-                    Op::BufferRef => {
-                        let ty = match var.ty {
-                            VarType::Bool => &VarType::U8,
-                            _ => &var.ty,
-                        };
-                        let spriv_ty = self.spirv_ty(&ty);
-                        let u32_ty = self.type_int(32, 0);
-                        let array_len = self.constant_u32(u32_ty, ir.n_buffers as _);
-                        let rta_ty = self.type_runtime_array(spriv_ty);
-                        let struct_ty = self.type_struct([rta_ty]);
-                        let array_ty = self.type_array(struct_ty, array_len);
-
-                        self.decorate(struct_ty, spirv::Decoration::Block, []);
+                VarType::Struct { tys } => {
+                    let spv_tys = tys.iter().map(|ty| self.spirv_ty(ty)).collect::<Vec<_>>();
+                    let struct_ty = self.type_struct(spv_tys);
+                    for i in 0..tys.len() {
+                        let offset = ty.offset(i);
                         self.member_decorate(
                             struct_ty,
-                            0,
+                            i as _,
                             spirv::Decoration::Offset,
-                            [dr::Operand::LiteralInt32(0)],
+                            [dr::Operand::LiteralInt32(offset as _)],
                         );
-                        self.decorate(
-                            rta_ty,
-                            rspirv::spirv::Decoration::ArrayStride,
-                            [dr::Operand::LiteralInt32(ty.size() as _)],
-                        );
-
-                        let ptr_ty =
-                            self.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
-
-                        // let dst = self.get(varid);
-
-                        let res =
-                            self.variable(ptr_ty, None, spirv::StorageClass::StorageBuffer, None);
-
-                        self.decorate(
-                            res,
-                            spirv::Decoration::DescriptorSet,
-                            [dr::Operand::LiteralInt32(0)],
-                        );
-                        self.decorate(
-                            res,
-                            spirv::Decoration::Binding,
-                            [dr::Operand::LiteralInt32(0)],
-                        );
-
-                        self.spriv_regs.insert(varid, res);
-                        dbg!(res);
-                        Some(res)
+                        match tys[i] {
+                            VarType::Mat { .. } => self.member_decorate(
+                                struct_ty,
+                                i as _,
+                                spirv::Decoration::RowMajor,
+                                [],
+                            ),
+                            _ => {}
+                        }
                     }
-                    Op::AccelRef => {
-                        let accel_ty = self.type_acceleration_structure_khr();
-                        let u32_ty = self.type_int(32, 0);
-                        let array_len = self.constant_u32(u32_ty, ir.n_accels as _);
-                        let array_ty = self.type_array(accel_ty, array_len);
-                        let ptr_ty =
-                            self.type_pointer(None, spirv::StorageClass::UniformConstant, array_ty);
-                        let res =
-                            self.variable(ptr_ty, None, spirv::StorageClass::UniformConstant, None);
-
-                        self.decorate(
-                            res,
-                            spirv::Decoration::DescriptorSet,
-                            [dr::Operand::LiteralInt32(0)],
-                        );
-                        self.decorate(
-                            res,
-                            spirv::Decoration::Binding,
-                            [dr::Operand::LiteralInt32(2)],
-                        );
-                        self.spriv_regs.insert(varid, res);
-
-                        Some(res)
-                    }
-                    _ => None,
+                    struct_ty
                 }
-            })
-            .collect()
+                VarType::Mat { ty, cols, rows } => {
+                    let vec_ty = self.spirv_ty(&VarType::Vec {
+                        ty: ty.clone(),
+                        num: *rows,
+                    });
+                    self.type_matrix(vec_ty, *cols as _)
+                }
+                VarType::Array { ty, num } => {
+                    let ty = self.spirv_ty(ty);
+                    let u32_ty = self.type_int(32, 0);
+                    let num = self.constant_u32(u32_ty, *num as _);
+                    self.type_array(ty, num)
+                }
+            };
+            self.types.insert(ty.clone(), spirv_ty);
+            spirv_ty
+        }
+    }
+    fn get_samplers(&mut self, desc: SamplerDesc) -> u32 {
+        if let Some(sampler) = self.samplers.get(&desc) {
+            *sampler
+        } else {
+            let n_textures = self.n_textures;
+            let ty = self.spirv_ty(&desc.ty);
+            let ty_image =
+                self.type_image(ty, desc.dim, 0, 0, 0, 1, spirv::ImageFormat::Unknown, None);
+            let ty_sampled_image = self.type_sampled_image(ty_image);
+
+            let ty_int = self.type_int(32, 0);
+            let length = self.constant_u32(ty_int, n_textures as _);
+
+            let ty_array = self.type_array(ty_sampled_image, length);
+            let ty_ptr = self.type_pointer(None, spirv::StorageClass::UniformConstant, ty_array);
+
+            let res = self
+                .with_module(|s| {
+                    let res = s.variable(ty_ptr, None, spirv::StorageClass::UniformConstant, None);
+
+                    s.decorate(
+                        res,
+                        spirv::Decoration::DescriptorSet,
+                        [dr::Operand::LiteralInt32(0)],
+                    );
+                    s.decorate(
+                        res,
+                        spirv::Decoration::Binding,
+                        [dr::Operand::LiteralInt32(1)],
+                    );
+                    Ok(res)
+                })
+                .unwrap();
+
+            self.samplers.insert(desc.clone(), res);
+            self.interface_vars.push(res);
+            res
+        }
+    }
+    /// Adds the AccelerationStructure array variable to the builder
+    /// TODO: rename
+    fn get_accel_array(&mut self) -> u32 {
+        if let Some(res) = &self.accel_var {
+            *res
+        } else {
+            let n_accels = self.n_accels;
+            let accel_ty = self.type_acceleration_structure_khr();
+            let u32_ty = self.type_int(32, 0);
+            let array_len = self.constant_u32(u32_ty, n_accels as _);
+            let array_ty = self.type_array(accel_ty, array_len);
+            let ptr_ty = self.type_pointer(None, spirv::StorageClass::UniformConstant, array_ty);
+            let res = self
+                .with_module(|s| {
+                    let res = s.variable(ptr_ty, None, spirv::StorageClass::UniformConstant, None);
+
+                    s.decorate(
+                        res,
+                        spirv::Decoration::DescriptorSet,
+                        [dr::Operand::LiteralInt32(0)],
+                    );
+                    s.decorate(
+                        res,
+                        spirv::Decoration::Binding,
+                        [dr::Operand::LiteralInt32(ACCEL_BINDING)],
+                    );
+                    s.interface_vars.push(res);
+                    Ok(res)
+                })
+                .unwrap();
+            self.accel_var = Some(res);
+            res
+        }
+    }
+    /// Returns the variable, representing the binding to which the buffers are bound of the type
+    /// `ty`.
+    /// It only inserts the code if the variable does not exist for that type.
+    ///
+    ///
+    /// * `ty`: Type for which to generate the buffer array
+    /// TODO: rename
+    fn get_buffer_array(&mut self, ty: &VarType) -> u32 {
+        let ty = match ty {
+            VarType::Bool => &VarType::U8,
+            _ => ty,
+        };
+        let spirv_ty = self.spirv_ty(&ty);
+        let n_buffers = self.n_buffers;
+
+        if self.buffer_arrays.contains_key(&spirv_ty) {
+            self.buffer_arrays[&spirv_ty]
+        } else {
+            let u32_ty = self.type_int(32, 0);
+            let array_len = self.constant_u32(u32_ty, n_buffers as _);
+            let rta_ty = self.type_runtime_array(spirv_ty);
+            let struct_ty = self.type_struct([rta_ty]);
+            let array_ty = self.type_array(struct_ty, array_len);
+
+            self.decorate(struct_ty, spirv::Decoration::Block, []);
+            self.member_decorate(
+                struct_ty,
+                0,
+                spirv::Decoration::Offset,
+                [dr::Operand::LiteralInt32(0)],
+            );
+            self.decorate(
+                rta_ty,
+                rspirv::spirv::Decoration::ArrayStride,
+                [dr::Operand::LiteralInt32(ty.size() as _)],
+            );
+
+            let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
+
+            let res = self
+                .with_module(|s| {
+                    let res = s.variable(ptr_ty, None, spirv::StorageClass::StorageBuffer, None);
+
+                    s.decorate(
+                        res,
+                        spirv::Decoration::DescriptorSet,
+                        [dr::Operand::LiteralInt32(0)],
+                    );
+                    s.decorate(
+                        res,
+                        spirv::Decoration::Binding,
+                        [dr::Operand::LiteralInt32(BUFFER_BINDING)],
+                    );
+                    Ok(res)
+                })
+                .unwrap();
+
+            self.buffer_arrays.insert(spirv_ty, res);
+            self.interface_vars.push(res);
+            res
+        }
     }
 
     fn assemble_vars(&mut self, ir: &IR, global_invocation_id: u32) -> Result<(), dr::Error> {
@@ -591,7 +624,7 @@ impl SpirvBuilder {
                     let u32_ty = self.type_int(32, 0);
                     let i32_ty = self.type_int(32, 1);
 
-                    let accels = self.reg(accels);
+                    let accels = self.get_accel_array();
                     let accel_idx = self.constant_u32(u32_ty, accel_idx as _);
                     let accel_ty = self.type_acceleration_structure_khr();
                     let accel_ptr_ty =
@@ -659,19 +692,14 @@ impl SpirvBuilder {
                     let img = deps[0];
                     let coord = self.reg(deps[1]);
 
+                    // TODO: Where do we get that from?
+                    let dim = spirv::Dim::Dim2D;
+
                     let img_idx = ir.var(img).data;
 
                     let ty = self.spirv_ty(ir.var_ty(img));
-                    let ty_image = self.type_image(
-                        ty,
-                        spirv::Dim::Dim2D,
-                        0,
-                        0,
-                        0,
-                        1,
-                        spirv::ImageFormat::Unknown,
-                        None,
-                    );
+                    let ty_image =
+                        self.type_image(ty, dim, 0, 0, 0, 1, spirv::ImageFormat::Unknown, None);
                     let ty_sampled_image = self.type_sampled_image(ty_image);
                     let ptr_ty = self.type_pointer(
                         None,
@@ -682,8 +710,11 @@ impl SpirvBuilder {
                     let int_ty = self.type_int(32, 0);
                     let img_idx = self.constant_u32(int_ty, img_idx as _);
 
-                    let img = self.reg(img);
-                    let ptr = self.access_chain(ptr_ty, None, img, [img_idx])?;
+                    let samplers = self.get_samplers(SamplerDesc {
+                        ty: ir.var_ty(img).clone(),
+                        dim,
+                    });
+                    let ptr = self.access_chain(ptr_ty, None, samplers, [img_idx])?;
 
                     let ty_v4 = self.type_vector(ty, 4);
 
@@ -722,7 +753,7 @@ impl SpirvBuilder {
                     let buffer = self.constant_u32(int_ty, buffer_idx as _);
                     let elem = self.constant_u32(int_ty, 0);
 
-                    let dst = self.reg(dst);
+                    let buffer_array = self.get_buffer_array(&ty);
                     let idx = self.reg(idx);
                     let src = self.reg(src);
 
@@ -733,7 +764,8 @@ impl SpirvBuilder {
 
                         let cond = self.reg(*cond);
                         self.if_block(cond, |s| {
-                            let ptr = s.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
+                            let ptr =
+                                s.access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])?;
 
                             match ty {
                                 VarType::Bool => {
@@ -753,7 +785,8 @@ impl SpirvBuilder {
                             Ok(())
                         })?;
                     } else {
-                        let ptr = self.access_chain(ptr_ty, None, dst, [buffer, elem, idx])?;
+                        let ptr =
+                            self.access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])?;
 
                         match ty {
                             VarType::Bool => {
@@ -792,7 +825,8 @@ impl SpirvBuilder {
                     let buffer_idx = self.constant_u32(int_ty, buffer_idx as _);
                     let elem = self.constant_u32(int_ty, 0);
 
-                    let src = self.reg(src);
+                    let buffer_array = self.get_buffer_array(&ty);
+                    // let src = self.reg(src);
                     let idx = self.reg(idx);
 
                     // We do not need variables if the gather operation is not conditioned.
@@ -817,7 +851,12 @@ impl SpirvBuilder {
                         })?;
 
                         self.if_block(cond, |s| {
-                            let ptr = s.access_chain(ptr_ty, None, src, [buffer_idx, elem, idx])?;
+                            let ptr = s.access_chain(
+                                ptr_ty,
+                                None,
+                                buffer_array,
+                                [buffer_idx, elem, idx],
+                            )?;
 
                             let res = match var.ty {
                                 VarType::Bool => {
@@ -836,7 +875,8 @@ impl SpirvBuilder {
                         })?;
                         self.load(spirv_ty, None, res_var, None, None)?
                     } else {
-                        let ptr = self.access_chain(ptr_ty, None, src, [buffer_idx, elem, idx])?;
+                        let ptr =
+                            self.access_chain(ptr_ty, None, buffer_array, [buffer_idx, elem, idx])?;
 
                         match var.ty {
                             VarType::Bool => {

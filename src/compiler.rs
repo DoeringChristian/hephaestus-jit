@@ -160,7 +160,7 @@ impl Compiler {
                     [],
                 )
             }
-            Op::Texture { .. } => {
+            Op::Texture => {
                 let texture_id = self.push_texture(id);
                 self.ir.push_var(
                     ir::Var {
