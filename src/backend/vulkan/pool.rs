@@ -112,7 +112,9 @@ impl Pool {
         self.buffers.lease(&self.device, &info)
     }
     pub fn image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
-        unsafe { self.device.create_image_view(info, None).unwrap() }
+        let view = unsafe { self.device.create_image_view(info, None).unwrap() };
+        self.image_views.push(view);
+        view
     }
     pub fn desc_sets(&mut self, set_layouts: &[vk::DescriptorSetLayout]) -> &[vk::DescriptorSet] {
         let desc_sizes = [
