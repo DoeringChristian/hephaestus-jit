@@ -226,6 +226,7 @@ pub fn assemble_var(
                 Bop::Div => todo!(),
                 Bop::Min => todo!(),
                 Bop::Max => todo!(),
+                _ => todo!(),
             }
         }
         Op::Scatter => {

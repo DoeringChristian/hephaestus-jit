@@ -597,6 +597,198 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
+                        Bop::And => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.bitwise_and(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                self.logical_and(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Or => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.bitwise_or(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                self.logical_or(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Xor => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.bitwise_xor(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                let n_lhs = self.logical_not(ty, None, lhs)?;
+                                let n_rhs = self.logical_not(ty, None, rhs)?;
+                                let t0 = self.logical_and(ty, None, n_lhs, rhs)?;
+                                let t1 = self.logical_and(ty, None, lhs, n_rhs)?;
+                                self.logical_or(ty, Some(res), t0, t1)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Shl => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.shift_left_logical(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Shr => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.shift_left_logical(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Eq => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.i_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_ord_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                self.logical_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Neq => match var.ty {
+                            VarType::U8
+                            | VarType::I8
+                            | VarType::U16
+                            | VarType::I16
+                            | VarType::U32
+                            | VarType::I32
+                            | VarType::U64
+                            | VarType::I64 => {
+                                self.i_not_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_ord_not_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                self.logical_not_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Lt => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.b.s_less_than(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                self.u_less_than(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_ord_less_than(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                let n_lhs = self.logical_not(ty, None, lhs)?;
+                                self.logical_and(ty, Some(res), n_lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Le => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.b.s_less_than_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                self.u_less_than_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_ord_less_than_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                let n_lhs = self.logical_not(ty, None, lhs)?;
+                                let n_rhs = self.logical_not(ty, None, rhs)?;
+                                let t0 = self.logical_and(ty, None, n_lhs, rhs)?;
+                                let t1 = self.logical_and(ty, None, lhs, rhs)?;
+                                let t2 = self.logical_and(ty, None, n_lhs, n_rhs)?;
+
+                                let t3 = self.logical_or(ty, None, t0, t1)?;
+                                self.logical_or(ty, Some(res), t3, t2)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Gt => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.b.s_greater_than(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                self.u_greater_than(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_ord_greater_than(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                let n_rhs = self.logical_not(ty, None, lhs)?;
+                                self.logical_and(ty, Some(res), lhs, n_rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Ge => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.b.s_greater_than_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                self.u_greater_than_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_ord_greater_than_equal(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::Bool => {
+                                let n_lhs = self.logical_not(ty, None, lhs)?;
+                                let n_rhs = self.logical_not(ty, None, rhs)?;
+                                let t0 = self.logical_and(ty, None, lhs, n_rhs)?;
+                                let t1 = self.logical_and(ty, None, lhs, rhs)?;
+                                let t2 = self.logical_and(ty, None, n_lhs, n_rhs)?;
+
+                                let t3 = self.logical_or(ty, None, t0, t1)?;
+                                self.logical_or(ty, Some(res), t3, t2)?;
+                            }
+                            _ => todo!(),
+                        },
                     };
                     res
                 }

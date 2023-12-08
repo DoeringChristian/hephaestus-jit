@@ -17,12 +17,42 @@ pub struct Var {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Bop {
+    // Normal Binary Operations
     Add,
     Sub,
     Mul,
     Div,
     Min,
     Max,
+    // Bitwise
+    And,
+    Or,
+    Xor,
+    // Shift
+    Shl,
+    Shr,
+    // Comparisons
+    Eq,
+    Neq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Uop {
+    // Casting
+    Cast,
+    BitCast,
+    // Arithmetic
+    Neg,
+    Sqrt,
+    Abs,
+    Sin,
+    Cos,
+    Exp2,
+    Log2,
 }
 
 /// Intermediary Representation Specific Operations
@@ -45,6 +75,7 @@ pub enum Op {
     TraceRay,
 
     Bop(Bop),
+    Uop(Uop),
 
     // Operations that are only available in IR
     BufferRef,
