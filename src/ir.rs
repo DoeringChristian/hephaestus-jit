@@ -31,6 +31,7 @@ pub enum Bop {
     // Shift
     Shl,
     Shr,
+
     // Comparisons
     Eq,
     Neq,

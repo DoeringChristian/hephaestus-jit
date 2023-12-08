@@ -614,3 +614,25 @@ fn reduce_or() {
     test_bool(&[false, false, false, true]);
     test_bool(&[false, false, false, false]);
 }
+
+#[test]
+fn uop_cos() {
+    pretty_env_logger::try_init().ok();
+
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let x = [0., 1., std::f32::consts::PI];
+
+    let reference = x.iter().map(|x| x.cos()).collect::<Vec<_>>();
+
+    let x = tr::array(&x, &device);
+    let pred = x.cos();
+    pred.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    for (reference, pred) in reference.into_iter().zip(pred.to_vec::<f32>().into_iter()) {
+        approx::assert_abs_diff_eq!(reference, pred, epsilon = 0.001);
+    }
+}

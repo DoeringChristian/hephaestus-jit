@@ -383,23 +383,124 @@ impl VarRef {
         with_trace(|trace| trace.entries[self.id().0].rc)
     }
 }
-impl VarRef {
-    pub fn add(&self, other: &VarRef) -> VarRef {
-        assert_eq!(self._thread_id, std::thread::current().id());
-        assert_eq!(other._thread_id, std::thread::current().id());
-        let extent = resulting_extent([self, other]);
+macro_rules! bop {
+    ($op:ident $(-> $result_type:expr)?) => {
+        paste::paste! {
+            pub fn $op(&self, other: &VarRef) -> VarRef {
+                assert_eq!(self._thread_id, std::thread::current().id());
+                assert_eq!(other._thread_id, std::thread::current().id());
 
-        let ty = self.ty();
+                let extent = resulting_extent([self, other]);
+
+                let ty = self.ty();
+                assert_eq!(other.ty(), ty);
+
+                $(let ty = $result_type;)?
+                push_var(
+                    Var {
+                        op: Op::KernelOp(ir::Op::Bop(ir::Bop::[<$op:camel>])),
+                        extent,
+                        ty,
+                        ..Default::default()
+                    },
+                    [self, other],
+                )
+            }
+        }
+    };
+}
+macro_rules! uop {
+    ($op:ident $(-> $result_type:expr)?) => {
+        paste::paste! {
+            pub fn $op(&self) -> VarRef {
+                assert_eq!(self._thread_id, std::thread::current().id());
+
+                let extent = resulting_extent([self]);
+
+                let ty = self.ty();
+
+                $(let ty = $result_type;)?
+                push_var(
+                    Var {
+                        op: Op::KernelOp(ir::Op::Uop(ir::Uop::[<$op:camel>])),
+                        extent,
+                        ty,
+                        ..Default::default()
+                    },
+                    [self],
+                )
+            }
+        }
+    };
+}
+impl VarRef {
+    // Binary operations returing the same type
+    bop!(add);
+    bop!(sub);
+    bop!(mul);
+    bop!(div);
+    bop!(min);
+    bop!(max);
+
+    // Bitwise
+    // TODO: more asserts for binary operations
+    bop!(and);
+    bop!(or);
+    bop!(xor);
+
+    // Shift
+    // TODO: more asserts for shift operations
+    bop!(shl);
+    bop!(shr);
+
+    // Comparisons
+    bop!(eq -> VarType::Bool);
+    bop!(neq -> VarType::Bool);
+    bop!(lt -> VarType::Bool);
+    bop!(le -> VarType::Bool);
+    bop!(gt -> VarType::Bool);
+    bop!(ge -> VarType::Bool);
+
+    uop!(neg);
+    uop!(sqrt);
+    uop!(abs);
+    uop!(sin);
+    uop!(cos);
+    uop!(exp2);
+    uop!(log2);
+
+    pub fn cast(&self, ty: VarType) -> Self {
+        assert_eq!(self._thread_id, std::thread::current().id());
+
+        let extent = resulting_extent([self]);
+
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Bop(ir::Bop::Add)),
+                op: Op::KernelOp(ir::Op::Uop(ir::Uop::Cast)),
                 extent,
                 ty,
                 ..Default::default()
             },
-            [self, other],
+            [self],
         )
     }
+
+    pub fn bitcast(&self, ty: VarType) -> Self {
+        assert_eq!(self._thread_id, std::thread::current().id());
+
+        let extent = resulting_extent([self]);
+
+        push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Uop(ir::Uop::BitCast)),
+                extent,
+                ty,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
+
     pub fn gather(&self, idx: &Self) -> Self {
         self.schedule();
         schedule_eval();

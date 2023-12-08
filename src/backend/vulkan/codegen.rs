@@ -792,6 +792,124 @@ impl SpirvBuilder {
                     };
                     res
                 }
+                Op::Uop(op) => {
+                    // let res = self.id();
+                    let src = self.reg(deps[0]);
+                    let ty = &var.ty;
+                    let src_ty = &ir.var(deps[0]).ty;
+                    let spirv_ty = self.spirv_ty(&var.ty);
+
+                    match op {
+                        crate::ir::Uop::Cast => match (src_ty, ty) {
+                            (
+                                VarType::F32 | VarType::F64,
+                                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
+                            ) => self.convert_f_to_u(spirv_ty, None, src)?,
+                            (
+                                VarType::F32 | VarType::F64,
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
+                            ) => self.convert_f_to_s(spirv_ty, None, src)?,
+                            (
+                                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
+                                VarType::F32 | VarType::F64,
+                            ) => self.convert_u_to_f(spirv_ty, None, src)?,
+                            (
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
+                                VarType::F32 | VarType::F64,
+                            ) => self.convert_s_to_f(spirv_ty, None, src)?,
+                            (
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
+                            ) => self.s_convert(spirv_ty, None, src)?,
+                            (
+                                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
+                                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
+                            ) => self.u_convert(spirv_ty, None, src)?,
+                            (
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
+                                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
+                            ) => {
+                                let s = self.s_convert(spirv_ty, None, src)?;
+                                todo!("Implemente S->U cast")
+                            }
+                            (
+                                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
+                            ) => {
+                                let u = self.u_convert(spirv_ty, None, src)?;
+                                todo!("Implemente U->S cast")
+                            }
+                            _ => todo!(),
+                        },
+                        crate::ir::Uop::BitCast => self.bitcast(spirv_ty, None, src)?,
+                        crate::ir::Uop::Neg => match ty {
+                            VarType::Bool => self.logical_not(spirv_ty, None, src)?,
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.s_negate(spirv_ty, None, src)?
+                            }
+                            VarType::F32 | VarType::F64 => self.f_negate(spirv_ty, None, src)?,
+                            _ => todo!(),
+                        },
+                        crate::ir::Uop::Sqrt => {
+                            let res = self.id();
+                            glsl_ext!(self; res: spirv_ty = Sqrt, src);
+                            res
+                        }
+                        crate::ir::Uop::Abs => {
+                            let res = self.id();
+                            match ty {
+                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                    glsl_ext!(self; res: spirv_ty = SAbs, src);
+                                }
+                                VarType::F32 | VarType::F64 => {
+                                    glsl_ext!(self; res: spirv_ty = FAbs, src);
+                                }
+                                _ => todo!(),
+                            };
+                            res
+                        }
+                        crate::ir::Uop::Sin => {
+                            let res = self.id();
+                            match ty {
+                                VarType::F32 | VarType::F64 => {
+                                    glsl_ext!(self; res: spirv_ty = Sin, src);
+                                }
+                                _ => todo!(),
+                            }
+                            res
+                        }
+                        crate::ir::Uop::Cos => {
+                            let res = self.id();
+                            match ty {
+                                VarType::F32 | VarType::F64 => {
+                                    glsl_ext!(self; res: spirv_ty = Cos, src);
+                                }
+                                _ => todo!(),
+                            }
+                            res
+                        }
+                        crate::ir::Uop::Exp2 => {
+                            let res = self.id();
+                            match ty {
+                                VarType::F32 | VarType::F64 => {
+                                    glsl_ext!(self; res: spirv_ty = Exp2, src);
+                                }
+                                _ => todo!(),
+                            }
+                            res
+                        }
+                        crate::ir::Uop::Log2 => {
+                            let res = self.id();
+                            match ty {
+                                VarType::F32 | VarType::F64 => {
+                                    glsl_ext!(self; res: spirv_ty = Log2, src);
+                                }
+                                _ => todo!(),
+                            }
+                            res
+                        }
+                    }
+                }
                 Op::Select => {
                     let ty = self.spirv_ty(&var.ty);
                     let cond = self.reg(deps[0]);

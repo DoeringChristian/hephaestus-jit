@@ -99,6 +99,43 @@ impl VarType {
             VarType::Array { ty, num } => ty.alignment(),
         }
     }
+    pub fn is_int(&self) -> bool {
+        match self {
+            VarType::I8
+            | VarType::U8
+            | VarType::I16
+            | VarType::U16
+            | VarType::I32
+            | VarType::U32
+            | VarType::I64
+            | VarType::U64 => true,
+            _ => false,
+        }
+    }
+    pub fn is_sint(&self) -> bool {
+        match self {
+            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => true,
+            _ => false,
+        }
+    }
+    pub fn is_uint(&self) -> bool {
+        match self {
+            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => true,
+            _ => false,
+        }
+    }
+    pub fn is_float(&self) -> bool {
+        match self {
+            VarType::F32 | VarType::F64 => true,
+            _ => false,
+        }
+    }
+    pub fn is_bool(&self) -> bool {
+        match self {
+            VarType::Bool => true,
+            _ => false,
+        }
+    }
 }
 
 pub trait AsVarType: Copy {
