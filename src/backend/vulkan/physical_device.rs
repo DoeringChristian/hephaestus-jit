@@ -75,25 +75,6 @@ impl<'a> DerefMut for Features2Ref<'a> {
 }
 
 impl PhysicalDevice {
-    pub fn features2(&mut self) -> Features2Ref {
-        let features2 = vk::PhysicalDeviceFeatures2::builder()
-            .push_next(&mut self.features_v1_1)
-            .push_next(&mut self.features_v1_2)
-            .push_next(&mut self.acceleration_structure_features)
-            .push_next(&mut self.ray_query_features)
-            .build();
-        Features2Ref {
-            _a: PhantomData,
-            features2,
-        }
-    }
-    pub unsafe fn properties2(&mut self) -> vk::PhysicalDeviceProperties2 {
-        vk::PhysicalDeviceProperties2::builder()
-            .push_next(&mut self.properties_v1_1)
-            .push_next(&mut self.properties_v1_2)
-            .push_next(&mut self.acceleration_structure_properties)
-            .build()
-    }
     pub fn new(instance: &ash::Instance, physical_device: vk::PhysicalDevice) -> Result<Self> {
         let mut features_v1_1 = vk::PhysicalDeviceVulkan11Features::default();
         let mut features_v1_2 = vk::PhysicalDeviceVulkan12Features::default();

@@ -245,8 +245,8 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             groups
         })
         .collect::<Vec<_>>();
-    dbg!(&groups);
-    dbg!(&vars);
+    // dbg!(&groups);
+    // dbg!(&vars);
 
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();

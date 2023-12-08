@@ -173,39 +173,35 @@ impl InternalDevice {
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
 
-            let physical_devices = instance
+            let mut physical_devices = instance
                 .enumerate_physical_devices()
                 .unwrap()
                 .into_iter()
                 .map(|physical_device| Ok(PhysicalDevice::new(&instance, physical_device)?))
                 .collect::<Result<Vec<_>>>()?;
-            let physical_devices = physical_devices
-                .into_iter()
-                .filter_map(|physical_device| {
-                    if physical_device
-                        .acceleration_structure_features
-                        .acceleration_structure
-                        == vk::TRUE
-                        && physical_device.ray_query_features.ray_query == vk::TRUE
-                        && physical_device.supports_ray_query
-                        && physical_device.supports_accel_struct
-                    {
-                        Some(physical_device)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
+            physical_devices.sort_by_key(|physical_device| {
+                match physical_device.properties.device_type {
+                    vk::PhysicalDeviceType::DISCRETE_GPU => 0,
+                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+                    vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
+                    vk::PhysicalDeviceType::CPU => 3,
+                    vk::PhysicalDeviceType::OTHER => 4,
+                    _ => todo!(),
+                }
+            });
 
             log::trace!("Compatible Devices: {physical_devices:?}");
             let physical_device = physical_devices.into_iter().nth(index).unwrap();
 
-            let device_extension_names = [
-                vk::ExtDescriptorIndexingFn::name().as_ptr(),
-                vk::KhrRayQueryFn::name().as_ptr(),
-                vk::KhrAccelerationStructureFn::name().as_ptr(),
-                vk::KhrDeferredHostOperationsFn::name().as_ptr(),
-            ];
+            let mut device_extension_names = vec![vk::ExtDescriptorIndexingFn::name().as_ptr()];
+
+            if physical_device.supports_ray_query {
+                device_extension_names.push(vk::KhrRayQueryFn::name().as_ptr());
+            }
+            if physical_device.supports_accel_struct {
+                device_extension_names.push(vk::KhrAccelerationStructureFn::name().as_ptr());
+                device_extension_names.push(vk::KhrDeferredHostOperationsFn::name().as_ptr());
+            }
 
             let queue_family_index = physical_device.queue_family_index;
             let vk_physical_device = physical_device.physical_device;
@@ -280,8 +276,9 @@ impl InternalDevice {
             let fence = device.create_fence(&fence_info, None).unwrap();
 
             // Extensons:
-            let acceleration_structure_ext =
-                Some(khr::AccelerationStructure::new(&instance, &device));
+            let acceleration_structure_ext = physical_device
+                .supports_accel_struct
+                .then(|| khr::AccelerationStructure::new(&instance, &device));
 
             Ok(Self {
                 entry,

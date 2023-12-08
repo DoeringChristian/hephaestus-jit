@@ -97,7 +97,6 @@ impl SpirvBuilder {
     }
     pub fn assemble(&mut self, ir: &IR, entry_point: &str) -> Result<(), dr::Error> {
         // let param_layout = ParamLayout::generate(trace);
-        // dbg!(&param_layout);
         self.n_buffers = ir.n_buffers;
         self.n_textures = ir.n_textures;
         self.n_accels = ir.n_accels;
@@ -1095,7 +1094,6 @@ impl SpirvBuilder {
                                     let u8_1 = s.constant_u32(u8_ty, 1);
 
                                     let data = s.select(u8_ty, None, src, u8_1, u8_0)?;
-                                    dbg!(data);
                                     s.store(ptr, data, None, None)?;
                                 }
                                 _ => {
@@ -1116,7 +1114,6 @@ impl SpirvBuilder {
                                 let u8_1 = self.constant_u32(u8_ty, 1);
 
                                 let data = self.select(u8_ty, None, src, u8_1, u8_0)?;
-                                dbg!(data);
                                 self.store(ptr, data, None, None)?;
                             }
                             _ => {
