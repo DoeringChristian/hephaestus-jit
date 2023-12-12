@@ -1,4 +1,6 @@
-use crate::vartype::Instance;
+use approx::assert_abs_diff_eq;
+
+use crate::vartype::{Instance, Intersection};
 use crate::{backend, tr, vulkan};
 
 #[test]
@@ -336,8 +338,8 @@ fn accel() {
     // d.schedule();
     // o.schedule();
 
-    let intersection_ty = accel.trace_ray(&o, &d, &tmin, &tmax);
-    intersection_ty.schedule();
+    let intersection = accel.trace_ray(&o, &d, &tmin, &tmax);
+    intersection.schedule();
 
     tr::with_trace(|trace| {
         dbg!(&trace);
@@ -355,10 +357,16 @@ fn accel() {
     let graph = tr::compile();
     graph.launch(&device);
 
-    dbg!(intersection_ty.to_vec::<i32>());
-    assert_eq!(intersection_ty.to_vec::<i32>(), vec![1, 0]);
-    // dbg!(o.to_vec::<f32>());
-    // dbg!(d.to_vec::<f32>());
+    dbg!(intersection.to_vec::<i32>());
+    let intersections = intersection.to_vec::<Intersection>();
+
+    assert_abs_diff_eq!(intersections[0].barycentrics[0], 0.4, epsilon = 0.001);
+    assert_abs_diff_eq!(intersections[0].barycentrics[1], 0.2, epsilon = 0.001);
+    assert!(intersections[0].valid > 0);
+    assert_eq!(intersections[0].instance_id, 0);
+    assert_eq!(intersections[0].primitive_idx, 0);
+
+    assert_eq!(intersections[1].valid, 0);
 }
 #[test]
 fn reduce_max() {

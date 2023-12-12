@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use lazy_static::lazy_static;
+
 const fn align_up(v: usize, base: usize) -> usize {
     ((v + base - 1) / base) * base
 }
@@ -139,7 +141,7 @@ impl VarType {
 }
 
 pub trait AsVarType: Copy {
-    fn var_ty() -> VarType;
+    fn var_ty() -> &'static VarType;
 }
 macro_rules! as_var_type {
     {$($src:ident => $dst:ident;)*} => {
@@ -147,8 +149,11 @@ macro_rules! as_var_type {
     };
     ($src:ident => $dst:ident) => {
         impl AsVarType for $src{
-            fn var_ty() -> VarType{
-                VarType::$dst
+            fn var_ty() -> &'static VarType{
+                lazy_static::lazy_static!{
+                    static ref TY: VarType = VarType::$dst;
+                }
+                &TY
             }
         }
     };
@@ -176,16 +181,47 @@ pub struct Instance {
 }
 
 impl AsVarType for Instance {
-    fn var_ty() -> VarType {
-        VarType::Struct {
-            tys: vec![
-                VarType::Array {
-                    ty: Box::new(VarType::F32),
-                    num: 12,
-                },
-                VarType::U32,
-            ],
-        }
+    fn var_ty() -> &'static VarType {
+        lazy_static! {
+            static ref TY: VarType = VarType::Struct {
+                tys: vec![
+                    VarType::Array {
+                        ty: Box::new(VarType::F32),
+                        num: 12,
+                    },
+                    VarType::U32,
+                ],
+            };
+        };
+        &TY
+    }
+}
+
+/// Ray Intersection
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct Intersection {
+    pub barycentrics: [f32; 2],
+    pub instance_id: u32,
+    pub primitive_idx: u32,
+    pub valid: u32, // 0 if invalid, >0 if valid
+}
+
+impl AsVarType for Intersection {
+    fn var_ty() -> &'static VarType {
+        lazy_static! {
+            static ref TY: VarType = VarType::Struct {
+                tys: vec![
+                    VarType::Vec {
+                        ty: Box::new(VarType::F32),
+                        num: 2
+                    },
+                    VarType::U32,
+                    VarType::U32,
+                    VarType::U32,
+                ],
+            };
+        };
+        &TY
     }
 }
 

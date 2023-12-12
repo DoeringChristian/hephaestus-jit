@@ -7,7 +7,7 @@ use std::thread::ThreadId;
 use crate::data::Data;
 use crate::extent::Extent;
 use crate::op::{DeviceOp, Op, ReduceOp};
-use crate::vartype::{AsVarType, Instance, VarType};
+use crate::vartype::{AsVarType, Instance, Intersection, VarType};
 use crate::{backend, ir};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
@@ -225,7 +225,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(ir::Op::Literal),
-            ty,
+            ty: ty.clone(),
             extent: Extent::Size(size),
             data: Data::Literal(data),
             ..Default::default()
@@ -243,7 +243,7 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
         Var {
             op: Op::Buffer,
             extent: Extent::Size(size),
-            ty,
+            ty: ty.clone(),
             data: Data::Buffer(data),
             ..Default::default()
         },
@@ -305,7 +305,7 @@ pub struct AccelDesc {
 }
 
 pub fn accel(desc: &AccelDesc) -> VarRef {
-    assert_eq!(desc.instances.ty(), Instance::var_ty());
+    assert_eq!(&desc.instances.ty(), Instance::var_ty());
     let mut deps = vec![];
     deps.push(&desc.instances);
     let geometries = desc
@@ -699,14 +699,14 @@ impl VarRef {
     pub fn trace_ray(&self, o: &Self, d: &Self, tmin: &Self, tmax: &Self) -> Self {
         let extent = resulting_extent([o, d, tmin, tmax].into_iter());
 
-        let ty = VarType::U32;
+        let ty = Intersection::var_ty();
 
         let accel_ref = self.get_ref();
 
         push_var(
             Var {
                 op: Op::KernelOp(ir::Op::TraceRay),
-                ty,
+                ty: ty.clone(),
                 extent,
                 ..Default::default()
             },

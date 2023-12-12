@@ -4,7 +4,8 @@ use std::ops::{Deref, DerefMut};
 
 use crate::backend::vulkan::glslext::GLSL450Instruction;
 use crate::ir::{Bop, Op, VarId, IR};
-use crate::vartype::VarType;
+use crate::vartype::{AsVarType, Intersection, VarType};
+use lazy_static::lazy_static;
 use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
 
@@ -495,6 +496,16 @@ impl SpirvBuilder {
             res
         }
     }
+    fn composite_construct(
+        &mut self,
+        ty: &VarType,
+        elems: impl IntoIterator<Item = u32>,
+    ) -> Result<u32, dr::Error> {
+        // let elems = elems.into_iter();
+        let ty = self.spirv_ty(&ty);
+        // let deps = deps.iter().map(|id| self.reg(*id)).collect::<Vec<_>>();
+        self.b.composite_construct(ty, None, elems)
+    }
 
     fn assemble_vars(&mut self, ir: &IR, global_invocation_id: u32) -> Result<(), dr::Error> {
         macro_rules! bop {
@@ -917,9 +928,8 @@ impl SpirvBuilder {
                     self.select(ty, None, cond, true_val, false_val)?
                 }
                 Op::Construct => {
-                    let ty = self.spirv_ty(&var.ty);
                     let deps = deps.iter().map(|id| self.reg(*id)).collect::<Vec<_>>();
-                    self.composite_construct(ty, None, deps)?
+                    self.composite_construct(&var.ty, deps)?
                 }
                 Op::Extract(elem) => {
                     let ty = self.spirv_ty(&ir.var(varid).ty);
@@ -979,6 +989,7 @@ impl SpirvBuilder {
                     let i32_0 = self.constant_u32(i32_ty, 0);
                     let u32_0 = self.constant_u32(u32_ty, 0);
 
+                    // TODO: Custom intersections (may require ray-tracing shader)
                     self.while_block(
                         |s| s.ray_query_proceed_khr(bool_ty, None, ray_query_var),
                         |s| {
@@ -996,10 +1007,51 @@ impl SpirvBuilder {
                         },
                     )?;
 
+                    let vec2_ty = self.spirv_ty(&VarType::Vec {
+                        ty: Box::new(VarType::F32),
+                        num: 2,
+                    });
+
                     let i32_1 = self.constant_u32(i32_ty, 1);
 
-                    // TODO: Handle intersections
-                    self.ray_query_get_intersection_type_khr(u32_ty, None, ray_query_var, i32_1)?
+                    let instance_id = self.ray_query_get_intersection_instance_id_khr(
+                        u32_ty,
+                        None,
+                        ray_query_var,
+                        i32_1,
+                    )?;
+                    let primitive_idx = self.ray_query_get_intersection_primitive_index_khr(
+                        u32_ty,
+                        None,
+                        ray_query_var,
+                        i32_1,
+                    )?;
+                    let barycentrics = self.ray_query_get_intersection_barycentrics_khr(
+                        vec2_ty,
+                        None,
+                        ray_query_var,
+                        i32_1,
+                    )?;
+                    let intersection_type_khr = self.ray_query_get_intersection_type_khr(
+                        u32_ty,
+                        None,
+                        ray_query_var,
+                        i32_1,
+                    )?;
+
+                    let intersection_ty = Intersection::var_ty();
+
+                    let intersection = self.composite_construct(
+                        intersection_ty,
+                        [
+                            barycentrics,
+                            instance_id,
+                            primitive_idx,
+                            intersection_type_khr,
+                        ],
+                    )?;
+
+                    intersection
                 }
                 Op::TexLookup => {
                     let img = deps[0];
