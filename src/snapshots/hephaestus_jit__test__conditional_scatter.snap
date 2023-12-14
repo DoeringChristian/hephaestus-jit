@@ -44,7 +44,9 @@ Graph {
                         },
                         Var {
                             ty: Void,
-                            op: Scatter,
+                            op: Scatter(
+                                None,
+                            ),
                             deps: (
                                 0,
                                 3,
@@ -145,7 +147,9 @@ Graph {
                         },
                         Var {
                             ty: Void,
-                            op: Scatter,
+                            op: Scatter(
+                                None,
+                            ),
                             deps: (
                                 2,
                                 6,

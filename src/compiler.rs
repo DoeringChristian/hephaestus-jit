@@ -1,7 +1,7 @@
 use crate::backend::Buffer;
 use crate::data::Data;
 use crate::ir::{self, IR};
-use crate::op::Op;
+use crate::op::{self, Op};
 use crate::trace::{self, Trace};
 use crate::vartype::VarType;
 use std::collections::HashMap;
@@ -67,7 +67,7 @@ impl Compiler {
             );
             self.ir.push_var(
                 ir::Var {
-                    op: ir::Op::Scatter,
+                    op: ir::Op::Scatter(None),
                     ty: VarType::Void,
                     ..Default::default()
                 },

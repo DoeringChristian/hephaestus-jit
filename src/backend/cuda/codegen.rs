@@ -229,7 +229,7 @@ pub fn assemble_var(
                 _ => todo!(),
             }
         }
-        Op::Scatter => {
+        Op::Scatter(reduce_op) => {
             let dst = deps[0];
             let src = deps[1];
             let idx = deps[2];

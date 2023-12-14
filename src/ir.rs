@@ -5,6 +5,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
+use crate::op;
 use crate::vartype::VarType;
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
@@ -22,6 +23,7 @@ pub enum Bop {
     Sub,
     Mul,
     Div,
+    Modulus,
     Min,
     Max,
     // Bitwise
@@ -62,7 +64,7 @@ pub enum Op {
     #[default]
     Nop,
 
-    Scatter,
+    Scatter(Option<op::ReduceOp>),
     Gather,
     Index,
     Literal,

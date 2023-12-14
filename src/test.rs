@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use approx::assert_abs_diff_eq;
 
 use crate::vartype::{Instance, Intersection};
@@ -643,4 +645,35 @@ fn uop_cos() {
     for (reference, pred) in reference.into_iter().zip(pred.to_vec::<f32>().into_iter()) {
         approx::assert_abs_diff_eq!(reference, pred, epsilon = 0.001);
     }
+}
+#[test]
+fn scatter_atomic() {
+    pretty_env_logger::try_init().ok();
+
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let src = tr::literal(1u32);
+
+    let dst = tr::array(&[0u32, 0, 0], &device);
+
+    let n = 16;
+    let idx = tr::sized_literal(0, n);
+
+    let prev = src.scatter_atomic(&dst, &idx, crate::op::ReduceOp::Sum);
+
+    // NOTE: need not schedule `prev` as it is already scheduled in scatter_atomic
+    // prev.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(dst.to_vec::<u32>()[0], n as u32);
+
+    let mut uniq = HashSet::new();
+    assert!(
+        prev.to_vec::<u32>()
+            .into_iter()
+            .all(move |x| uniq.insert(x)),
+        "Atomic Operations should return the previous index which is unique!"
+    );
 }

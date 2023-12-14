@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::backend::vulkan::glslext::GLSL450Instruction;
 use crate::ir::{Bop, Op, VarId, IR};
+use crate::op::ReduceOp;
 use crate::vartype::{AsVarType, Intersection, VarType};
 use lazy_static::lazy_static;
 use rspirv::binary::{Assemble, Disassemble};
@@ -114,6 +115,9 @@ impl SpirvBuilder {
         self.capability(spirv::Capability::Int64);
         self.capability(spirv::Capability::Float16);
         self.capability(spirv::Capability::Float64);
+        self.capability(spirv::Capability::AtomicFloat32AddEXT);
+        self.capability(spirv::Capability::AtomicFloat64AddEXT);
+        // self.capability(spirv::Capability::AtomicFloat)
 
         // Add ray query capability only if it is needed
         // TODO: Refactor into properties?
@@ -127,6 +131,8 @@ impl SpirvBuilder {
 
         self.extension("SPV_KHR_16bit_storage");
         self.extension("SPV_KHR_ray_query");
+        self.extension("SPV_EXT_shader_atomic_float_add");
+        self.extension("SPV_EXT_shader_atomic_float_min_max");
 
         self.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
 
@@ -297,6 +303,58 @@ impl SpirvBuilder {
 
         self.begin_block(Some(end_label))?;
         Ok(())
+    }
+    /// Store value at src in ptr, potentially atomically
+    fn store_reduce(
+        &mut self,
+        src: spirv::Word,
+        ptr: spirv::Word,
+        ty: &VarType,
+        op: &Option<ReduceOp>,
+    ) -> Result<Option<u32>, dr::Error> {
+        let spirv_ty = self.spirv_ty(ty);
+        let u32_ty = self.type_int(32, 0);
+        let u32_0 = self.constant_u32(u32_ty, 0);
+        let u32_1 = self.constant_u32(u32_ty, 1);
+        match ty {
+            VarType::Bool => {
+                let u8_ty = self.type_int(8, 0);
+                let u8_0 = self.constant_u32(u8_ty, 0);
+                let u8_1 = self.constant_u32(u8_ty, 1);
+
+                let data = self.select(u8_ty, None, src, u8_1, u8_0)?;
+                self.store(ptr, data, None, None)?;
+                Ok(None)
+            }
+            _ => match op {
+                Some(op) => {
+                    let res = match op {
+                        ReduceOp::Sum => match ty {
+                            VarType::I8
+                            | VarType::U8
+                            | VarType::I16
+                            | VarType::U16
+                            | VarType::I32
+                            | VarType::U32
+                            | VarType::I64
+                            | VarType::U64 => {
+                                self.atomic_i_add(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.atomic_f_add_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                            }
+                            _ => todo!(),
+                        },
+                        _ => todo!(),
+                    };
+                    Ok(Some(res))
+                }
+                None => {
+                    self.store(ptr, src, None, None)?;
+                    Ok(None)
+                }
+            },
+        }
     }
     fn spirv_ty(&mut self, ty: &VarType) -> u32 {
         // Deduplicate types
@@ -580,6 +638,18 @@ impl SpirvBuilder {
                             }
                             VarType::F32 | VarType::F64 => {
                                 self.f_div(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
+                        Bop::Modulus => match var.ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                self.s_mod(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                self.u_mod(ty, Some(res), lhs, rhs)?;
+                            }
+                            VarType::F32 | VarType::F64 => {
+                                self.f_mod(ty, Some(res), lhs, rhs)?;
                             }
                             _ => todo!(),
                         },
@@ -1105,7 +1175,7 @@ impl SpirvBuilder {
                         [dr::Operand::IdRef(float_0)],
                     )?
                 }
-                Op::Scatter => {
+                Op::Scatter(reduce_op) => {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
@@ -1139,41 +1209,18 @@ impl SpirvBuilder {
                             let ptr =
                                 s.access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])?;
 
-                            match ty {
-                                VarType::Bool => {
-                                    let u8_ty = s.type_int(8, 0);
-                                    let u8_0 = s.constant_u32(u8_ty, 0);
-                                    let u8_1 = s.constant_u32(u8_ty, 1);
-
-                                    let data = s.select(u8_ty, None, src, u8_1, u8_0)?;
-                                    s.store(ptr, data, None, None)?;
-                                }
-                                _ => {
-                                    s.store(ptr, src, None, None)?;
-                                }
-                            };
+                            // TODO: suport returning atomic in if block
+                            s.store_reduce(src, ptr, ty, &reduce_op)?.unwrap_or(0);
 
                             Ok(())
                         })?;
+                        0
                     } else {
                         let ptr =
                             self.access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])?;
 
-                        match ty {
-                            VarType::Bool => {
-                                let u8_ty = self.type_int(8, 0);
-                                let u8_0 = self.constant_u32(u8_ty, 0);
-                                let u8_1 = self.constant_u32(u8_ty, 1);
-
-                                let data = self.select(u8_ty, None, src, u8_1, u8_0)?;
-                                self.store(ptr, data, None, None)?;
-                            }
-                            _ => {
-                                self.store(ptr, src, None, None)?;
-                            }
-                        };
+                        self.store_reduce(src, ptr, ty, &reduce_op)?.unwrap_or(0)
                     }
-                    0
                 }
                 Op::Gather => {
                     let src = deps[0];
