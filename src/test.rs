@@ -661,8 +661,9 @@ fn scatter_atomic() {
 
     let prev = src.scatter_atomic(&dst, &idx, crate::op::ReduceOp::Sum);
 
-    // NOTE: need not schedule `prev` as it is already scheduled in scatter_atomic
-    // prev.schedule();
+    // NOTE: in contrast to scatter and scatter_reduce, atomic operations require scheduling of the
+    // result as it could lead to unintended evaluation of the result.
+    prev.schedule();
 
     let graph = tr::compile();
     graph.launch(&device);

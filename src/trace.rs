@@ -624,7 +624,7 @@ impl VarRef {
             [&dst_ref, self, idx],
         );
         dst.mark_dirty();
-        res.schedule(); // Auto schedule
+        // NOTE: do not schedule result of scatter_atomic
         res
     }
     pub fn scatter_atomic_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) -> Self {
@@ -643,7 +643,7 @@ impl VarRef {
             [&dst_ref, self, idx, active],
         );
         dst.mark_dirty();
-        res.schedule(); // Auto schedule
+        // NOTE: do not schedule result of scatter_atomic
         res
     }
     pub fn get_ref(&self) -> Self {
