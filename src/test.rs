@@ -678,3 +678,24 @@ fn scatter_atomic() {
         "Atomic Operations should return the previous index which is unique!"
     );
 }
+
+#[test]
+fn scatter_reduce() {
+    pretty_env_logger::try_init().ok();
+
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let src = tr::literal(1u32);
+
+    let dst = tr::array(&[0u32, 0, 0], &device);
+
+    let n = 16;
+    let idx = tr::sized_literal(0, n);
+
+    src.scatter_reduce(&dst, &idx, crate::op::ReduceOp::Sum);
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(dst.to_vec::<u32>()[0], n as u32);
+}

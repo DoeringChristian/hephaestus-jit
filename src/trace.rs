@@ -536,7 +536,7 @@ impl VarRef {
     }
     // WARN: keep in mind, that we should also update `scatter_if`, `scatter_reduce` and
     // `scatter_reduce_if`
-    pub fn scatter(&self, dst: &Self, idx: &Self) -> Self {
+    pub fn scatter(&self, dst: &Self, idx: &Self) {
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, idx].into_iter());
@@ -552,9 +552,9 @@ impl VarRef {
         );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
-        res
+                        // res
     }
-    pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) -> Self {
+    pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) {
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, idx, active].into_iter());
@@ -570,44 +570,44 @@ impl VarRef {
         );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
-        res
+                        // res
     }
-    // pub fn scatter_reduce(&self, dst: &Self, idx: &Self, op: ReduceOp) -> Self {
-    //     dst.schedule();
-    //     schedule_eval();
-    //     let extent = resulting_extent([self, idx].into_iter());
-    //     let dst_ref = dst.get_mut();
-    //     let res = push_var(
-    //         Var {
-    //             op: Op::KernelOp(ir::Op::Scatter(Some(op))),
-    //             ty: VarType::Void,
-    //             extent,
-    //             ..Default::default()
-    //         },
-    //         [&dst_ref, self, idx],
-    //     );
-    //     dst.mark_dirty();
-    //     res.schedule(); // Auto schedule
-    //     res
-    // }
-    // pub fn scatter_reduce_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) -> Self {
-    //     dst.schedule();
-    //     schedule_eval();
-    //     let extent = resulting_extent([self, idx, active].into_iter());
-    //     let dst_ref = dst.get_mut();
-    //     let res = push_var(
-    //         Var {
-    //             op: Op::KernelOp(ir::Op::Scatter(Some(op))),
-    //             ty: VarType::Void,
-    //             extent,
-    //             ..Default::default()
-    //         },
-    //         [&dst_ref, self, idx, active],
-    //     );
-    //     dst.mark_dirty();
-    //     res.schedule(); // Auto schedule
-    //     res
-    // }
+    pub fn scatter_reduce(&self, dst: &Self, idx: &Self, op: ReduceOp) {
+        dst.schedule();
+        schedule_eval();
+        let extent = resulting_extent([self, idx].into_iter());
+        let dst_ref = dst.get_mut();
+        let res = push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Scatter(Some(op))),
+                ty: VarType::Void,
+                extent,
+                ..Default::default()
+            },
+            [&dst_ref, self, idx],
+        );
+        dst.mark_dirty();
+        res.schedule(); // Auto schedule
+                        // res
+    }
+    pub fn scatter_reduce_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) {
+        dst.schedule();
+        schedule_eval();
+        let extent = resulting_extent([self, idx, active].into_iter());
+        let dst_ref = dst.get_mut();
+        let res = push_var(
+            Var {
+                op: Op::KernelOp(ir::Op::Scatter(Some(op))),
+                ty: VarType::Void,
+                extent,
+                ..Default::default()
+            },
+            [&dst_ref, self, idx, active],
+        );
+        dst.mark_dirty();
+        res.schedule(); // Auto schedule
+                        // res
+    }
     pub fn scatter_atomic(&self, dst: &Self, idx: &Self, op: ReduceOp) -> Self {
         dst.schedule();
         schedule_eval();
