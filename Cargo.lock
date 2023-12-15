@@ -168,12 +168,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cudarc"
-version = "0.9.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc4cab390f4a32340211f015292a4551742a63e528e9ade9e0bde0d1a989d2a1"
-
-[[package]]
 name = "either"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -284,7 +278,6 @@ dependencies = [
  "bytemuck",
  "bytesize",
  "cuda-rs",
- "cudarc",
  "enum_dispatch",
  "gpu-allocator",
  "inline-spirv",

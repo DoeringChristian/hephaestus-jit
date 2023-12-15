@@ -19,8 +19,8 @@ pub fn vulkan(id: usize) -> Device {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("[CudaError] {0:?}")]
-    CudaError(#[from] cuda::DriverError),
+    // #[error("[CudaError] {0:?}")]
+    // CudaError(#[from] cuda::DriverError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
