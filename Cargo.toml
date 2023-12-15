@@ -22,7 +22,7 @@ cudarc = "0.9.14"
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "derive"] }
 ash = { version = "0.37.3+1.3.251", features = ["linked", "debug"] }
 gpu-allocator = "0.22"
-rspirv = "0.11.0"
+rspirv = { git = "https://github.com/gfx-rs/rspirv.git", version = "0.11" }
 inline-spirv = "0.1.6"
 slotmap = "1.0.6"
 itertools = "0.11.0"

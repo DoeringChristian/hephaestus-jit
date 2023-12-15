@@ -314,13 +314,13 @@ impl SpirvBuilder {
     ) -> Result<Option<u32>, dr::Error> {
         let spirv_ty = self.spirv_ty(ty);
         let u32_ty = self.type_int(32, 0);
-        let u32_0 = self.constant_u32(u32_ty, 0);
-        let u32_1 = self.constant_u32(u32_ty, 1);
+        let u32_0 = self.constant_bit32(u32_ty, 0);
+        let u32_1 = self.constant_bit32(u32_ty, 1);
         match ty {
             VarType::Bool => {
                 let u8_ty = self.type_int(8, 0);
-                let u8_0 = self.constant_u32(u8_ty, 0);
-                let u8_1 = self.constant_u32(u8_ty, 1);
+                let u8_0 = self.constant_bit32(u8_ty, 0);
+                let u8_1 = self.constant_bit32(u8_ty, 1);
 
                 let data = self.select(u8_ty, None, src, u8_1, u8_0)?;
                 self.store(ptr, data, None, None)?;
@@ -387,7 +387,7 @@ impl SpirvBuilder {
                             struct_ty,
                             i as _,
                             spirv::Decoration::Offset,
-                            [dr::Operand::LiteralInt32(offset as _)],
+                            [dr::Operand::LiteralBit32(offset as _)],
                         );
                         match tys[i] {
                             VarType::Mat { .. } => self.member_decorate(
@@ -411,7 +411,7 @@ impl SpirvBuilder {
                 VarType::Array { ty, num } => {
                     let ty = self.spirv_ty(ty);
                     let u32_ty = self.type_int(32, 0);
-                    let num = self.constant_u32(u32_ty, *num as _);
+                    let num = self.constant_bit32(u32_ty, *num as _);
                     self.type_array(ty, num)
                 }
             };
@@ -430,7 +430,7 @@ impl SpirvBuilder {
             let ty_sampled_image = self.type_sampled_image(ty_image);
 
             let ty_int = self.type_int(32, 0);
-            let length = self.constant_u32(ty_int, n_textures as _);
+            let length = self.constant_bit32(ty_int, n_textures as _);
 
             let ty_array = self.type_array(ty_sampled_image, length);
             let ty_ptr = self.type_pointer(None, spirv::StorageClass::UniformConstant, ty_array);
@@ -442,12 +442,12 @@ impl SpirvBuilder {
                     s.decorate(
                         res,
                         spirv::Decoration::DescriptorSet,
-                        [dr::Operand::LiteralInt32(0)],
+                        [dr::Operand::LiteralBit32(0)],
                     );
                     s.decorate(
                         res,
                         spirv::Decoration::Binding,
-                        [dr::Operand::LiteralInt32(1)],
+                        [dr::Operand::LiteralBit32(1)],
                     );
                     Ok(res)
                 })
@@ -467,7 +467,7 @@ impl SpirvBuilder {
             let n_accels = self.n_accels;
             let accel_ty = self.type_acceleration_structure_khr();
             let u32_ty = self.type_int(32, 0);
-            let array_len = self.constant_u32(u32_ty, n_accels as _);
+            let array_len = self.constant_bit32(u32_ty, n_accels as _);
             let array_ty = self.type_array(accel_ty, array_len);
             let ptr_ty = self.type_pointer(None, spirv::StorageClass::UniformConstant, array_ty);
             let res = self
@@ -477,12 +477,12 @@ impl SpirvBuilder {
                     s.decorate(
                         res,
                         spirv::Decoration::DescriptorSet,
-                        [dr::Operand::LiteralInt32(0)],
+                        [dr::Operand::LiteralBit32(0)],
                     );
                     s.decorate(
                         res,
                         spirv::Decoration::Binding,
-                        [dr::Operand::LiteralInt32(ACCEL_BINDING)],
+                        [dr::Operand::LiteralBit32(ACCEL_BINDING)],
                     );
                     s.interface_vars.push(res);
                     Ok(res)
@@ -511,7 +511,7 @@ impl SpirvBuilder {
             self.buffer_arrays[&spirv_ty]
         } else {
             let u32_ty = self.type_int(32, 0);
-            let array_len = self.constant_u32(u32_ty, n_buffers as _);
+            let array_len = self.constant_bit32(u32_ty, n_buffers as _);
             let rta_ty = self.type_runtime_array(spirv_ty);
             let struct_ty = self.type_struct([rta_ty]);
             let array_ty = self.type_array(struct_ty, array_len);
@@ -521,12 +521,12 @@ impl SpirvBuilder {
                 struct_ty,
                 0,
                 spirv::Decoration::Offset,
-                [dr::Operand::LiteralInt32(0)],
+                [dr::Operand::LiteralBit32(0)],
             );
             self.decorate(
                 rta_ty,
                 rspirv::spirv::Decoration::ArrayStride,
-                [dr::Operand::LiteralInt32(ty.size() as _)],
+                [dr::Operand::LiteralBit32(ty.size() as _)],
             );
 
             let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, array_ty);
@@ -538,12 +538,12 @@ impl SpirvBuilder {
                     s.decorate(
                         res,
                         spirv::Decoration::DescriptorSet,
-                        [dr::Operand::LiteralInt32(0)],
+                        [dr::Operand::LiteralBit32(0)],
                     );
                     s.decorate(
                         res,
                         spirv::Decoration::Binding,
-                        [dr::Operand::LiteralInt32(BUFFER_BINDING)],
+                        [dr::Operand::LiteralBit32(BUFFER_BINDING)],
                     );
                     Ok(res)
                 })
@@ -1018,7 +1018,7 @@ impl SpirvBuilder {
                     let i32_ty = self.type_int(32, 1);
 
                     let accels = self.get_accel_array();
-                    let accel_idx = self.constant_u32(u32_ty, accel_idx as _);
+                    let accel_idx = self.constant_bit32(u32_ty, accel_idx as _);
                     let accel_ty = self.type_acceleration_structure_khr();
                     let accel_ptr_ty =
                         self.type_pointer(None, spirv::StorageClass::UniformConstant, accel_ty);
@@ -1037,8 +1037,8 @@ impl SpirvBuilder {
                         Ok(var)
                     })?;
 
-                    let ray_flags = self.constant_u32(u32_ty, 0x01);
-                    let cull_mask = self.constant_u32(u32_ty, 0xff);
+                    let ray_flags = self.constant_bit32(u32_ty, 0x01);
+                    let cull_mask = self.constant_bit32(u32_ty, 0xff);
                     let o = self.reg(o);
                     let d = self.reg(d);
                     let tmin = self.reg(tmin);
@@ -1056,8 +1056,8 @@ impl SpirvBuilder {
                     )?;
 
                     let bool_ty = self.type_bool();
-                    let i32_0 = self.constant_u32(i32_ty, 0);
-                    let u32_0 = self.constant_u32(u32_ty, 0);
+                    let i32_0 = self.constant_bit32(i32_ty, 0);
+                    let u32_0 = self.constant_bit32(u32_ty, 0);
 
                     // TODO: Custom intersections (may require ray-tracing shader)
                     self.while_block(
@@ -1082,7 +1082,7 @@ impl SpirvBuilder {
                         num: 2,
                     });
 
-                    let i32_1 = self.constant_u32(i32_ty, 1);
+                    let i32_1 = self.constant_bit32(i32_ty, 1);
 
                     let instance_id = self.ray_query_get_intersection_instance_id_khr(
                         u32_ty,
@@ -1150,7 +1150,7 @@ impl SpirvBuilder {
                     );
 
                     let int_ty = self.type_int(32, 0);
-                    let img_idx = self.constant_u32(int_ty, img_idx as _);
+                    let img_idx = self.constant_bit32(int_ty, img_idx as _);
 
                     let samplers = self.get_samplers(SamplerDesc {
                         ty: ir.var_ty(img).clone(),
@@ -1161,7 +1161,7 @@ impl SpirvBuilder {
                     let ty_v4 = self.type_vector(ty, 4);
 
                     let float_ty = self.type_float(32);
-                    let float_0 = self.constant_f32(float_ty, 0.);
+                    let float_0 = self.constant_bit32(float_ty, 0f32.to_bits());
 
                     let img = self.load(ty_sampled_image, None, ptr, None, None)?;
 
@@ -1192,8 +1192,8 @@ impl SpirvBuilder {
                     let ptr_ty =
                         self.type_pointer(None, spirv::StorageClass::StorageBuffer, spriv_ty);
                     let int_ty = self.type_int(32, 0);
-                    let buffer = self.constant_u32(int_ty, buffer_idx as _);
-                    let elem = self.constant_u32(int_ty, 0);
+                    let buffer = self.constant_bit32(int_ty, buffer_idx as _);
+                    let elem = self.constant_bit32(int_ty, 0);
 
                     let buffer_array = self.get_buffer_array(&ty);
                     let idx = self.reg(idx);
@@ -1239,8 +1239,8 @@ impl SpirvBuilder {
                     let ptr_ty =
                         self.type_pointer(None, spirv::StorageClass::StorageBuffer, spirv_data_ty);
                     let int_ty = self.type_int(32, 0);
-                    let buffer_idx = self.constant_u32(int_ty, buffer_idx as _);
-                    let elem = self.constant_u32(int_ty, 0);
+                    let buffer_idx = self.constant_bit32(int_ty, buffer_idx as _);
+                    let elem = self.constant_bit32(int_ty, 0);
 
                     let buffer_array = self.get_buffer_array(&ty);
                     // let src = self.reg(src);
@@ -1279,7 +1279,7 @@ impl SpirvBuilder {
                                 VarType::Bool => {
                                     let bool_ty = s.type_bool();
                                     let u8_ty = s.type_int(8, 0);
-                                    let u8_0 = s.constant_u32(u8_ty, 0);
+                                    let u8_0 = s.constant_bit32(u8_ty, 0);
                                     let data = s.load(spirv_data_ty, None, ptr, None, None)?;
                                     s.i_not_equal(bool_ty, None, data, u8_0)?
                                 }
@@ -1299,7 +1299,7 @@ impl SpirvBuilder {
                             VarType::Bool => {
                                 let bool_ty = self.type_bool();
                                 let u8_ty = self.type_int(8, 0);
-                                let u8_0 = self.constant_u32(u8_ty, 0);
+                                let u8_0 = self.constant_bit32(u8_ty, 0);
                                 let data = self.load(spirv_data_ty, None, ptr, None, None)?;
                                 self.i_not_equal(bool_ty, None, data, u8_0)?
                             }
@@ -1310,7 +1310,7 @@ impl SpirvBuilder {
                 Op::Index => {
                     let u32_ty = self.type_int(32, 0);
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::Input, u32_ty);
-                    let u32_0 = self.constant_u32(u32_ty, 0);
+                    let u32_0 = self.constant_bit32(u32_ty, 0);
                     let ptr = self.access_chain(ptr_ty, None, global_invocation_id, [u32_0])?;
 
                     self.load(u32_ty, None, ptr, None, None)?
@@ -1332,12 +1332,12 @@ impl SpirvBuilder {
                         | VarType::I32
                         | VarType::U32
                         | VarType::I64
-                        | VarType::U64 => self.constant_u32(ty, var.data as _),
+                        | VarType::U64 => self.constant_bit64(ty, var.data),
                         VarType::F32 => {
-                            self.constant_f32(ty, unsafe { *(&var.data as *const _ as *const _) })
+                            self.constant_bit32(ty, unsafe { *(&var.data as *const _ as *const _) })
                         }
                         VarType::F64 => {
-                            self.constant_f64(ty, unsafe { *(&var.data as *const _ as *const _) })
+                            self.constant_bit64(ty, unsafe { *(&var.data as *const _ as *const _) })
                         }
                         _ => todo!(),
                     }
