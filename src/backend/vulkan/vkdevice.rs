@@ -99,6 +99,7 @@ impl VulkanDevice {
             ReduceOp::Prod => "(a * b)",
             ReduceOp::And => "(a & b)",
             ReduceOp::Or => "(a | b)",
+            ReduceOp::Xor => "(a ^ b)",
             _ => todo!(),
         };
         let init = match op {
@@ -167,6 +168,14 @@ impl VulkanDevice {
                 _ => todo!(),
             },
             ReduceOp::Or => match ty {
+                VarType::Bool => "uint8_t(0)",
+                VarType::U8 => "uint8_t(0x0)",
+                VarType::U16 => "uint16_t(0x0)",
+                VarType::U32 => "uint32_t(0x0)",
+                VarType::U64 => "uint64_t(0x0)",
+                _ => todo!(),
+            },
+            ReduceOp::Xor => match ty {
                 VarType::Bool => "uint8_t(0)",
                 VarType::U8 => "uint8_t(0x0)",
                 VarType::U16 => "uint16_t(0x0)",

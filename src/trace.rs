@@ -858,6 +858,19 @@ impl VarRef {
             [self],
         )
     }
+    pub fn reduce_xor(&self) -> Self {
+        let extent = Extent::Size(1);
+        let ty = self.ty();
+        push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Xor)),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self],
+        )
+    }
 
     pub fn reduce_and(&self) -> Self {
         let extent = Extent::Size(1);

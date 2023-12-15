@@ -115,9 +115,13 @@ impl SpirvBuilder {
         self.capability(spirv::Capability::Int64);
         self.capability(spirv::Capability::Float16);
         self.capability(spirv::Capability::Float64);
+        // self.capability(spirv::Capability::AtomicFloat16AddEXT);
         self.capability(spirv::Capability::AtomicFloat32AddEXT);
         self.capability(spirv::Capability::AtomicFloat64AddEXT);
-        // self.capability(spirv::Capability::AtomicFloat)
+        // self.capability(spirv::Capability::AtomicFloat16MinMaxEXT);
+        self.capability(spirv::Capability::AtomicFloat32MinMaxEXT);
+        self.capability(spirv::Capability::AtomicFloat64MinMaxEXT);
+        self.capability(spirv::Capability::Int64Atomics);
 
         // Add ray query capability only if it is needed
         // TODO: Refactor into properties?
@@ -328,25 +332,74 @@ impl SpirvBuilder {
             }
             _ => match op {
                 Some(op) => {
-                    let res = match op {
-                        ReduceOp::Sum => match ty {
-                            VarType::I8
-                            | VarType::U8
-                            | VarType::I16
-                            | VarType::U16
-                            | VarType::I32
-                            | VarType::U32
-                            | VarType::I64
-                            | VarType::U64 => {
-                                self.atomic_i_add(spirv_ty, None, ptr, u32_1, u32_0, src)?
-                            }
-                            VarType::F32 | VarType::F64 => {
-                                self.atomic_f_add_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?
-                            }
-                            _ => todo!(),
-                        },
-                        _ => todo!(),
-                    };
+                    let res =
+                            match op {
+                                ReduceOp::Sum => match ty {
+                                    VarType::I8
+                                    | VarType::U8
+                                    | VarType::I16
+                                    | VarType::U16
+                                    | VarType::I32
+                                    | VarType::U32
+                                    | VarType::I64
+                                    | VarType::U64 => {
+                                        self.atomic_i_add(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    VarType::F32 | VarType::F64 => self
+                                        .atomic_f_add_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?,
+                                    _ => todo!(),
+                                },
+                                ReduceOp::And => match ty {
+                                    VarType::U8
+                                    | VarType::U16
+                                    | VarType::U32
+                                    | VarType::U64 => {
+                                        self.atomic_and(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    _ => todo!(),
+                                },
+                                ReduceOp::Or => match ty {
+                                    VarType::U8
+                                    | VarType::U16
+                                    | VarType::U32
+                                    | VarType::U64 => {
+                                        self.atomic_or(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    _ => todo!(),
+                                },
+                                ReduceOp::Xor => match ty {
+                                    VarType::U8
+                                    | VarType::U16
+                                    | VarType::U32
+                                    | VarType::U64 => {
+                                        self.atomic_xor(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    _ => todo!(),
+                                },
+                                ReduceOp::Min => match ty {
+                                    VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                        self.atomic_u_min(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                        self.atomic_s_min(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    VarType::F32 | VarType::F64 => self
+                                        .atomic_f_min_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?,
+                                    _ => todo!(),
+                                },
+                                ReduceOp::Max => match ty {
+                                    VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                                        self.atomic_u_max(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                        self.atomic_s_max(spirv_ty, None, ptr, u32_1, u32_0, src)?
+                                    }
+                                    VarType::F32 | VarType::F64 => self
+                                        .atomic_f_max_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?,
+                                    _ => todo!(),
+                                },
+                                _ => todo!("{op:?} is not supported as an atomic scatter operation by the spirv backend!"),
+                            };
                     Ok(Some(res))
                 }
                 None => {

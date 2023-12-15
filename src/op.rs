@@ -8,6 +8,7 @@ pub enum ReduceOp {
     Prod,
     Or,
     And,
+    Xor,
 }
 
 /// TODO: Find better name for this kind of operation
