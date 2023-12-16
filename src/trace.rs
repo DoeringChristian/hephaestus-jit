@@ -792,8 +792,12 @@ impl VarRef {
     }
 }
 impl VarRef {
-    pub fn count(&self) -> (Self, Self) {
+    /// Get's the argument to true values of a boolean array
+    /// Returns a tuple (count: u32, indices: [u32])
+    pub fn compress(&self) -> (Self, Self) {
+        assert_eq!(self.ty(), VarType::Bool);
         let size = self.size();
+        // TODO: find a way to generate uninitialized arrays in a deffered manner
         let count = sized_literal(0u32, 1);
         let index = sized_literal(0u32, size);
 
@@ -804,7 +808,7 @@ impl VarRef {
 
         let res = push_var(
             Var {
-                op: Op::DeviceOp(DeviceOp::Count),
+                op: Op::DeviceOp(DeviceOp::Compress),
                 ty: VarType::Void,
                 extent: Extent::Size(0),
                 ..Default::default()

@@ -313,7 +313,7 @@ impl VulkanDevice {
             )
         };
     }
-    pub fn count_small(
+    pub fn compress_small(
         &self,
         cb: vk::CommandBuffer,
         pool: &mut Pool,
@@ -332,8 +332,10 @@ impl VulkanDevice {
             &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
         );
 
+        // TODO: in the end we might get the size buffer as an argument when suporting dynamic
+        // indices
         let mut size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u64>(),
+            size: std::mem::size_of::<u32>(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
@@ -342,7 +344,7 @@ impl VulkanDevice {
         });
         size_buffer
             .mapped_slice_mut()
-            .copy_from_slice(bytemuck::cast_slice(&[num as u64]));
+            .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
 
         let pipeline = self.get_pipeline(&PipelineDesc {
             code: &shader,

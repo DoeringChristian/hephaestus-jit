@@ -211,7 +211,7 @@ impl backend::BackendDevice for VulkanDevice {
                                 .size();
                             self.reduce(&self, cb, &mut pool, *op, &ty, num, src, dst);
                         }
-                        DeviceOp::Count => {
+                        DeviceOp::Compress => {
                             let index_out = buffers[0];
                             let count_out = buffers[1];
                             let src = buffers[2];
@@ -223,7 +223,7 @@ impl backend::BackendDevice for VulkanDevice {
                             let num = graph.buffer_desc(pass.buffers[2]).size;
                             dbg!(num);
 
-                            self.count_small(cb, &mut pool, num as _, count_out, src, index_out);
+                            self.compress_small(cb, &mut pool, num as _, count_out, src, index_out);
                         }
                         DeviceOp::Buffer2Texture => {
                             let src = buffers[0];

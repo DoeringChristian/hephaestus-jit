@@ -32,11 +32,11 @@ layout(set = 0, binding = 0) buffer Input{
 layout(set = 0, binding = 1) buffer Output{
     uint32_t out_data[];
 };
-layout(set = 0, binding = 3) buffer Count{
-    uint64_t out_count;
+layout(set = 0, binding = 2) buffer Count{
+    uint32_t out_count;
 };
-layout(set = 0, binding = 2) buffer Size{
-    uint64_t size;
+layout(set = 0, binding = 3) buffer Size{
+    uint32_t size;
 };
 
 shared uint32_t shared_data[WORK_GROUP_SIZE];

@@ -750,20 +750,33 @@ fn scatter_reduce() {
 }
 
 #[test]
-fn count() {
+fn compress_small() {
+    use rand::Rng;
+
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();
 
-    let src = tr::array(&[true, false, false, true, false, true, true], &device);
+    let src: Vec<bool> = (0..7).map(|_| rand::thread_rng().gen()).collect();
 
-    let (count, index) = src.count();
+    let reference = src
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| **b)
+        .map(|(i, _)| i as u32)
+        .collect::<Vec<_>>();
+
+    let src_tr = tr::array(&src, &device);
+
+    let (count, index) = src_tr.compress();
 
     let graph = tr::compile();
     graph.launch(&device);
 
-    dbg!(count.to_vec::<u32>());
-    dbg!(index.to_vec::<u32>());
-    dbg!(src.to_vec::<u8>());
-    // TODO: fix this
+    let count = count.to_vec::<u32>()[0] as usize;
+    let mut prediction = index.to_vec::<u32>();
+    prediction.truncate(count);
+
+    assert_eq!(reference, prediction);
+    assert_eq!(reference.len(), count);
 }
