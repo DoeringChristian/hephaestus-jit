@@ -794,6 +794,7 @@ impl VarRef {
 impl VarRef {
     /// Get's the argument to true values of a boolean array
     /// Returns a tuple (count: u32, indices: [u32])
+    /// TODO: add this to the SSA graph instead of scheduling it
     pub fn compress(&self) -> (Self, Self) {
         assert_eq!(self.ty(), VarType::Bool);
         let size = self.size();
