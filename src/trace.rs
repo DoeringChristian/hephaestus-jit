@@ -793,96 +793,38 @@ impl VarRef {
 }
 // Reduction Operations
 impl VarRef {
-    pub fn reduce_max(&self) -> Self {
+    pub fn reduce(&self, op: ReduceOp) -> Self {
         let extent = Extent::Size(1);
         let ty = self.ty();
         push_var(
             Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Max)),
+                op: Op::DeviceOp(DeviceOp::ReduceOp(op)),
                 ty,
                 extent,
                 ..Default::default()
             },
             [self],
         )
+    }
+    pub fn reduce_max(&self) -> Self {
+        self.reduce(ReduceOp::Max)
     }
     pub fn reduce_min(&self) -> Self {
-        let extent = Extent::Size(1);
-        let ty = self.ty();
-        push_var(
-            Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Min)),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [self],
-        )
+        self.reduce(ReduceOp::Min)
     }
     pub fn reduce_sum(&self) -> Self {
-        let extent = Extent::Size(1);
-        let ty = self.ty();
-        push_var(
-            Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Sum)),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [self],
-        )
+        self.reduce(ReduceOp::Sum)
     }
     pub fn reduce_prod(&self) -> Self {
-        let extent = Extent::Size(1);
-        let ty = self.ty();
-        push_var(
-            Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Prod)),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [self],
-        )
+        self.reduce(ReduceOp::Prod)
     }
     pub fn reduce_or(&self) -> Self {
-        let extent = Extent::Size(1);
-        let ty = self.ty();
-        push_var(
-            Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Or)),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [self],
-        )
+        self.reduce(ReduceOp::Or)
     }
     pub fn reduce_xor(&self) -> Self {
-        let extent = Extent::Size(1);
-        let ty = self.ty();
-        push_var(
-            Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::Xor)),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [self],
-        )
+        self.reduce(ReduceOp::Xor)
     }
-
     pub fn reduce_and(&self) -> Self {
-        let extent = Extent::Size(1);
-        let ty = self.ty();
-        push_var(
-            Var {
-                op: Op::DeviceOp(DeviceOp::ReduceOp(ReduceOp::And)),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [self],
-        )
+        self.reduce(ReduceOp::And)
     }
 }
