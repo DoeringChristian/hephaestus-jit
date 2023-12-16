@@ -748,3 +748,22 @@ fn scatter_reduce() {
 
     assert_eq!(dst.to_vec::<u32>()[0], n as u32);
 }
+
+#[test]
+fn count() {
+    pretty_env_logger::try_init().ok();
+
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let src = tr::array(&[true, false, false, true, false, true, true], &device);
+
+    let (count, index) = src.count();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    dbg!(count.to_vec::<u32>());
+    dbg!(index.to_vec::<u32>());
+    dbg!(src.to_vec::<u8>());
+    // TODO: fix this
+}

@@ -791,6 +791,31 @@ impl VarRef {
         )
     }
 }
+impl VarRef {
+    pub fn count(&self) -> (Self, Self) {
+        let size = self.size();
+        let count = sized_literal(0u32, 1);
+        let index = sized_literal(0u32, size);
+
+        count.schedule();
+        index.schedule();
+        self.schedule();
+        schedule_eval();
+
+        let res = push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::Count),
+                ty: VarType::Void,
+                extent: Extent::Size(0),
+                ..Default::default()
+            },
+            [&index, &count, self],
+        );
+        // NOTE: auto sceduled by `push_var`
+
+        (count, index)
+    }
+}
 // Reduction Operations
 impl VarRef {
     pub fn reduce(&self, op: ReduceOp) -> Self {

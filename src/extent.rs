@@ -4,7 +4,7 @@ use crate::backend;
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum Extent {
     #[default]
-    None,
+    None, // TODO: actually use none...
     Size(usize),
     DynSize {
         capacity: usize,

@@ -56,8 +56,16 @@ impl InternalVkDevice {
             .or_insert_with(|| Arc::new(pipeline::Pipeline::create(&self.device, desc)))
             .clone()
     }
-    fn get_shader_glsl(&self, src: &str, kind: ShaderKind) -> Arc<Vec<u32>> {
-        self.shader_cache.lock().unwrap().lease_glsl(src, kind)
+    fn get_shader_glsl(
+        &self,
+        src: &str,
+        kind: ShaderKind,
+        defines: &[(&str, Option<&str>)],
+    ) -> Arc<Vec<u32>> {
+        self.shader_cache
+            .lock()
+            .unwrap()
+            .lease_glsl(src, kind, defines)
     }
     fn get_static_glsl_templated(
         &self,
@@ -202,6 +210,20 @@ impl backend::BackendDevice for VulkanDevice {
                                 .extent
                                 .size();
                             self.reduce(&self, cb, &mut pool, *op, &ty, num, src, dst);
+                        }
+                        DeviceOp::Count => {
+                            let index_out = buffers[0];
+                            let count_out = buffers[1];
+                            let src = buffers[2];
+                            dbg!(buffers);
+                            dbg!(index_out);
+                            dbg!(count_out);
+                            dbg!(src);
+
+                            let num = graph.buffer_desc(pass.buffers[2]).size;
+                            dbg!(num);
+
+                            self.count_small(cb, &mut pool, num as _, count_out, src, index_out);
                         }
                         DeviceOp::Buffer2Texture => {
                             let src = buffers[0];

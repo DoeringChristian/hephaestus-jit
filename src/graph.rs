@@ -279,7 +279,9 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                                 op::Op::Accel => {
                                     accels.push(graph_builder.push_accel(trace, *id));
                                 }
-                                _ => todo!(),
+                                _ => {
+                                    log::trace!("No valid resulting operation, skipping!");
+                                }
                             };
                         }
                         graph_builder.push_pass(Pass {

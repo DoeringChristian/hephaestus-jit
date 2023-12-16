@@ -63,11 +63,18 @@ impl ShaderCache {
             })
             .clone()
     }
-    pub fn lease_glsl(&mut self, src: &str, kind: ShaderKind) -> Arc<Vec<u32>> {
+    pub fn lease_glsl(
+        &mut self,
+        src: &str,
+        kind: ShaderKind,
+        defines: &[(&str, Option<&str>)],
+    ) -> Arc<Vec<u32>> {
         log::trace!("Creating shader with the following source:");
         log::trace!("{}", src);
+        log::trace!("defines: {defines:?}");
         let mut hasher = DefaultHasher::new();
         src.hash(&mut hasher);
+        defines.hash(&mut hasher);
         kind.hash(&mut hasher);
         let hash = hasher.finish();
 
@@ -75,7 +82,12 @@ impl ShaderCache {
             .entry(hash)
             .or_insert_with(|| {
                 let compiler = shaderc::Compiler::new().unwrap();
-                let options = shaderc::CompileOptions::new().unwrap();
+                let mut options = shaderc::CompileOptions::new().unwrap();
+
+                for define in defines {
+                    options.add_macro_definition(define.0, define.1);
+                }
+
                 let result = compiler
                     .compile_into_spirv(src, kind.into(), "", "main", Some(&options))
                     .unwrap();

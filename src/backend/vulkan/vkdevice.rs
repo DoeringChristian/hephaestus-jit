@@ -313,6 +313,109 @@ impl VulkanDevice {
             )
         };
     }
+    pub fn count_small(
+        &self,
+        cb: vk::CommandBuffer,
+        pool: &mut Pool,
+        num: u32,
+        out_count: &Buffer,
+        src: &Buffer,
+        dst: &Buffer,
+    ) {
+        const ITEMS_PER_THREAD: u32 = 4;
+        let thread_count = round_pow2((num + ITEMS_PER_THREAD - 1) / ITEMS_PER_THREAD);
+        dbg!(thread_count);
+
+        let shader = self.get_shader_glsl(
+            include_str!("kernels/compress_small.glsl"),
+            ShaderKind::Compute,
+            &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
+        );
+
+        let mut size_buffer = pool.buffer(BufferInfo {
+            size: std::mem::size_of::<u64>(),
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::CpuToGpu,
+            ..Default::default()
+        });
+        size_buffer
+            .mapped_slice_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[num as u64]));
+
+        let pipeline = self.get_pipeline(&PipelineDesc {
+            code: &shader,
+            desc_set_layouts: &[DescSetLayout {
+                bindings: &[
+                    Binding {
+                        binding: 0,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 1,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 2,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 3,
+                        count: 1,
+                    },
+                ],
+            }],
+        });
+
+        let memory_barriers = [vk::MemoryBarrier::builder()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .build()];
+        unsafe {
+            self.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &memory_barriers,
+                &[],
+                &[],
+            );
+        }
+        log::trace!("Counting {num} elements with count_small");
+
+        pipeline.submit(
+            cb,
+            pool,
+            self,
+            &[
+                WriteSet {
+                    set: 0,
+                    binding: 0,
+                    buffers: &[BufferWriteInfo { buffer: src }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 1,
+                    buffers: &[BufferWriteInfo { buffer: dst }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 2,
+                    buffers: &[BufferWriteInfo { buffer: out_count }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 3,
+                    buffers: &[BufferWriteInfo {
+                        buffer: &size_buffer,
+                    }],
+                },
+            ],
+            (1, 1, 1),
+        );
+    }
     pub fn build_accel<'a>(
         &'a self,
         cb: vk::CommandBuffer,

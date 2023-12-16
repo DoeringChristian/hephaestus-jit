@@ -17,6 +17,7 @@ pub enum ReduceOp {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
     ReduceOp(ReduceOp),
+    Count, // TODO: determine if return or return by ref is better
     Buffer2Texture,
     BuildAccel,
 }
@@ -24,6 +25,7 @@ impl DeviceOp {
     pub fn resulting_op(self) -> Op {
         match self {
             DeviceOp::ReduceOp(_) => Op::Buffer,
+            DeviceOp::Count => Op::Nop,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
         }
