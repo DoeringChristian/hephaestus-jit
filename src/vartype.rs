@@ -1,3 +1,4 @@
+use half::f16;
 use std::sync::Arc;
 
 use lazy_static::lazy_static;
@@ -20,6 +21,7 @@ pub enum VarType {
     U32,
     I64,
     U64,
+    F16,
     F32,
     F64,
     Vec {
@@ -53,6 +55,7 @@ impl VarType {
             VarType::U32 => 4,
             VarType::I64 => 8,
             VarType::U64 => 8,
+            VarType::F16 => 2,
             VarType::F32 => 4,
             VarType::F64 => 8,
             VarType::Vec { ty, num } => ty.size() * num,
@@ -93,6 +96,7 @@ impl VarType {
             VarType::U32 => 4,
             VarType::I64 => 8,
             VarType::U64 => 8,
+            VarType::F16 => 2,
             VarType::F32 => 4,
             VarType::F64 => 8,
             VarType::Vec { ty, num } => ty.alignment(),
@@ -128,7 +132,7 @@ impl VarType {
     }
     pub fn is_float(&self) -> bool {
         match self {
-            VarType::F32 | VarType::F64 => true,
+            VarType::F16 | VarType::F32 | VarType::F64 => true,
             _ => false,
         }
     }
@@ -168,6 +172,7 @@ as_var_type! {
     u32 => U32;
     i64 => I64;
     u64 => U64;
+    f16 => F16;
     f32 => F32;
     f64 => F64;
 }

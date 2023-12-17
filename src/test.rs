@@ -1,3 +1,4 @@
+use half::f16;
 use std::collections::HashSet;
 
 use approx::assert_abs_diff_eq;
@@ -57,6 +58,21 @@ fn simple_u16() {
 
     dbg!(c.to_vec::<u16>());
     assert_eq!(c.to_vec::<u16>(), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
+}
+#[test]
+fn simple_f16() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let c = tr::index(10).cast(crate::vartype::VarType::F16);
+
+    c.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    let reference = (0..10).map(|i| f16::from_f32(i as _)).collect::<Vec<_>>();
+    assert_eq!(reference, c.to_vec::<f16>());
 }
 
 #[test]

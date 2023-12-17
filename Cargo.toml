@@ -35,6 +35,7 @@ rand = "0.8.5"
 approx = "0.5.1"
 paste = "1.0.14"
 lazy_static = "1.4.0"
+half = "2.3.1"
 
 [dev-dependecies]
 rusty-hook = "^0.11.2"

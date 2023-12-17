@@ -158,6 +158,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "crunchy"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+
+[[package]]
 name = "cuda-rs"
 version = "0.11.3"
 source = "git+https://github.com/DoeringChristian/cuda-rs.git#2c22e53f6c0458371b307972acf2f90e876c3f5b"
@@ -260,6 +266,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "half"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc52e53916c08643f1b56ec082790d1e86a32e58dc5268f897f313fbae7b4872"
+dependencies = [
+ "cfg-if",
+ "crunchy",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -280,6 +296,7 @@ dependencies = [
  "cuda-rs",
  "enum_dispatch",
  "gpu-allocator",
+ "half",
  "inline-spirv",
  "insta",
  "itertools",

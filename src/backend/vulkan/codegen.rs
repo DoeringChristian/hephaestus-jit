@@ -32,7 +32,7 @@ pub fn assemble_trace(trace: &IR, entry_point: &str) -> Result<Vec<u32>, dr::Err
 }
 fn isfloat(ty: &VarType) -> bool {
     match ty {
-        VarType::F32 | VarType::F64 => true,
+        VarType::F16 | VarType::F32 | VarType::F64 => true,
         _ => false,
     }
 }
@@ -56,12 +56,28 @@ pub struct SamplerDesc {
     dim: spirv::Dim,
 }
 
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Requirements {
+    int_8: bool,
+    int_16: bool,
+    int_64: bool,
+    float_16: bool,
+    float_64: bool,
+    atomic_float_16_add: bool,
+    atomic_float_32_add: bool,
+    atomic_float_64_add: bool,
+    atomic_float_16_min_max: bool,
+    atomic_float_32_min_max: bool,
+    atomic_float_64_min_max: bool,
+    ray_query: bool,
+}
+
 /// A wrapper arround `dr::Builder` to generate spriv code.
 ///
 /// * `b`: Builder from `rspriv`
 /// * `spirv_vars`: Mapping from VarId -> Spirv Id
 /// * `glsl_ext`: GLSL_EXT libarary loaded by default
+#[derive(Default)]
 struct SpirvBuilder {
     b: dr::Builder,
     spriv_regs: HashMap<VarId, u32>,
@@ -345,7 +361,7 @@ impl SpirvBuilder {
                                     | VarType::U64 => {
                                         self.atomic_i_add(spirv_ty, None, ptr, u32_1, u32_0, src)?
                                     }
-                                    VarType::F32 | VarType::F64 => self
+                                    VarType::F16| VarType::F32 | VarType::F64 => self
                                         .atomic_f_add_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?,
                                     _ => todo!(),
                                 },
@@ -383,7 +399,7 @@ impl SpirvBuilder {
                                     VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                         self.atomic_s_min(spirv_ty, None, ptr, u32_1, u32_0, src)?
                                     }
-                                    VarType::F32 | VarType::F64 => self
+                                    VarType::F16|VarType::F32 | VarType::F64 => self
                                         .atomic_f_min_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?,
                                     _ => todo!(),
                                 },
@@ -394,7 +410,7 @@ impl SpirvBuilder {
                                     VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                         self.atomic_s_max(spirv_ty, None, ptr, u32_1, u32_0, src)?
                                     }
-                                    VarType::F32 | VarType::F64 => self
+                                    VarType::F16|VarType::F32 | VarType::F64 => self
                                         .atomic_f_max_ext(spirv_ty, None, ptr, u32_1, u32_0, src)?,
                                     _ => todo!(),
                                 },
@@ -425,6 +441,7 @@ impl SpirvBuilder {
                 VarType::U32 => self.type_int(32, 0),
                 VarType::I64 => self.type_int(64, 1),
                 VarType::U64 => self.type_int(64, 0),
+                VarType::F16 => self.type_float(16),
                 VarType::F32 => self.type_float(32),
                 VarType::F64 => self.type_float(64),
                 VarType::Vec { ty, num } => {
@@ -689,7 +706,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 self.u_div(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_div(ty, Some(res), lhs, rhs)?;
                             }
                             _ => todo!(),
@@ -701,7 +718,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 self.u_mod(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_mod(ty, Some(res), lhs, rhs)?;
                             }
                             _ => todo!(),
@@ -713,7 +730,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 glsl_ext!(self; res: ty = UMin, lhs, rhs);
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 glsl_ext!(self; res: ty = FMin, lhs, rhs);
                             }
                             _ => todo!(),
@@ -725,7 +742,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 glsl_ext!(self; res: ty = UMax, lhs, rhs);
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 glsl_ext!(self; res: ty = FMax, lhs, rhs);
                             }
                             _ => todo!(),
@@ -819,7 +836,7 @@ impl SpirvBuilder {
                             | VarType::I64 => {
                                 self.i_equal(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_ord_equal(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Bool => {
@@ -838,7 +855,7 @@ impl SpirvBuilder {
                             | VarType::I64 => {
                                 self.i_not_equal(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_ord_not_equal(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Bool => {
@@ -853,7 +870,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 self.u_less_than(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_ord_less_than(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Bool => {
@@ -869,7 +886,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 self.u_less_than_equal(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_ord_less_than_equal(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Bool => {
@@ -891,7 +908,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 self.u_greater_than(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_ord_greater_than(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Bool => {
@@ -907,7 +924,7 @@ impl SpirvBuilder {
                             VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
                                 self.u_greater_than_equal(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F32 | VarType::F64 => {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_ord_greater_than_equal(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Bool => {
@@ -935,20 +952,20 @@ impl SpirvBuilder {
                     match op {
                         crate::ir::Uop::Cast => match (src_ty, ty) {
                             (
-                                VarType::F32 | VarType::F64,
+                                VarType::F16 | VarType::F32 | VarType::F64,
                                 VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
                             ) => self.convert_f_to_u(spirv_ty, None, src)?,
                             (
-                                VarType::F32 | VarType::F64,
+                                VarType::F16 | VarType::F32 | VarType::F64,
                                 VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
                             ) => self.convert_f_to_s(spirv_ty, None, src)?,
                             (
                                 VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
-                                VarType::F32 | VarType::F64,
+                                VarType::F16 | VarType::F32 | VarType::F64,
                             ) => self.convert_u_to_f(spirv_ty, None, src)?,
                             (
                                 VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
-                                VarType::F32 | VarType::F64,
+                                VarType::F16 | VarType::F32 | VarType::F64,
                             ) => self.convert_s_to_f(spirv_ty, None, src)?,
                             (
                                 VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64,
@@ -980,7 +997,9 @@ impl SpirvBuilder {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.s_negate(spirv_ty, None, src)?
                             }
-                            VarType::F32 | VarType::F64 => self.f_negate(spirv_ty, None, src)?,
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                self.f_negate(spirv_ty, None, src)?
+                            }
                             _ => todo!(),
                         },
                         crate::ir::Uop::Sqrt => {
@@ -994,7 +1013,7 @@ impl SpirvBuilder {
                                 VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                     glsl_ext!(self; res: spirv_ty = SAbs, src);
                                 }
-                                VarType::F32 | VarType::F64 => {
+                                VarType::F16 | VarType::F32 | VarType::F64 => {
                                     glsl_ext!(self; res: spirv_ty = FAbs, src);
                                 }
                                 _ => todo!(),
@@ -1004,7 +1023,7 @@ impl SpirvBuilder {
                         crate::ir::Uop::Sin => {
                             let res = self.id();
                             match ty {
-                                VarType::F32 | VarType::F64 => {
+                                VarType::F16 | VarType::F32 | VarType::F64 => {
                                     glsl_ext!(self; res: spirv_ty = Sin, src);
                                 }
                                 _ => todo!(),
@@ -1014,7 +1033,7 @@ impl SpirvBuilder {
                         crate::ir::Uop::Cos => {
                             let res = self.id();
                             match ty {
-                                VarType::F32 | VarType::F64 => {
+                                VarType::F16 | VarType::F32 | VarType::F64 => {
                                     glsl_ext!(self; res: spirv_ty = Cos, src);
                                 }
                                 _ => todo!(),
@@ -1024,7 +1043,7 @@ impl SpirvBuilder {
                         crate::ir::Uop::Exp2 => {
                             let res = self.id();
                             match ty {
-                                VarType::F32 | VarType::F64 => {
+                                VarType::F16 | VarType::F32 | VarType::F64 => {
                                     glsl_ext!(self; res: spirv_ty = Exp2, src);
                                 }
                                 _ => todo!(),
@@ -1034,7 +1053,7 @@ impl SpirvBuilder {
                         crate::ir::Uop::Log2 => {
                             let res = self.id();
                             match ty {
-                                VarType::F32 | VarType::F64 => {
+                                VarType::F16 | VarType::F32 | VarType::F64 => {
                                     glsl_ext!(self; res: spirv_ty = Log2, src);
                                 }
                                 _ => todo!(),
@@ -1386,6 +1405,9 @@ impl SpirvBuilder {
                         | VarType::U32
                         | VarType::I64
                         | VarType::U64 => self.constant_bit64(ty, var.data),
+                        VarType::F16 => {
+                            self.constant_bit32(ty, unsafe { *(&var.data as *const _ as *const _) })
+                        }
                         VarType::F32 => {
                             self.constant_bit32(ty, unsafe { *(&var.data as *const _ as *const _) })
                         }
