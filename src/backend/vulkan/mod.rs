@@ -223,7 +223,15 @@ impl backend::BackendDevice for VulkanDevice {
                             let num = graph.buffer_desc(pass.buffers[2]).size;
                             dbg!(num);
 
-                            self.compress_small(cb, &mut pool, num as _, count_out, src, index_out);
+                            if num <= 4096 {
+                                self.compress_small(
+                                    cb, &mut pool, num as _, count_out, src, index_out,
+                                );
+                            } else {
+                                self.compress_large(
+                                    cb, &mut pool, num as _, count_out, src, index_out,
+                                );
+                            }
                         }
                         DeviceOp::Buffer2Texture => {
                             let src = buffers[0];

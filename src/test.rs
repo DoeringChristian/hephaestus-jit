@@ -773,7 +773,38 @@ fn compress_small() {
 
     let device = backend::Device::vulkan(0).unwrap();
 
-    let src: Vec<bool> = (0..7).map(|_| rand::thread_rng().gen()).collect();
+    let src: Vec<bool> = (0..128).map(|_| rand::thread_rng().gen()).collect();
+
+    let reference = src
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| **b)
+        .map(|(i, _)| i as u32)
+        .collect::<Vec<_>>();
+
+    let src_tr = tr::array(&src, &device);
+
+    let (count, index) = src_tr.compress();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    let count = count.to_vec::<u32>()[0] as usize;
+    let mut prediction = index.to_vec::<u32>();
+    prediction.truncate(count);
+
+    assert_eq!(reference, prediction);
+    assert_eq!(reference.len(), count);
+}
+#[test]
+fn compress_large() {
+    use rand::Rng;
+
+    pretty_env_logger::try_init().ok();
+
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let src: Vec<bool> = (0..4097).map(|_| rand::thread_rng().gen()).collect();
 
     let reference = src
         .iter()

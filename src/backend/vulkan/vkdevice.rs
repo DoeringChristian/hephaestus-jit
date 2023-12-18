@@ -418,6 +418,189 @@ impl VulkanDevice {
             (1, 1, 1),
         );
     }
+    pub fn compress_large(
+        &self,
+        cb: vk::CommandBuffer,
+        pool: &mut Pool,
+        num: u32,
+        out_count: &Buffer,
+        src: &Buffer,
+        dst: &Buffer,
+    ) {
+        let items_per_thread = 16;
+        let thread_count = 128;
+        let items_per_block = items_per_thread * thread_count;
+        let block_count = (num + items_per_block - 1) / items_per_block;
+        let scratch_items = block_count + 32;
+        let trailer = items_per_block * block_count - num;
+
+        let compress_large = self.get_shader_glsl(
+            include_str!("kernels/compress_large.glsl"),
+            ShaderKind::Compute,
+            &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
+        );
+        let compress_large = self.get_pipeline(&PipelineDesc {
+            code: &compress_large,
+            desc_set_layouts: &[DescSetLayout {
+                bindings: &[
+                    Binding {
+                        binding: 0,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 1,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 2,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 3,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 4,
+                        count: 1,
+                    },
+                ],
+            }],
+        });
+        let prefix_sum_large_init = self.get_shader_glsl(
+            include_str!("kernels/prefix_sum_large_init.glsl"),
+            ShaderKind::Compute,
+            &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
+        );
+        let prefix_sum_large_init = self.get_pipeline(&PipelineDesc {
+            code: &prefix_sum_large_init,
+            desc_set_layouts: &[DescSetLayout {
+                bindings: &[
+                    Binding {
+                        binding: 0,
+                        count: 1,
+                    },
+                    Binding {
+                        binding: 1,
+                        count: 1,
+                    },
+                ],
+            }],
+        });
+
+        let scratch_buffer = pool.buffer(BufferInfo {
+            size: std::mem::size_of::<u64>() * scratch_items as usize,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::GpuOnly,
+            ..Default::default()
+        });
+
+        let size_buffer = pool.buffer(BufferInfo {
+            size: std::mem::size_of::<u64>() * scratch_items as usize,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::CpuToGpu,
+            ..Default::default()
+        });
+        let scratch_items_size = pool.buffer(BufferInfo {
+            size: std::mem::size_of::<u64>() * scratch_items as usize,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::STORAGE_BUFFER,
+            memory_location: MemoryLocation::CpuToGpu,
+            ..Default::default()
+        });
+
+        // Initializing scratch buffer
+        let memory_barriers = [vk::MemoryBarrier::builder()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .build()];
+        unsafe {
+            self.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &memory_barriers,
+                &[],
+                &[],
+            );
+        }
+
+        prefix_sum_large_init.submit(
+            cb,
+            pool,
+            self,
+            &[
+                WriteSet {
+                    set: 0,
+                    binding: 0,
+                    buffers: &[BufferWriteInfo {
+                        buffer: &scratch_buffer,
+                    }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 1,
+                    buffers: &[BufferWriteInfo {
+                        buffer: &scratch_items_size,
+                    }],
+                },
+            ],
+            (scratch_items / thread_count, 1, 1),
+        );
+
+        // Compress
+        let memory_barriers = [vk::MemoryBarrier::builder()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .build()];
+        unsafe {
+            self.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &memory_barriers,
+                &[],
+                &[],
+            );
+        }
+
+        compress_large.submit(
+            cb,
+            pool,
+            self,
+            &[
+                WriteSet {
+                    set: 0,
+                    binding: 0,
+                    buffers: &[BufferWriteInfo { buffer: &src }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 1,
+                    buffers: &[BufferWriteInfo { buffer: &dst }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 2,
+                    buffers: &[BufferWriteInfo {
+                        buffer: &scratch_buffer,
+                    }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 3,
+                    buffers: &[BufferWriteInfo { buffer: &out_count }],
+                },
+            ],
+            (block_count, 1, 1),
+        );
+    }
     pub fn build_accel<'a>(
         &'a self,
         cb: vk::CommandBuffer,

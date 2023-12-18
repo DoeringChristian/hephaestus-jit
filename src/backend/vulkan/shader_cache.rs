@@ -84,6 +84,11 @@ impl ShaderCache {
                 let compiler = shaderc::Compiler::new().unwrap();
                 let mut options = shaderc::CompileOptions::new().unwrap();
 
+                options.set_target_env(
+                    shaderc::TargetEnv::Vulkan,
+                    shaderc::EnvVersion::Vulkan1_2 as _,
+                );
+
                 for define in defines {
                     options.add_macro_definition(define.0, define.1);
                 }
