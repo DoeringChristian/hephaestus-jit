@@ -57,7 +57,7 @@ layout(set = 0, binding = 4) buffer Index{
 shared uint32_t shared_data[WORK_GROUP_SIZE * N * M]; 
 
 uint32_t clz(uint32_t x){
-    return 32 - findMSB(x);
+    return 31 - findMSB(x);
 }
 
 layout(local_size_x = WORK_GROUP_SIZE, local_size_y = 1, local_size_z = 1)in;
@@ -110,10 +110,10 @@ void main(){
     // Fetch input from shared memory
     uint32_t values[N * M];
     for (uint i = 0; i < N; i++){
-        values[i+0] = shared_data[(thread_idx * N + i) * M + 0];
-        values[i+1] = shared_data[(thread_idx * N + i) * M + 1];
-        values[i+2] = shared_data[(thread_idx * N + i) * M + 2];
-        values[i+3] = shared_data[(thread_idx * N + i) * M + 3];
+        values[i * M +0] = shared_data[(thread_idx * N + i) * M + 0];
+        values[i * M +1] = shared_data[(thread_idx * N + i) * M + 1];
+        values[i * M +2] = shared_data[(thread_idx * N + i) * M + 2];
+        values[i * M +3] = shared_data[(thread_idx * N + i) * M + 3];
     }
 
     // Unroled exclusive prefix sum
@@ -144,7 +144,7 @@ void main(){
         shared_data[si] = sum_block;
         memoryBarrierShared();
         barrier();
-        sum_block = shared_data[si] + shared_data[si + offset];
+        sum_block = shared_data[si] + shared_data[si - offset];
         memoryBarrierShared();
         barrier();
     }
@@ -194,15 +194,16 @@ void main(){
     }
     
     // Warp-level sum reduction of 'prefix'
-    for (uint offset = warp_size/2; offset > 0; offset /= 2){
+    for (uint offset = warp_size / 2; offset > 0; offset /= 2){
         prefix += subgroupShuffleDown(prefix, offset);
     }
     
     // Broadcast the reduced 'prefix' value from lane 0
-    prefix += subgroupShuffle(prefix, 0);
+    prefix = subgroupBroadcast(prefix, 0);
     
     // Offset the local block sum with the final prefix
     sum_block += prefix;
+    
     
     // Store block-level complete inclusive prefixnsum value in global memory
     if(thread_idx == block_size - 1){
@@ -213,13 +214,14 @@ void main(){
     for (uint i = 0; i < N * M; i++){
         values[i] += sum_block;
     }
+    
 
     // Store input into shared memory
     for (uint i = 0; i < N; i++){
-        shared_data[(thread_idx * N + i) * M + 0] = values[0];
-        shared_data[(thread_idx * N + i) * M + 1] = values[1];
-        shared_data[(thread_idx * N + i) * M + 2] = values[2];
-        shared_data[(thread_idx * N + i) * M + 3] = values[3];
+        shared_data[(thread_idx * N + i) * M + 0] = values[N * i + 0];
+        shared_data[(thread_idx * N + i) * M + 1] = values[N * i + 1];
+        shared_data[(thread_idx * N + i) * M + 2] = values[N * i + 2];
+        shared_data[(thread_idx * N + i) * M + 3] = values[N * i + 3];
     }
     
     memoryBarrierShared();
@@ -234,6 +236,8 @@ void main(){
         v.y = shared_data[j * M + 1];
         v.z = shared_data[j * M + 2];
         v.w = shared_data[j * M + 3];
+        uint index_out = j + partition_idx * (N * block_size);
+        
         out_data[j + partition_idx * (N * block_size)] = v;
     }
 }

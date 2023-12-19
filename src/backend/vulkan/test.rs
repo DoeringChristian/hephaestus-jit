@@ -14,11 +14,15 @@ fn prefix_sum() {
     let device = VulkanDevice::create(0).unwrap();
 
     let elem_size = std::mem::size_of::<u32>();
-    let num = 1024;
+    let num = 2048 * 4;
 
-    let block_size = 128;
-    let block_count = 8;
+    let items_per_thread = 4 * 4;
+    let thread_count = 128;
+    let items_per_block = items_per_thread * thread_count;
+    let block_count = (num + items_per_block - 1) / items_per_block;
     let scratch_items = 32 + block_count;
+    dbg!(block_count);
+    // return;
 
     let mut pool = Pool::new(&device);
 
@@ -46,7 +50,7 @@ fn prefix_sum() {
     let prefix_sum_large = device.get_shader_glsl(
         include_str!("kernels/prefix_sum_large.glsl"),
         ShaderKind::Compute,
-        &[("WORK_GROUP_SIZE", Some(&format!("{block_size}")))],
+        &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
     );
 
     let pipeline = device.get_pipeline(&PipelineDesc {
@@ -164,7 +168,9 @@ fn prefix_sum() {
     });
 
     let out: &[u32] = bytemuck::cast_slice(output.mapped_slice());
-    for i in 0..(block_count as usize - 1) {
-        dbg!(&out[i * block_size..(i + 1) * block_size]);
+    for i in 0..(block_count as usize) {
+        println!("");
+        let slice = &out[i * thread_count..(i + 1) * thread_count];
+        println!("{slice:?}");
     }
 }
