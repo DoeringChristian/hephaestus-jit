@@ -32,6 +32,7 @@ pub struct PhysicalDevice {
     pub properties_v1_1: vk::PhysicalDeviceVulkan11Properties,
     pub properties_v1_2: vk::PhysicalDeviceVulkan12Properties,
     pub acceleration_structure_properties: vk::PhysicalDeviceAccelerationStructurePropertiesKHR,
+    pub subgroup_properties: vk::PhysicalDeviceSubgroupProperties,
 
     pub extensions: Vec<vk::ExtensionProperties>,
 
@@ -97,10 +98,12 @@ impl PhysicalDevice {
         let mut properties_v1_2 = vk::PhysicalDeviceVulkan12Properties::default();
         let mut acceleration_structure_properties =
             vk::PhysicalDeviceAccelerationStructurePropertiesKHR::default();
+        let mut subgroup_properties = vk::PhysicalDeviceSubgroupProperties::default();
         let mut properties2 = vk::PhysicalDeviceProperties2::builder()
             .push_next(&mut properties_v1_1)
             .push_next(&mut properties_v1_2)
             .push_next(&mut acceleration_structure_properties)
+            .push_next(&mut subgroup_properties)
             .build();
 
         unsafe { instance.get_physical_device_properties2(physical_device, &mut properties2) };
@@ -168,6 +171,8 @@ impl PhysicalDevice {
             properties_v1_1,
             properties_v1_2,
             acceleration_structure_properties,
+            subgroup_properties,
+
             extensions,
             queue_family_index,
             memory_properties,

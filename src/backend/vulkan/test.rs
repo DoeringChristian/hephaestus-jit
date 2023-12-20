@@ -18,9 +18,10 @@ fn prefix_sum() {
 
     let items_per_thread = 4 * 4;
     let thread_count = 128;
+    let warp_size = device.physical_device.subgroup_properties.subgroup_size as usize;
     let items_per_block = items_per_thread * thread_count;
     let block_count = (num + items_per_block - 1) / items_per_block;
-    let scratch_items = 1 + 32 + block_count;
+    let scratch_items = 1 + warp_size + block_count;
     dbg!(block_count);
     // return;
 
@@ -113,7 +114,7 @@ fn prefix_sum() {
         .copy_from_slice(bytemuck::cast_slice(
             &(0..1)
                 .map(|_| 0)
-                .chain((0..32).map(|_| 2))
+                .chain((0..warp_size as u64).map(|_| 2))
                 .chain((0..block_count).map(|_| 0))
                 .collect::<Vec<u64>>(),
         ));
@@ -168,10 +169,5 @@ fn prefix_sum() {
             Some(*sum)
         })
         .collect::<Vec<_>>();
-    // for i in 0..(block_count as usize) {
-    //     println!("");
-    //     let slice = &reference[i * thread_count..(i + 1) * thread_count];
-    //     println!("{slice:?}");
-    // }
     assert_eq!(out, &reference);
 }
