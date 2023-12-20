@@ -8,6 +8,7 @@
 
 
 
+// Explicit arythmetic types
 #extension GL_EXT_shader_explicit_arithmetic_types: require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8: require
 #extension GL_EXT_shader_explicit_arithmetic_types_int16: require
@@ -17,8 +18,11 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_float32: require
 #extension GL_EXT_shader_explicit_arithmetic_types_float64: require
 
+// Atomics and Memory
 #extension GL_KHR_memory_scope_semantics: require
+#extension GL_EXT_shader_atomic_int64: require
 
+// Subgroup
 #extension GL_KHR_shader_subgroup_basic: require
 #extension GL_KHR_shader_subgroup_vote: require
 #extension GL_KHR_shader_subgroup_ballot: require
@@ -47,11 +51,9 @@ layout(set = 0, binding = 1) buffer Outputu32{
 layout(set = 0, binding = 2) buffer Size{
     uint32_t size;
 };
+// Atomic scratch buffer, storing a index, variables and flags 
 layout(set = 0, binding = 3) buffer Scratch{
     uint64_t scratch[];
-};
-layout(set = 0, binding = 4) buffer Index{
-    uint32_t global_index;
 };
 
 shared uint32_t shared_data[WORK_GROUP_SIZE * N * M]; 
@@ -75,7 +77,7 @@ void main(){
     // Atomically aquire partition index
     uint32_t partition_idx = 0;
     if (warp_idx == 0 && lane == 0){
-        shared_data[0].x = atomicAdd(global_index, 1);
+        shared_data[0].x = uint32_t(atomicAdd(scratch[0], 1));
     }
     groupMemoryBarrier();
     barrier();
@@ -152,7 +154,11 @@ void main(){
     // Store tentative block-level inclusive prefix sum value in global memory
     // (still missing prefix from predecessors)
     // uint scratch_idx = partition_idx + SCRATCH_OFFSET;
-    uint scratch_idx = partition_idx + warp_size; // scratch buffer is offset by warp_size to not cause deadlocks for first thread
+    
+    // scratch buffer is offset by warp_size to not cause deadlocks for first thread
+    // Also by the atomic counter
+    
+    uint scratch_idx = partition_idx + warp_size;
     if (thread_idx == block_size - 1){
         atomicStore(scratch[scratch_idx], (uint64_t(sum_block) << 32) | 1ul, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
     }

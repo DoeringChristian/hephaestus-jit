@@ -20,7 +20,7 @@ fn prefix_sum() {
     let thread_count = 128;
     let items_per_block = items_per_thread * thread_count;
     let block_count = (num + items_per_block - 1) / items_per_block;
-    let scratch_items = 32 + block_count;
+    let scratch_items = 1 + 32 + block_count;
     dbg!(block_count);
     // return;
 
@@ -56,7 +56,7 @@ fn prefix_sum() {
     let pipeline = device.get_pipeline(&PipelineDesc {
         code: &prefix_sum_large,
         desc_set_layouts: &[DescSetLayout {
-            bindings: &(0..5)
+            bindings: &(0..4)
                 .map(|i| Binding {
                     binding: i,
                     count: 1,
@@ -97,17 +97,6 @@ fn prefix_sum() {
     });
     size.mapped_slice_mut()
         .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
-    let mut index = pool.buffer(BufferInfo {
-        size: std::mem::size_of::<u32>(),
-        alignment: 0,
-        usage: vk::BufferUsageFlags::TRANSFER_SRC
-            | vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::STORAGE_BUFFER,
-        memory_location: MemoryLocation::CpuToGpu,
-    });
-    index
-        .mapped_slice_mut()
-        .copy_from_slice(bytemuck::cast_slice(&[0]));
     let mut scratch = pool.buffer(BufferInfo {
         size: scratch_items * std::mem::size_of::<u64>(),
         alignment: 0,
@@ -119,8 +108,9 @@ fn prefix_sum() {
     scratch
         .mapped_slice_mut()
         .copy_from_slice(bytemuck::cast_slice(
-            &(0..32)
-                .map(|_| 2)
+            &(0..1)
+                .map(|_| 0)
+                .chain((0..32).map(|_| 2))
                 .chain((0..block_count).map(|_| 0))
                 .collect::<Vec<u64>>(),
         ));
@@ -156,11 +146,6 @@ fn prefix_sum() {
                     set: 0,
                     binding: 3,
                     buffers: &[BufferWriteInfo { buffer: &scratch }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 4,
-                    buffers: &[BufferWriteInfo { buffer: &index }],
                 },
             ],
             (block_count as _, 1, 1),
