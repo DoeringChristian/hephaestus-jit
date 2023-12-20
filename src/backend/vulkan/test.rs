@@ -76,6 +76,9 @@ fn prefix_sum() {
     output
         .mapped_slice_mut()
         .copy_from_slice(bytemuck::cast_slice(&vec![0u32; num]));
+
+    let input_vec = (0..num as u32).map(|i| i).collect::<Vec<_>>();
+
     let mut input = pool.buffer(BufferInfo {
         size: num * elem_size,
         alignment: 0,
@@ -86,7 +89,7 @@ fn prefix_sum() {
     });
     input
         .mapped_slice_mut()
-        .copy_from_slice(bytemuck::cast_slice(&vec![1u32; num]));
+        .copy_from_slice(bytemuck::cast_slice(&input_vec));
     let mut size = pool.buffer(BufferInfo {
         size: std::mem::size_of::<u32>(),
         alignment: 0,
@@ -158,4 +161,17 @@ fn prefix_sum() {
         let slice = &out[i * thread_count..(i + 1) * thread_count];
         println!("{slice:?}");
     }
+    let reference = input_vec
+        .into_iter()
+        .scan(0, |sum, i| {
+            *sum += i;
+            Some(*sum)
+        })
+        .collect::<Vec<_>>();
+    // for i in 0..(block_count as usize) {
+    //     println!("");
+    //     let slice = &reference[i * thread_count..(i + 1) * thread_count];
+    //     println!("{slice:?}");
+    // }
+    assert_eq!(out, &reference);
 }

@@ -39,19 +39,24 @@
 
 // TODO: Optimization
 
+// Immutable buffer over input data
 layout(set = 0, binding = 0) buffer Input{
     u32vec4 in_data[];
 };
+// Mutable buffer for output data
 layout(set = 0, binding = 1) buffer Output{
     u32vec4 out_data[];
 };
 layout(set = 0, binding = 1) buffer Outputu32{
     uint32_t out_data_u32[];
 };
+// Buffer holding the `size` (number of elements) for the input buffer
 layout(set = 0, binding = 2) buffer Size{
     uint32_t size;
 };
-// Atomic scratch buffer, storing a index, variables and flags 
+// Atomic mutable scratch buffer, storing [index, 32 + item_size] u64s.
+// The `index` part is used to atomically select partitions
+// The other items are used to perform decoupled lookback (storing a flag and value)
 layout(set = 0, binding = 3) buffer Scratch{
     uint64_t scratch[];
 };
