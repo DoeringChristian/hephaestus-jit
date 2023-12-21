@@ -1,5 +1,9 @@
 #version 450
 /*
+    This implementation is both based on Mitsuba's prefix sum.
+    In order to make it more compatible, I added the threadlock prevention strategy described
+    here: https://github.com/b0nes164/GPUPrefixSums
+
     Copyright (c) 2021 Wenzel Jakob <wenzel.jakob@epfl.ch>
 
     All rights reserved. Use of this source code is governed by a BSD-style
@@ -29,27 +33,34 @@
 #extension GL_KHR_shader_subgroup_shuffle: require
 #extension GL_KHR_shader_subgroup_shuffle_relative: require
 
-#define INCLUSIVE
 
 // N: Number of vectors to load
 // M: Number of element per vector 
 #define N 4
 #define M 4
 
+// Defines if inclusive or exclusive sum is performed
+#define INCLUSIVE
+
+// Defines the type
+#define T uint32_t
+// Defines the vector type used for loading must be `{short form of T}vec{M}`
+#define VT u32vec4
+
 
 // TODO: Optimization
 
 // Immutable buffer over input data
 layout(set = 0, binding = 0) buffer Input{
-    u32vec4 in_data[];
+    VT in_data[];
 };
 // Mutable buffer for output data
 layout(set = 0, binding = 1) buffer Output{
-    u32vec4 out_data[];
+    VT out_data[];
 };
-layout(set = 0, binding = 1) buffer Outputu32{
-    uint32_t out_data_u32[];
-};
+// layout(set = 0, binding = 1) buffer Outputu32{
+//     uint32_t out_data_u32[];
+// };
 // Buffer holding the `size` (number of elements) for the input buffer
 layout(set = 0, binding = 2) buffer Size{
     uint32_t size;
@@ -61,10 +72,74 @@ layout(set = 0, binding = 3) buffer Scratch{
     uint64_t scratch[];
 };
 
-shared uint32_t shared_data[WORK_GROUP_SIZE * N * M]; 
+shared T shared_data[WORK_GROUP_SIZE * N * M]; 
 
 uint32_t clz(uint32_t x){
     return 31 - findMSB(x);
+}
+
+/*
+ * Combine a value and flag in one uint64_t value.
+ * Ported from Mitsuba
+ *
+ * The Vulkan backend implementation for *large* numeric types (double precision
+ * floats, 64 bit integers) has the following technical limitation: when
+ * reducing 64-bit integers, their values must be smaller than 2**62. When
+ * reducing double precision arrays, the two least significant mantissa bits
+ * are clamped to zero when forwarding the prefix from one 512-wide block to
+ * the next (at a very minor loss in accuracy). The reason is that the
+ * operations requires two status bits (in the `flags` variable)  to coordinate
+ * the prefix and status of each 512-wide block, and those must each fit into a
+ * single 64 bit value (128-bit writes aren't guaranteed to be atomic).
+*/
+uint64_t combine(T value, uint32_t flag){
+    uint64_t combined;
+    
+    // TODO: add more types
+#if T == uint32_t
+    combined = uint64_t(value) << 32 | flag;
+#elif T == float32_t
+    combined = uint64_t(floatBitsToUint(value)) << 32 | flag;
+#elif T == uint64_t 
+    combined = (value << 2) | flag;
+#elif T == float64_t 
+    combined = (floatBitsToUint(value) & ~3ul) | flag;
+#endif
+
+    return combined;
+}
+
+/*
+ * Extract a value and flag from one uint64_t value.
+ * Ported from Mitsuba
+ *
+ * The Vulkan backend implementation for *large* numeric types (double precision
+ * floats, 64 bit integers) has the following technical limitation: when
+ * reducing 64-bit integers, their values must be smaller than 2**62. When
+ * reducing double precision arrays, the two least significant mantissa bits
+ * are clamped to zero when forwarding the prefix from one 512-wide block to
+ * the next (at a very minor loss in accuracy). The reason is that the
+ * operations requires two status bits (in the `flags` variable)  to coordinate
+ * the prefix and status of each 512-wide block, and those must each fit into a
+ * single 64 bit value (128-bit writes aren't guaranteed to be atomic).
+*/
+void extract(in uint64_t src, out T value, out uint32_t flag){
+    
+    // TODO: add more types
+#if T == uint32_t
+    flag = uint32_t(src);
+    value = uint32_t(src >> 32);
+#elif T == float32_t
+    flag = uint32_t(src);
+    value = floatBitsToUint(uint32_t(src >> 32));
+#elif T == uint64_t 
+    flags = uint32_t(src) & 3u;
+    value = src >> 2;
+#elif T == float64_t 
+    flags = uint32_t(src) & 3u;
+    value = floatBitsToUint(src & ~32ul);
+#endif
+
 }
 
 layout(local_size_x = WORK_GROUP_SIZE, local_size_y = 1, local_size_z = 1)in;
@@ -92,12 +167,12 @@ void main(){
 
     // We should now be able to replace block_idx with partition_idx in mitsuba's code
 
-    u32vec4 v[N];
+    VT v[N];
 
     for (uint i = 0; i < N; i++){
         uint32_t j = (partition_idx * N + i) * block_size + thread_idx;
 
-        u32vec4 value = in_data[j];
+        VT value = in_data[j];
 
         // TODO: add bound check (especially for floats)!
 
@@ -115,7 +190,7 @@ void main(){
     barrier();
 
     // Fetch input from shared memory
-    uint32_t values[N * M];
+    T values[N * M];
     for (uint i = 0; i < N; i++){
         values[i * M +0] = shared_data[(thread_idx * N + i) * M + 0];
         values[i * M +1] = shared_data[(thread_idx * N + i) * M + 1];
@@ -124,9 +199,9 @@ void main(){
     }
 
     // Unroled exclusive prefix sum
-    uint32_t sum_local = uint32_t(0);
+    T sum_local = T(0);
     for (uint i = 0; i < N * M; i++){
-        uint32_t v = values[i];
+        T v = values[i];
 
         #ifdef INCLUSIVE
         sum_local += v;
@@ -146,7 +221,7 @@ void main(){
     shared_data[si] = 0;
     si += block_size;
 
-    uint32_t sum_block = sum_local;
+    T sum_block = sum_local;
     for (uint offset = 1; offset < block_size; offset <<= 1){
         shared_data[si] = sum_block;
         memoryBarrierShared();
@@ -165,10 +240,11 @@ void main(){
     
     uint scratch_idx = partition_idx + warp_size;
     if (thread_idx == block_size - 1){
-        atomicStore(scratch[scratch_idx], (uint64_t(sum_block) << 32) | 1ul, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
+        uint64_t combined = combine(sum_block, 1u);
+        atomicStore(scratch[scratch_idx], combined, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
     }
 
-    uint32_t prefix = uint32_t(0);
+    T prefix = T(0);
 
     // Each thread looks back a different amount
     int32_t shift = int32_t(lane) - int32_t(warp_size);
@@ -179,7 +255,10 @@ void main(){
     // Decoupled lookback iteration
     while(true){
         uint64_t tmp = atomicLoad(scratch[scratch_idx + shift], gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
-        uint32_t flag = uint32_t(tmp);
+        // uint32_t flag = uint32_t(tmp);
+        uint32_t flag;
+        T value;
+        extract(tmp, value, flag);
         
         // Retry if at least one of the predecessors hasn't made any progress yet
         if(subgroupAny(flag == 0)){
@@ -187,7 +266,7 @@ void main(){
         }
 
         uint32_t mask = subgroupBallot(flag == 2).x; 
-        uint32_t value = uint32_t(tmp >> 32);
+        // uint32_t value = uint32_t(tmp >> 32);
         
         if (mask == 0){
             prefix += value;
@@ -218,7 +297,8 @@ void main(){
     
     // Store block-level complete inclusive prefixnsum value in global memory
     if(thread_idx == block_size - 1){
-        atomicStore(scratch[scratch_idx], (uint64_t(sum_block) << 32) | 2ul, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
+        uint64_t combined = combine(sum_block, 2u);
+        atomicStore(scratch[scratch_idx], combined, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
     }
 
     sum_block -= sum_local;
@@ -242,7 +322,7 @@ void main(){
     for (uint i = 0; i < N; i++){
         uint j = i * block_size + thread_idx;
 
-        u32vec4 v; 
+        VT v; 
         v.x = shared_data[j * M + 0];
         v.y = shared_data[j * M + 1];
         v.z = shared_data[j * M + 2];

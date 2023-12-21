@@ -17,9 +17,9 @@ fn prefix_sum() {
     let num = 2048 * 4;
 
     let items_per_thread = 4 * 4;
-    let thread_count = 128;
+    let block_size = 128;
     let warp_size = device.physical_device.subgroup_properties.subgroup_size as usize;
-    let items_per_block = items_per_thread * thread_count;
+    let items_per_block = items_per_thread * block_size;
     let block_count = (num + items_per_block - 1) / items_per_block;
     let scratch_items = 1 + warp_size + block_count;
     dbg!(block_count);
@@ -51,7 +51,7 @@ fn prefix_sum() {
     let prefix_sum_large = device.get_shader_glsl(
         include_str!("kernels/prefix_sum_large.glsl"),
         ShaderKind::Compute,
-        &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
+        &[("WORK_GROUP_SIZE", Some(&format!("{block_size}")))],
     );
 
     let pipeline = device.get_pipeline(&PipelineDesc {
@@ -159,7 +159,7 @@ fn prefix_sum() {
     let out: &[u32] = bytemuck::cast_slice(output.mapped_slice());
     for i in 0..(block_count as usize) {
         println!("");
-        let slice = &out[i * thread_count..(i + 1) * thread_count];
+        let slice = &out[i * block_size..(i + 1) * block_size];
         println!("{slice:?}");
     }
     let reference = input_vec
