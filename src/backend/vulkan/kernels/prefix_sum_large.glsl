@@ -36,16 +36,25 @@
 
 // N: Number of vectors to load
 // M: Number of element per vector 
+#ifndef N
 #define N 4
+#endif
+
+#ifndef M
 #define M 4
+#endif
 
 // Defines if inclusive or exclusive sum is performed
-#define INCLUSIVE
+// #define INCLUSIVE
 
 // Defines the type
+#ifndef T
 #define T uint32_t
+#endif
 // Defines the vector type used for loading must be `{short form of T}vec{M}`
+#ifndef VT
 #define VT u32vec4
+#endif
 
 
 // TODO: Optimization
@@ -58,9 +67,10 @@ layout(set = 0, binding = 0) buffer Input{
 layout(set = 0, binding = 1) buffer Output{
     VT out_data[];
 };
-// layout(set = 0, binding = 1) buffer Outputu32{
-//     uint32_t out_data_u32[];
-// };
+// DEBUG:
+layout(set = 0, binding = 1) buffer Outputu32{
+    uint32_t out_data_u32[];
+};
 // Buffer holding the `size` (number of elements) for the input buffer
 layout(set = 0, binding = 2) buffer Size{
     uint32_t size;

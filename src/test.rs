@@ -827,3 +827,31 @@ fn compress_large() {
     assert_eq!(reference, prediction);
     assert_eq!(reference.len(), count);
 }
+#[test]
+fn prefix_sum() {
+    pretty_env_logger::try_init().ok();
+
+    let num = 2048 * 4;
+
+    let input = (0..num as u32).map(|i| i).collect::<Vec<_>>();
+
+    let device = vulkan(0);
+
+    let x = tr::array(&input, &device);
+
+    let prediction = x.prefix_sum(true);
+    prediction.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    let reference = input
+        .into_iter()
+        .scan(0, |sum, i| {
+            *sum += i;
+            Some(*sum)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(prediction.to_vec::<u32>(), reference);
+}

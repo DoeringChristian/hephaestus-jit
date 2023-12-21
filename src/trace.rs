@@ -821,6 +821,23 @@ impl VarRef {
         (count, index)
     }
 }
+impl VarRef {
+    pub fn prefix_sum(&self, inclusive: bool) -> Self {
+        let size = self.size();
+        let ty = self.ty();
+
+        let res = push_var(
+            Var {
+                op: Op::DeviceOp(DeviceOp::PrefixSum { inclusive }),
+                ty,
+                extent: Extent::Size(size),
+                ..Default::default()
+            },
+            [self],
+        );
+        res
+    }
+}
 // Reduction Operations
 impl VarRef {
     pub fn reduce(&self, op: ReduceOp) -> Self {

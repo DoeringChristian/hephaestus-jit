@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::ffi::CStr;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -13,8 +12,6 @@ use gpu_allocator::AllocatorDebugSettings;
 pub use ash::{extensions::khr, vk};
 
 use crate::backend::vulkan::physical_device::{self, PhysicalDevice};
-
-use super::buffer;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

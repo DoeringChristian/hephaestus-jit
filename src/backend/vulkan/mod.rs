@@ -8,6 +8,8 @@ mod image;
 mod physical_device;
 mod pipeline;
 mod pool;
+mod prefix_sum;
+mod reduce;
 mod shader_cache;
 #[cfg(test)]
 mod test;
@@ -209,7 +211,17 @@ impl backend::BackendDevice for VulkanDevice {
                                 .var(graph.buffer_desc(pass.buffers[1]).var.id())
                                 .extent
                                 .size();
-                            self.reduce(&self, cb, &mut pool, *op, &ty, num, src, dst);
+                            self.reduce(cb, &mut pool, *op, &ty, num, src, dst);
+                        }
+                        DeviceOp::PrefixSum { inclusive } => {
+                            let dst = buffers[0];
+                            let src = buffers[1];
+                            let ty = trace
+                                .var(graph.buffer_desc(pass.buffers[0]).var.id())
+                                .ty
+                                .clone();
+                            let num = graph.buffer_desc(pass.buffers[1]).size;
+                            self.prefix_sum(cb, &mut pool, &ty, num, *inclusive, src, dst);
                         }
                         DeviceOp::Compress => {
                             let index_out = buffers[0];

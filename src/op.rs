@@ -17,6 +17,7 @@ pub enum ReduceOp {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
     ReduceOp(ReduceOp),
+    PrefixSum { inclusive: bool },
     Compress, // TODO: determine if return or return by ref is better
     Buffer2Texture,
     BuildAccel,
@@ -26,6 +27,7 @@ impl DeviceOp {
         match self {
             DeviceOp::ReduceOp(_) => Op::Buffer,
             DeviceOp::Compress => Op::Nop,
+            DeviceOp::PrefixSum { .. } => Op::Buffer,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
         }

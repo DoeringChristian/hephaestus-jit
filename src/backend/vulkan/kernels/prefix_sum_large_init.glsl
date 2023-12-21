@@ -12,6 +12,7 @@
 
 
 
+// Explicit arythmetic types
 #extension GL_EXT_shader_explicit_arithmetic_types: require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8: require
 #extension GL_EXT_shader_explicit_arithmetic_types_int16: require
@@ -21,6 +22,12 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_float32: require
 #extension GL_EXT_shader_explicit_arithmetic_types_float64: require
 
+// Subgroup
+#extension GL_KHR_shader_subgroup_basic: require
+#extension GL_KHR_shader_subgroup_vote: require
+#extension GL_KHR_shader_subgroup_ballot: require
+#extension GL_KHR_shader_subgroup_shuffle: require
+#extension GL_KHR_shader_subgroup_shuffle_relative: require
 
 // TODO: Optimization
 
@@ -52,7 +59,7 @@ void main(){
     for(uint i = global_thread_idx; i < size; i += block_size * grid_size){
         // WARN: using `warp_size` here means that the buffer has to be
         // initialized with the same device that uses it.
-        scratch[i] = ( 1 < i && i < warp_size + 1 ) ? 2 : 0;
+        scratch[i] = ( 1 <= i && i < warp_size + 1 ) ? 2 : 0;
     }
 
 }
