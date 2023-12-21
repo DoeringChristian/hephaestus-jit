@@ -833,7 +833,7 @@ fn prefix_sum() {
 
     let num = 2048 * 4;
 
-    let input = (0..num as u32).map(|i| i).collect::<Vec<_>>();
+    let input = (0..num as u64).map(|i| i).collect::<Vec<_>>();
 
     let device = vulkan(0);
 
@@ -853,5 +853,5 @@ fn prefix_sum() {
         })
         .collect::<Vec<_>>();
 
-    assert_eq!(prediction.to_vec::<u32>(), reference);
+    assert_eq!(prediction.to_vec::<u64>(), reference);
 }

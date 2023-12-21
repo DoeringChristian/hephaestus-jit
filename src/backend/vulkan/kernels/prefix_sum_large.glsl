@@ -32,6 +32,7 @@
 #extension GL_KHR_shader_subgroup_ballot: require
 #extension GL_KHR_shader_subgroup_shuffle: require
 #extension GL_KHR_shader_subgroup_shuffle_relative: require
+#extension GL_EXT_shader_subgroup_extended_types_int64: require
 
 
 // N: Number of vectors to load
@@ -81,7 +82,13 @@ layout(set = 0, binding = 2) buffer Size{
 layout(set = 0, binding = 3) buffer Scratch{
     uint64_t scratch[];
 };
+// We access the partition_counter using another view into the scratch_buffer
+layout(set = 0, binding = 3) buffer PartitionCounter{
+    uint32_t partition_counter;
+};
 
+// Idk. how we would have different views into the same shared data, therefore we use two shared variables.
+shared uint32_t shared_partition_index; 
 shared T shared_data[WORK_GROUP_SIZE * N * M]; 
 
 uint32_t clz(uint32_t x){
@@ -167,11 +174,11 @@ void main(){
     // Atomically aquire partition index
     uint32_t partition_idx = 0;
     if (warp_idx == 0 && lane == 0){
-        shared_data[0].x = uint32_t(atomicAdd(scratch[0], 1));
+        shared_partition_index = uint32_t(atomicAdd(partition_counter, 1));
     }
     groupMemoryBarrier();
     barrier();
-    partition_idx = subgroupBroadcast(shared_data[0].x, 0);
+    partition_idx = subgroupBroadcast(shared_partition_index, 0);
     groupMemoryBarrier();
     barrier();
 
