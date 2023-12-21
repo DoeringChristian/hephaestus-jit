@@ -2,6 +2,7 @@ mod accel;
 mod acceleration_structure;
 mod buffer;
 mod codegen;
+mod compress;
 mod device;
 mod glslext;
 mod image;
