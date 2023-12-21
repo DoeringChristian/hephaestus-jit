@@ -187,90 +187,47 @@ impl VulkanDevice {
         &self,
         cb: vk::CommandBuffer,
         pool: &mut Pool,
-        num: u32,
+        num: usize,
         out_count: &Buffer,
         src: &Buffer,
         dst: &Buffer,
     ) {
         let items_per_thread = 16;
-        let thread_count = 128;
-        let items_per_block = items_per_thread * thread_count;
+        let block_size = 128;
+        let items_per_block = items_per_thread * block_size;
         let block_count = (num + items_per_block - 1) / items_per_block;
-        let scratch_items = block_count + 32;
+        let warp_size = self
+            .device
+            .physical_device
+            .subgroup_properties
+            .subgroup_size as usize;
+
+        let scratch_items = 1 + warp_size + block_count;
         let trailer = items_per_block * block_count - num;
+        dbg!(block_count);
 
         let compress_large = self.get_shader_glsl(
             include_str!("kernels/compress_large.glsl"),
             ShaderKind::Compute,
-            &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
+            &[
+                ("WORK_GROUP_SIZE", Some(&format!("{block_size}"))),
+                ("INIT", Some("")),
+            ],
         );
         let compress_large = self.get_pipeline(&PipelineDesc {
             code: &compress_large,
             desc_set_layouts: &[DescSetLayout {
-                bindings: &[
-                    Binding {
-                        binding: 0,
+                bindings: &(0..5)
+                    .map(|i| Binding {
+                        binding: i,
                         count: 1,
-                    },
-                    Binding {
-                        binding: 1,
-                        count: 1,
-                    },
-                    Binding {
-                        binding: 2,
-                        count: 1,
-                    },
-                    Binding {
-                        binding: 3,
-                        count: 1,
-                    },
-                    Binding {
-                        binding: 4,
-                        count: 1,
-                    },
-                ],
-            }],
-        });
-        let prefix_sum_large_init = self.get_shader_glsl(
-            include_str!("kernels/prefix_sum_large_init.glsl"),
-            ShaderKind::Compute,
-            &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
-        );
-        let prefix_sum_large_init = self.get_pipeline(&PipelineDesc {
-            code: &prefix_sum_large_init,
-            desc_set_layouts: &[DescSetLayout {
-                bindings: &[
-                    Binding {
-                        binding: 0,
-                        count: 1,
-                    },
-                    Binding {
-                        binding: 1,
-                        count: 1,
-                    },
-                ],
+                    })
+                    .collect::<Vec<_>>(),
             }],
         });
 
-        let scratch_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u64>() * scratch_items as usize,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        });
-
-        let size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u64>() * scratch_items as usize,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
-        let scratch_items_size = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u64>() * scratch_items as usize,
+        let mut size_buffer = pool.buffer(BufferInfo {
+            size: std::mem::size_of::<u32>(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
@@ -278,47 +235,13 @@ impl VulkanDevice {
             ..Default::default()
         });
 
-        // Initializing scratch buffer
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            self.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
-        }
+        size_buffer
+            .mapped_slice_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
 
-        prefix_sum_large_init.submit(
-            cb,
-            pool,
-            self,
-            &[
-                WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
-                    }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 1,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_items_size,
-                    }],
-                },
-            ],
-            (scratch_items / thread_count, 1, 1),
-        );
+        let scratch_buffer = self.prefix_sum_scratch_buffer(cb, pool, scratch_items as _);
 
-        // Compress
+        // Barrier
         let memory_barriers = [vk::MemoryBarrier::builder()
             .src_access_mask(vk::AccessFlags::SHADER_WRITE)
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
@@ -353,17 +276,24 @@ impl VulkanDevice {
                 WriteSet {
                     set: 0,
                     binding: 2,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
-                    }],
+                    buffers: &[BufferWriteInfo { buffer: &out_count }],
                 },
                 WriteSet {
                     set: 0,
                     binding: 3,
-                    buffers: &[BufferWriteInfo { buffer: &out_count }],
+                    buffers: &[BufferWriteInfo {
+                        buffer: &size_buffer,
+                    }],
+                },
+                WriteSet {
+                    set: 0,
+                    binding: 4,
+                    buffers: &[BufferWriteInfo {
+                        buffer: &scratch_buffer,
+                    }],
                 },
             ],
-            (block_count, 1, 1),
+            (block_count as _, 1, 1),
         );
     }
     pub fn build_accel<'a>(

@@ -48,6 +48,9 @@
 // Defines if inclusive or exclusive sum is performed
 // #define INCLUSIVE
 
+// Defines if initialization is required
+// #define INIT
+
 // Defines the type
 #ifndef T
 #define T uint32_t
@@ -191,7 +194,14 @@ void main(){
 
         VT value = in_data[j];
 
-        // TODO: add bound check (especially for floats)!
+        #ifdef INIT
+        // TODO: test for conditions where M < 4
+        j *= M;
+        if(j + 0 >= size) value.x = 0;
+        if(j + 1 >= size) value.y = 0;
+        if(j + 2 >= size) value.z = 0;
+        if(j + 3 >= size) value.w = 0;
+        #endif
 
         v[i] = value;
     }
@@ -255,7 +265,7 @@ void main(){
     // scratch buffer is offset by warp_size to not cause deadlocks for first thread
     // Also by the atomic counter
     
-    uint scratch_idx = partition_idx + warp_size;
+    uint scratch_idx = partition_idx + warp_size + 1;
     if (thread_idx == block_size - 1){
         uint64_t combined = combine(sum_block, 1u);
         atomicStore(scratch[scratch_idx], combined, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelaxed);
@@ -266,8 +276,6 @@ void main(){
     // Each thread looks back a different amount
     int32_t shift = int32_t(lane) - int32_t(warp_size);
 
-
-    uint debug_i = 0;
 
     // Decoupled lookback iteration
     while(true){

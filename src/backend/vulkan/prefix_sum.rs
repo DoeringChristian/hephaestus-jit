@@ -69,6 +69,7 @@ impl VulkanDevice {
                 ("M", Some(&format!("{vector_size}"))),
                 ("N", Some(&format!("{loads_per_thread}"))),
                 ("INCLUSIVE", inclusive.then(|| "")),
+                ("INIT", Some("")),
             ],
         );
 
@@ -99,7 +100,7 @@ impl VulkanDevice {
 
         // NOTE: don't need barrier here, as scratch buffer init is not depending on anything
 
-        let scratch_buffer = self.prefix_sum_scratch_buffer(pool, cb, scratch_items);
+        let scratch_buffer = self.prefix_sum_scratch_buffer(cb, pool, scratch_items);
 
         // Barrier
         let memory_barriers = [vk::MemoryBarrier::builder()
@@ -154,9 +155,8 @@ impl VulkanDevice {
 
     pub fn prefix_sum_scratch_buffer(
         &self,
-        pool: &mut Pool,
         cb: vk::CommandBuffer,
-        // ty: &VarType,
+        pool: &mut Pool,
         scratch_items: usize,
     ) -> Lease<Buffer> {
         let LaunchConfig {
