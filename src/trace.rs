@@ -485,6 +485,15 @@ impl VarRef {
             [self],
         )
     }
+    // pub fn reinterpret(&self, ty: VarType) -> Self {
+    //     // TODO: for indirect dispatch, we have to change the dynamic size
+    //
+    //     let bytesize = self.extent().capacity() * self.ty().size();
+    //     assert!(bytesize % ty.size() == 0);
+    //
+    //     todo!()
+    //     // assert!(self.size() * self.ty().size() % ty.size())
+    // }
 
     pub fn bitcast(&self, ty: VarType) -> Self {
         assert_eq!(self._thread_id, std::thread::current().id());
@@ -680,7 +689,17 @@ impl VarRef {
     }
     pub fn to_vec<T: AsVarType>(&self) -> Vec<T> {
         assert_eq!(self._thread_id, std::thread::current().id());
-        with_trace(|t| t.var(self.id()).data.buffer().unwrap().to_host().unwrap())
+        let bytesize = self.size() * self.ty().size();
+        assert!(bytesize % T::var_ty().size() == 0);
+        let size = bytesize / T::var_ty().size();
+        with_trace(|t| {
+            t.var(self.id())
+                .data
+                .buffer()
+                .unwrap()
+                .to_host(0..size)
+                .unwrap()
+        })
     }
     pub fn extract(&self, elem: usize) -> Self {
         let extent = self.extent();

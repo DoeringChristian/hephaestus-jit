@@ -364,8 +364,16 @@ impl Debug for VulkanBuffer {
 impl backend::BackendBuffer for VulkanBuffer {
     type Device = VulkanDevice;
 
-    fn to_host<T: AsVarType + Copy>(&self) -> backend::Result<Vec<T>> {
-        let size = self.size();
+    fn to_host<T: AsVarType + Copy>(
+        &self,
+        range: std::ops::Range<usize>,
+    ) -> backend::Result<Vec<T>> {
+        let len = range.len();
+        let ty_size = T::var_ty().size();
+        let size = len * ty_size;
+
+        assert!(self.size() >= size);
+
         let info = BufferInfo {
             size,
             alignment: 0,
@@ -375,13 +383,12 @@ impl backend::BackendBuffer for VulkanBuffer {
         let staging = Buffer::create(&self.device, info);
         self.device.submit_global(|device, cb| unsafe {
             let region = vk::BufferCopy {
-                src_offset: 0,
+                src_offset: (range.start * ty_size) as _,
                 dst_offset: 0,
-                size: self.size() as _,
+                size: size as _,
             };
             device.cmd_copy_buffer(cb, self.buffer.buffer(), staging.buffer(), &[region]);
         });
-        let len = size / std::mem::size_of::<T>();
         Ok(
             unsafe { std::slice::from_raw_parts(staging.mapped_slice().as_ptr() as *const T, len) }
                 .to_vec(),

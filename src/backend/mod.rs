@@ -114,10 +114,10 @@ impl Buffer {
             Buffer::VulkanBuffer(buffer) => buffer.size(),
         }
     }
-    pub fn to_host<T: AsVarType>(&self) -> Result<Vec<T>> {
+    pub fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>> {
         match self {
-            Self::CudaBuffer(buffer) => Ok(buffer.to_host()?),
-            Self::VulkanBuffer(buffer) => Ok(buffer.to_host()?),
+            Self::CudaBuffer(buffer) => Ok(buffer.to_host(range)?),
+            Self::VulkanBuffer(buffer) => Ok(buffer.to_host(range)?),
         }
     }
     pub fn device(&self) -> Device {
@@ -183,7 +183,7 @@ pub trait BackendDevice: Clone {
 
 pub trait BackendBuffer {
     type Device: BackendDevice;
-    fn to_host<T: AsVarType>(&self) -> Result<Vec<T>>;
+    fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>>;
     fn size(&self) -> usize;
     fn device(&self) -> &Self::Device;
 }

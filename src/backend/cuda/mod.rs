@@ -60,7 +60,7 @@ impl BackendDevice for CudaDevice {
 impl BackendBuffer for CudaBuffer {
     type Device = CudaDevice;
 
-    fn to_host<T: AsVarType>(&self) -> backend::Result<Vec<T>> {
+    fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> backend::Result<Vec<T>> {
         todo!()
     }
 

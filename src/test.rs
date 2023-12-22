@@ -196,7 +196,6 @@ fn texture2d() {
     let v = tex.tex_lookup(&[&x, &y]);
 
     v.schedule();
-
     tr::compile().launch(&device);
 
     tr::with_trace(|trace| {

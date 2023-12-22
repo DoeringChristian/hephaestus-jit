@@ -1,5 +1,7 @@
 use half::f16;
-use std::sync::Arc;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
 
@@ -227,6 +229,28 @@ impl AsVarType for Intersection {
             };
         };
         &TY
+    }
+}
+
+impl<const N: usize, T: AsVarType> AsVarType for [T; N] {
+    fn var_ty() -> &'static VarType {
+        // TODO: this is potentially very inefficient
+        static ty_map: Lazy<Mutex<HashMap<(usize, VarType), &'static VarType>>> =
+            Lazy::new(|| Mutex::new(HashMap::new()));
+
+        ty_map
+            .lock()
+            .unwrap()
+            .entry((N, T::var_ty().clone()))
+            .or_insert_with_key(|(n, ty)| {
+                Box::leak(Box::new(VarType::Array {
+                    ty: Box::new(ty.clone()),
+                    num: *n,
+                }))
+            });
+
+        let ty = ty_map.lock().unwrap()[&(N, T::var_ty().clone())];
+        ty
     }
 }
 
