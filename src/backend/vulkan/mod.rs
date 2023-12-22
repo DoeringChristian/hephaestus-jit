@@ -197,6 +197,24 @@ impl backend::BackendDevice for VulkanDevice {
                                 &[],
                             );
                         }
+                        // TODO: if we ever add dynamic sized kernels pass the buffer here
+                        let mut size_buffer = pool.buffer(BufferInfo {
+                            size: std::mem::size_of::<u32>(),
+                            usage: vk::BufferUsageFlags::TRANSFER_SRC
+                                | vk::BufferUsageFlags::TRANSFER_DST
+                                | vk::BufferUsageFlags::STORAGE_BUFFER,
+                            memory_location: MemoryLocation::CpuToGpu,
+                            ..Default::default()
+                        });
+                        size_buffer
+                            .mapped_slice_mut()
+                            .copy_from_slice(bytemuck::cast_slice(&[*size as u32]));
+                        dbg!(size);
+                        dbg!(&*size_buffer);
+                        let buffers = [&*size_buffer]
+                            .into_iter()
+                            .chain(buffers.into_iter())
+                            .collect::<Vec<_>>();
                         pipeline
                             .submit_to_cbuffer(cb, &mut pool, *size, &buffers, &images, &accels);
                     }

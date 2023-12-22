@@ -1,4 +1,5 @@
 use crate::backend;
+use crate::tr::VarId;
 
 /// Represents a Variables Extent.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -20,6 +21,9 @@ impl PartialOrd for Extent {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Extent::Size(a), Extent::Size(b)) => Some(a.cmp(b)),
+            (Extent::DynSize { .. }, Extent::Size(_)) => Some(std::cmp::Ordering::Less),
+            (Extent::Size(_), Extent::DynSize { .. }) => Some(std::cmp::Ordering::Greater),
+            (Extent::DynSize { .. }, Extent::DynSize { .. }) => None,
             _ => None,
         }
     }
@@ -36,6 +40,12 @@ impl Extent {
         match self {
             Extent::Size(size) => *size,
             _ => todo!(),
+        }
+    }
+    pub fn is_dynamic(&self) -> bool {
+        match self {
+            Extent::DynSize { .. } => true,
+            _ => false,
         }
     }
     pub fn accel_desc(&self) -> &backend::AccelDesc {

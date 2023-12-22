@@ -76,7 +76,7 @@ impl GraphBuilder {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct Graph {
     pub passes: Vec<Pass>,
     pub buffers: Vec<BufferDesc>,
@@ -166,20 +166,21 @@ pub struct TextureId(usize);
 #[derive(Debug, Clone, Copy)]
 pub struct AccelId(usize);
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct Pass {
     pub buffers: Vec<BufferId>,
     pub textures: Vec<TextureId>,
     pub accels: Vec<AccelId>,
+    // pub size: Option<BufferId>,
     pub op: PassOp,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub enum PassOp {
     #[default]
     None,
     Kernel {
-        ir: Arc<ir::IR>,
+        ir: ir::IR,
         size: usize,
     },
     DeviceOp(op::DeviceOp),
@@ -213,6 +214,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         ..
     } = schedule;
 
+    // Split groups into groups by extent
     let groups = groups
         .iter_mut()
         .flat_map(|group| {
@@ -252,46 +254,45 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
     let mut graph_builder = GraphBuilder::default();
     for group in groups {
         if trace.var(vars[group.start].id()).op.is_device_op() {
-            // Handle Device Ops
+            // Handle Device Ops (precompiled)
             assert_eq!(group.len(), 1);
             let id = vars[group.start].id();
 
-            match trace.var(id).op {
-                op::Op::DeviceOp(op) => match op {
-                    // op::DeviceOp::Max => todo!(),
-                    _ => {
-                        let deps = trace.deps(id).to_vec();
+            let var = trace.var(id);
+            match var.op {
+                op::Op::DeviceOp(op) => {
+                    let deps = trace.deps(id).to_vec();
 
-                        let mut buffers = vec![];
-                        let mut textures = vec![];
-                        let mut accels = vec![];
+                    let mut buffers = vec![];
+                    let mut textures = vec![];
+                    let mut accels = vec![];
 
-                        // TODO: Improve the readability here. atm. we are pushing all the
-                        // dependenceis into multiple vecs starting with [id]
-                        for id in [id].iter().chain(deps.iter()) {
-                            match trace.var(*id).op.resulting_op() {
-                                op::Op::Buffer => {
-                                    buffers.push(graph_builder.push_buffer(trace, *id));
-                                }
-                                op::Op::Texture { .. } => {
-                                    textures.push(graph_builder.push_texture(trace, *id));
-                                }
-                                op::Op::Accel => {
-                                    accels.push(graph_builder.push_accel(trace, *id));
-                                }
-                                _ => {
-                                    log::trace!("No valid resulting operation, skipping!");
-                                }
-                            };
-                        }
-                        graph_builder.push_pass(Pass {
-                            buffers,
-                            textures,
-                            accels,
-                            op: PassOp::DeviceOp(op),
-                        })
+                    // TODO: Improve the readability here. atm. we are pushing all the
+                    // dependenceis into multiple vecs starting with [id]
+                    for id in [id].iter().chain(deps.iter()) {
+                        match trace.var(*id).op.resulting_op() {
+                            op::Op::Buffer => {
+                                buffers.push(graph_builder.push_buffer(trace, *id));
+                            }
+                            op::Op::Texture { .. } => {
+                                textures.push(graph_builder.push_texture(trace, *id));
+                            }
+                            op::Op::Accel => {
+                                accels.push(graph_builder.push_accel(trace, *id));
+                            }
+                            _ => {
+                                log::trace!("No valid resulting operation, skipping!");
+                            }
+                        };
                     }
-                },
+                    graph_builder.push_pass(Pass {
+                        buffers,
+                        textures,
+                        accels,
+                        // size: None,
+                        op: PassOp::DeviceOp(op),
+                    })
+                }
                 _ => todo!(),
             };
         } else {
@@ -315,13 +316,16 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 .iter()
                 .map(|id| graph_builder.push_accel(trace, *id))
                 .collect::<Vec<_>>();
+            let size = trace.var(vars[group.start].id()).extent.size();
+            dbg!(size);
             let pass = Pass {
                 buffers,
                 textures,
                 accels,
+                // size: None,
                 op: PassOp::Kernel {
-                    ir: Arc::new(compiler.ir),
-                    size: trace.var(vars[group.start].id()).extent.size(),
+                    ir: compiler.ir,
+                    size,
                 },
             };
             graph_builder.push_pass(pass);

@@ -81,9 +81,33 @@ impl Resource for Buffer {
     }
 }
 
+// Simple Bump allocator esque pool
+pub struct BumpPool<R: Resource> {
+    pub cache: Cache<R>,
+}
+
+impl<R: Resource> Default for BumpPool<R> {
+    fn default() -> Self {
+        Self {
+            cache: Rc::new(RefCell::new(vec![])),
+        }
+    }
+}
+impl<R: Resource> BumpPool<R> {
+    fn lease(&mut self, device: &Device, info: &R::Info) -> Lease<R> {
+        let resource = R::create(device, &info);
+
+        Lease {
+            resource: Some(resource),
+            cache: self.cache.clone(),
+        }
+    }
+}
+
 pub struct Pool {
     pub device: Device,
-    pub buffers: ResourcePool<Buffer>,
+    pub buffer_pool: ResourcePool<Buffer>,
+    pub buffers: BumpPool<Buffer>,
     pub image_views: Vec<vk::ImageView>,
     pub desc_sets: Vec<vk::DescriptorSet>,
     pub desc_pools: Vec<vk::DescriptorPool>,
@@ -102,11 +126,15 @@ impl Pool {
         Self {
             device: device.clone(),
             buffers: Default::default(),
+            buffer_pool: Default::default(),
             image_views: vec![],
             desc_sets: vec![],
             desc_pools: vec![],
             // desc_pool,
         }
+    }
+    pub fn lease_buffer(&mut self, info: buffer::BufferInfo) -> Lease<Buffer> {
+        self.buffer_pool.lease(&self.device, &info)
     }
     pub fn buffer(&mut self, info: buffer::BufferInfo) -> Lease<Buffer> {
         self.buffers.lease(&self.device, &info)

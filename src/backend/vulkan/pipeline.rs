@@ -130,7 +130,7 @@ impl Pipeline {
     pub fn from_ir(device: &Device, ir: &IR) -> Self {
         let spirv = codegen::assemble_trace(ir, "main").unwrap();
 
-        let num_buffers = ir.n_buffers;
+        let num_buffers = 1 + ir.n_buffers; // Add one for size buffer
         let num_textures = ir.n_textures;
         let num_accels = ir.n_accels;
 

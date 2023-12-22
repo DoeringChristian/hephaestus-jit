@@ -115,7 +115,7 @@ impl SpirvBuilder {
     }
     pub fn assemble(&mut self, ir: &IR, entry_point: &str) -> Result<(), dr::Error> {
         // let param_layout = ParamLayout::generate(trace);
-        self.n_buffers = ir.n_buffers;
+        self.n_buffers = 1 + ir.n_buffers; // [size_buffer, ir buffers]
         self.n_textures = ir.n_textures;
         self.n_accels = ir.n_accels;
 
@@ -125,7 +125,9 @@ impl SpirvBuilder {
 
         self.set_version(1, 5);
 
+        // Enable capabilities
         self.capability(spirv::Capability::Shader);
+        self.capability(spirv::Capability::StorageUniformBufferBlock16);
         self.capability(spirv::Capability::Int8);
         self.capability(spirv::Capability::Int16);
         self.capability(spirv::Capability::Int64);
@@ -145,8 +147,7 @@ impl SpirvBuilder {
             self.capability(spirv::Capability::RayQueryKHR);
         }
 
-        self.capability(spirv::Capability::StorageUniformBufferBlock16);
-
+        // Enable Extensions
         self.glsl_ext = self.ext_inst_import("GLSL.std.450");
 
         self.extension("SPV_KHR_16bit_storage");
@@ -183,6 +184,35 @@ impl SpirvBuilder {
         self.begin_block(None)?;
         self.function_block = self.selected_block().unwrap();
 
+        // Load Kernel size from size_buffer
+        let buffer_idx = 0;
+        let u32_ty = self.type_int(32, 0);
+        let ptr_ty = self.type_pointer(None, spirv::StorageClass::StorageBuffer, u32_ty);
+        let buffer_idx = self.constant_bit32(u32_ty, buffer_idx);
+        let elem = self.constant_bit32(u32_ty, 0);
+        let buffer_array = self.get_buffer_array(&VarType::U32);
+        let idx = self.constant_bit32(u32_ty, 0);
+        let ptr = self.access_chain(ptr_ty, None, buffer_array, [buffer_idx, elem, idx])?;
+        let size = self.load(u32_ty, None, ptr, None, None)?;
+
+        // Load index
+        // TODO: refactor into function
+        let u32_ty = self.type_int(32, 0);
+        let ptr_ty = self.type_pointer(None, spirv::StorageClass::Input, u32_ty);
+        let u32_0 = self.constant_bit32(u32_ty, 0);
+        let ptr = self.access_chain(ptr_ty, None, global_invocation_id, [u32_0])?;
+        let index = self.load(u32_ty, None, ptr, None, None)?;
+
+        let bool_ty = self.type_bool();
+        let cond = self.u_greater_than_equal(bool_ty, None, index, size)?;
+
+        // Early exit if index >= size
+        self.if_block(cond, |s| {
+            let inst = dr::Instruction::new(spirv::Op::Return, None, None, vec![]);
+            s.insert_into_block(rspirv::dr::InsertPoint::End, inst)?;
+            Ok(())
+        })?;
+
         self.assemble_vars(ir, global_invocation_id)?;
 
         self.ret()?;
@@ -206,6 +236,10 @@ impl SpirvBuilder {
     }
     fn reg(&self, id: VarId) -> u32 {
         self.spriv_regs[&id]
+    }
+    pub fn buffer_idx(&self, data_idx: u64) -> u32 {
+        // Offset buffer index by 1 for the size buffer
+        (data_idx + 1) as _
     }
     /// Put the instructions at the beginning of a function
     fn with_function<T, F: FnOnce(&mut Self) -> Result<T, dr::Error>>(
@@ -1258,13 +1292,13 @@ impl SpirvBuilder {
                         _ => &ir.var(src).ty,
                     };
 
-                    let buffer_idx = ir.var(dst).data;
+                    let buffer_idx = self.buffer_idx(ir.var(dst).data);
 
                     let spriv_ty = self.spirv_ty(data_ty);
                     let ptr_ty =
                         self.type_pointer(None, spirv::StorageClass::StorageBuffer, spriv_ty);
                     let int_ty = self.type_int(32, 0);
-                    let buffer = self.constant_bit32(int_ty, buffer_idx as _);
+                    let buffer = self.constant_bit32(int_ty, buffer_idx);
                     let elem = self.constant_bit32(int_ty, 0);
 
                     let buffer_array = self.get_buffer_array(&ty);
@@ -1298,7 +1332,7 @@ impl SpirvBuilder {
                     let src = deps[0];
                     let idx = deps[1];
                     let cond = deps.get(2);
-                    let buffer_idx = ir.var(src).data;
+                    let buffer_idx = self.buffer_idx(ir.var(src).data);
 
                     let ty = &var.ty;
                     let data_ty = match var.ty {
@@ -1311,7 +1345,7 @@ impl SpirvBuilder {
                     let ptr_ty =
                         self.type_pointer(None, spirv::StorageClass::StorageBuffer, spirv_data_ty);
                     let int_ty = self.type_int(32, 0);
-                    let buffer_idx = self.constant_bit32(int_ty, buffer_idx as _);
+                    let buffer_idx = self.constant_bit32(int_ty, buffer_idx);
                     let elem = self.constant_bit32(int_ty, 0);
 
                     let buffer_array = self.get_buffer_array(&ty);

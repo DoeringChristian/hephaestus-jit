@@ -185,7 +185,7 @@ impl VulkanDevice {
             }],
         });
 
-        let scratch_buffer = pool.buffer(BufferInfo {
+        let scratch_buffer = pool.lease_buffer(BufferInfo {
             size: std::mem::size_of::<u64>() * scratch_items as usize,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
