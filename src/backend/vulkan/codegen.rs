@@ -230,7 +230,8 @@ impl SpirvBuilder {
             interface,
         );
         //OpEntryPoint GLCompute %main "main" %test %gl_GlobalInvocationID %test2
-        self.execution_mode(func, spirv::ExecutionMode::LocalSize, [1, 1, 1]);
+        // TODO: get prefered local size from device (somehow)
+        self.execution_mode(func, spirv::ExecutionMode::LocalSize, [128, 1, 1]);
 
         Ok(())
     }
