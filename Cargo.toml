@@ -43,3 +43,6 @@ rusty-hook = "^0.11.2"
 
 [hooks]
 pre-commit = "cargo test"
+
+[profile.release]
+debug = true

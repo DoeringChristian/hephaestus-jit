@@ -28,7 +28,9 @@ fn simple1() {
 
     let graph = tr::compile();
     dbg!(&graph);
-    graph.launch(&device);
+    for i in 0..1000 {
+        graph.launch(&device);
+    }
 
     dbg!(graph.n_passes());
 
