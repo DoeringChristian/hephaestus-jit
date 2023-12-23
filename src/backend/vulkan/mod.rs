@@ -14,6 +14,7 @@ mod reduce;
 mod shader_cache;
 #[cfg(test)]
 mod test;
+mod util;
 mod vkdevice;
 
 use std::collections::HashMap;
@@ -354,7 +355,7 @@ impl backend::BackendDevice for VulkanDevice {
                 dst_offset: 0,
                 size: size as _,
             };
-            device.cmd_copy_buffer(cb, staging.buffer(), buffer.buffer.buffer(), &[region]);
+            device.cmd_copy_buffer(cb, staging.vk(), buffer.buffer.vk(), &[region]);
         });
         Ok(buffer)
     }
@@ -405,7 +406,7 @@ impl backend::BackendBuffer for VulkanBuffer {
                 dst_offset: 0,
                 size: size as _,
             };
-            device.cmd_copy_buffer(cb, self.buffer.buffer(), staging.buffer(), &[region]);
+            device.cmd_copy_buffer(cb, self.buffer.vk(), staging.vk(), &[region]);
         });
         Ok(
             unsafe { std::slice::from_raw_parts(staging.mapped_slice().as_ptr() as *const T, len) }

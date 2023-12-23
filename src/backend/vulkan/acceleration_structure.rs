@@ -187,7 +187,7 @@ impl AccelerationStructure {
         );
         let create_info = vk::AccelerationStructureCreateInfoKHR::builder()
             .ty(info.ty)
-            .buffer(buffer.buffer())
+            .buffer(buffer.vk())
             .size(sizes.acceleration_structure_size);
 
         let accel = unsafe {

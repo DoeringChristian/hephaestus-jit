@@ -117,7 +117,7 @@ impl Image {
         unsafe {
             self.device.cmd_copy_buffer_to_image(
                 cb,
-                src.buffer(),
+                src.vk(),
                 self.image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[region],
@@ -155,6 +155,9 @@ impl Image {
     }
     pub fn info(&self) -> &ImageInfo {
         &self.info
+    }
+    pub fn vk(&self) -> vk::Image {
+        self.image
     }
 }
 

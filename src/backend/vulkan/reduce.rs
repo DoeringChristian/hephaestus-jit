@@ -188,8 +188,8 @@ impl VulkanDevice {
         unsafe {
             self.cmd_copy_buffer(
                 cb,
-                src.buffer(),
-                in_buffer.buffer(),
+                src.vk(),
+                in_buffer.vk(),
                 &[vk::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
@@ -269,8 +269,8 @@ impl VulkanDevice {
         unsafe {
             self.cmd_copy_buffer(
                 cb,
-                in_buffer.buffer(),
-                dst.buffer(),
+                in_buffer.vk(),
+                dst.vk(),
                 &[vk::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,

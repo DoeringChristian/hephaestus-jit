@@ -254,7 +254,7 @@ impl Pipeline {
                     .buffers
                     .iter()
                     .map(|info| vk::DescriptorBufferInfo {
-                        buffer: info.buffer.buffer(),
+                        buffer: info.buffer.vk(),
                         offset: 0,
                         range: info.buffer.info().size as _,
                     })
@@ -338,7 +338,7 @@ impl Pipeline {
         let desc_buffer_infos = buffers
             .iter()
             .map(|buffer| vk::DescriptorBufferInfo {
-                buffer: buffer.buffer(),
+                buffer: buffer.vk(),
                 offset: 0,
                 range: buffer.info().size as _,
             })

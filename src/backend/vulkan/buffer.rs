@@ -1,6 +1,9 @@
+use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
+
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
+use vk_sync::AccessType;
 
 use super::device::Device;
 
@@ -109,7 +112,10 @@ impl Buffer {
     pub fn info(&self) -> BufferInfo {
         self.info
     }
-    pub fn buffer(&self) -> vk::Buffer {
+    pub fn size(&self) -> usize {
+        self.info().size
+    }
+    pub fn vk(&self) -> vk::Buffer {
         self.buffer
     }
     pub fn device_address(&self) -> vk::DeviceAddress {
