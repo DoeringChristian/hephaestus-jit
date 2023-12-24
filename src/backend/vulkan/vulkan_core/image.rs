@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
@@ -16,6 +17,7 @@ pub struct Image {
     image: vk::Image,
     sampler: vk::Sampler,
     info: ImageInfo,
+    image_view_cache: Mutex<HashMap<ImageViewInfo, vk::ImageView>>,
 }
 
 impl Image {
@@ -80,6 +82,7 @@ impl Image {
             device: device.clone(),
             image,
             sampler,
+            image_view_cache: Mutex::new(Default::default()),
             info,
         }
     }
@@ -130,6 +133,18 @@ impl Image {
     pub fn info(&self) -> &ImageInfo {
         &self.info
     }
+    pub fn image_view(&self, info: ImageViewInfo) -> vk::ImageView {
+        *self
+            .image_view_cache
+            .lock()
+            .unwrap()
+            .entry(info)
+            .or_insert_with_key(|info| {
+                let mut info: vk::ImageViewCreateInfo = (*info).into();
+                info.image = self.image;
+                unsafe { self.device.create_image_view(&info, None).unwrap() }
+            })
+    }
 }
 
 impl Deref for Image {
@@ -171,4 +186,41 @@ pub struct ImageInfo {
     pub ty: vk::ImageType,
     pub format: vk::Format,
     pub extent: vk::Extent3D,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageViewInfo {
+    pub format: vk::Format,
+    pub ty: vk::ImageViewType,
+
+    // SubresourceRange:
+    pub aspect_mask: vk::ImageAspectFlags,
+    pub base_mip_level: u32,
+    pub level_count: u32,
+    pub base_array_layer: u32,
+    pub layer_count: u32,
+}
+
+impl From<ImageViewInfo> for vk::ImageViewCreateInfo {
+    fn from(value: ImageViewInfo) -> Self {
+        vk::ImageViewCreateInfo {
+            flags: vk::ImageViewCreateFlags::empty(),
+            view_type: value.ty,
+            format: value.format,
+            components: vk::ComponentMapping {
+                r: vk::ComponentSwizzle::R,
+                g: vk::ComponentSwizzle::G,
+                b: vk::ComponentSwizzle::B,
+                a: vk::ComponentSwizzle::A,
+            },
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: value.aspect_mask,
+                base_mip_level: value.base_mip_level,
+                level_count: value.level_count,
+                base_array_layer: value.base_array_layer,
+                layer_count: value.layer_count,
+            },
+            ..Default::default()
+        }
+    }
 }

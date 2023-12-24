@@ -225,7 +225,6 @@ impl<'a> PassBuilder<'a> {
 #[derive(Debug)]
 pub struct RGraphPool {
     pub device: Device,
-    pub image_views: Vec<vk::ImageView>, // Image view cache in images
     pub desc_sets: Vec<vk::DescriptorSet>,
     pub desc_pools: Vec<vk::DescriptorPool>,
 }
@@ -234,15 +233,10 @@ impl RGraphPool {
     pub fn new(device: &Device) -> Self {
         Self {
             device: device.clone(),
-            image_views: vec![],
+            // image_views: vec![],
             desc_sets: vec![],
             desc_pools: vec![],
         }
-    }
-    pub fn image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
-        let view = unsafe { self.device.create_image_view(info, None).unwrap() };
-        self.image_views.push(view);
-        view
     }
     pub fn desc_sets(&mut self, set_layouts: &[vk::DescriptorSetLayout]) -> &[vk::DescriptorSet] {
         let desc_sizes = [
@@ -286,9 +280,6 @@ impl RGraphPool {
 impl Drop for RGraphPool {
     fn drop(&mut self) {
         unsafe {
-            for image_view in self.image_views.drain(..) {
-                self.device.destroy_image_view(image_view, None);
-            }
             for pool in self.desc_pools.drain(..) {
                 self.device.destroy_descriptor_pool(pool, None);
             }

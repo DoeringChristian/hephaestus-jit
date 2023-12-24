@@ -12,7 +12,7 @@ use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::device::Device;
 use super::vulkan_core::graph::RGraphPool;
-use super::vulkan_core::image::Image;
+use super::vulkan_core::image::{Image, ImageViewInfo};
 use ash::vk;
 
 #[derive(Debug)]
@@ -307,23 +307,21 @@ impl Pipeline {
         let image_views = images
             .iter()
             .map(|image| {
-                let info = vk::ImageViewCreateInfo::builder()
-                    .image(image.vk())
-                    .view_type(match image.info().ty {
+                image.image_view(ImageViewInfo {
+                    ty: match image.info().ty {
                         vk::ImageType::TYPE_1D => vk::ImageViewType::TYPE_1D,
                         vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,
                         vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
                         _ => todo!(),
-                    })
-                    .format(image.info().format)
-                    .subresource_range(vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        base_mip_level: 0,
-                        level_count: 1,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    });
-                pool.image_view(&info)
+                    },
+                    format: image.info().format,
+
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
             })
             .collect::<Vec<_>>();
 
