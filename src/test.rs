@@ -289,7 +289,7 @@ fn select() {
 
     assert_eq!(res.to_vec::<i32>(), vec![10, 5]);
 }
-// #[test]
+#[test]
 fn accel() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);

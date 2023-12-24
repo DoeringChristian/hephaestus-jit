@@ -191,12 +191,13 @@ impl Accel {
 
         {
             let n_instances = self.info.instances;
-            let instance_buffer = self.instance_buffer.clone();
             let desc = desc;
-            let instance_buffer = desc.instances.clone();
+            let desc_instance_buffer = desc.instances.clone();
+            let instance_buffer = self.instance_buffer.clone();
             rgraph
                 .pass()
                 .read(references_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .read(desc_instance_buffer.clone(), vk::AccessFlags::SHADER_READ)
                 .write(instance_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
                 .record(move |device, cb, pool| {
                     copy2instances.submit(
@@ -208,7 +209,7 @@ impl Accel {
                             binding: 0,
                             buffers: &[
                                 BufferWriteInfo {
-                                    buffer: &instance_buffer,
+                                    buffer: &desc_instance_buffer,
                                 },
                                 BufferWriteInfo {
                                     buffer: &references_buffer,
