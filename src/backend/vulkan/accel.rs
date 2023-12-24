@@ -126,7 +126,7 @@ impl Accel {
                 _ => todo!(),
             }
 
-            blas.build(rgraph, &info);
+            blas.build(rgraph, &info, &[]);
         }
         // let memory_barriers = [vk::MemoryBarrier::builder()
         //     .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
@@ -239,7 +239,7 @@ impl Accel {
             _ => todo!(),
         }
 
-        self.tlas.build(rgraph, &info);
+        self.tlas.build(rgraph, &info, &self.blases);
     }
     pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
         unsafe {

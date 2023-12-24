@@ -214,7 +214,13 @@ impl AccelerationStructure {
             info,
         }
     }
-    pub fn build(self: &Arc<Self>, rgraph: &mut RGraph, info: &AccelerationStructureInfo) {
+    pub fn build(
+        self: &Arc<Self>,
+        rgraph: &mut RGraph,
+        info: &AccelerationStructureInfo,
+        // TODO: not shure if I should handle dependencies like this:
+        dependencies: &[Arc<AccelerationStructure>],
+    ) {
         log::trace!("Building AccelerationStructure with {info:#?}");
         // TODO: pool
         let scratch_buffer = Arc::new(Buffer::create(
@@ -254,11 +260,14 @@ impl AccelerationStructure {
         // log::trace!("Using geometry info {geometry_info:#?}");
 
         let s = self.clone();
-        rgraph
+        let mut pass = rgraph
             .pass()
             .read(&scratch_buffer, AccessType::AccelerationStructureBuildRead)
-            .write(&scratch_buffer, AccessType::AccelerationStructureBuildWrite)
-            .write(self, AccessType::AccelerationStructureBuildWrite)
+            .write(&scratch_buffer, AccessType::AccelerationStructureBuildWrite);
+        for dep in dependencies {
+            pass = pass.read(dep, AccessType::AccelerationStructureBuildRead);
+        }
+        pass.write(self, AccessType::AccelerationStructureBuildWrite)
             .record(move |device, cb, _| unsafe {
                 let geometries = geometries;
                 let build_ranges = build_ranges;
