@@ -196,9 +196,9 @@ impl Accel {
             let instance_buffer = self.instance_buffer.clone();
             rgraph
                 .pass()
-                .read(references_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .read(desc_instance_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .write(instance_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
+                .read(&references_buffer, vk::AccessFlags::SHADER_READ)
+                .read(&desc_instance_buffer, vk::AccessFlags::SHADER_READ)
+                .write(&instance_buffer, vk::AccessFlags::SHADER_WRITE)
                 .record(move |device, cb, pool| {
                     copy2instances.submit(
                         cb,

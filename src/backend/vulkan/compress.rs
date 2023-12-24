@@ -83,10 +83,10 @@ impl VulkanDevice {
             let out_count = out_count.clone();
             rgraph
                 .pass()
-                .read(src.clone(), vk::AccessFlags::SHADER_READ)
-                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .write(dst.clone(), vk::AccessFlags::SHADER_WRITE)
-                .write(out_count.clone(), vk::AccessFlags::SHADER_READ)
+                .read(&src, vk::AccessFlags::SHADER_READ)
+                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
+                .write(&dst, vk::AccessFlags::SHADER_WRITE)
+                .write(&out_count, vk::AccessFlags::SHADER_READ)
                 .record(move |device, cb, pool| {
                     pipeline.submit(
                         cb,
@@ -190,12 +190,12 @@ impl VulkanDevice {
             let out_count = out_count.clone();
             rgraph
                 .pass()
-                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .read(src.clone(), vk::AccessFlags::SHADER_READ)
-                .read(scratch_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .write(out_count.clone(), vk::AccessFlags::SHADER_WRITE)
-                .write(scratch_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
-                .write(dst.clone(), vk::AccessFlags::SHADER_WRITE)
+                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
+                .read(&src, vk::AccessFlags::SHADER_READ)
+                .read(&scratch_buffer, vk::AccessFlags::SHADER_READ)
+                .write(&out_count, vk::AccessFlags::SHADER_WRITE)
+                .write(&scratch_buffer, vk::AccessFlags::SHADER_WRITE)
+                .write(&dst, vk::AccessFlags::SHADER_WRITE)
                 .record(move |device, cb, pool| {
                     compress_large.submit(
                         cb,

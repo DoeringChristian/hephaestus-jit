@@ -201,8 +201,8 @@ impl VulkanDevice {
             let in_buffer = in_buffer.clone();
             rgraph
                 .pass()
-                .read(src.clone(), vk::AccessFlags::TRANSFER_READ)
-                .write(in_buffer.clone(), vk::AccessFlags::TRANSFER_WRITE)
+                .read(&src, vk::AccessFlags::TRANSFER_READ)
+                .write(&in_buffer, vk::AccessFlags::TRANSFER_WRITE)
                 .record(move |device, cb, _| {
                     unsafe {
                         device.cmd_copy_buffer(
@@ -231,9 +231,9 @@ impl VulkanDevice {
                 let pipeline = pipeline.clone();
                 rgraph
                     .pass()
-                    .read(in_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                    .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                    .write(out_buffer.clone(), vk::AccessFlags::TRANSFER_WRITE)
+                    .read(&in_buffer, vk::AccessFlags::SHADER_READ)
+                    .read(&size_buffer, vk::AccessFlags::SHADER_READ)
+                    .write(&out_buffer, vk::AccessFlags::TRANSFER_WRITE)
                     .record(move |device, cb, pool| {
                         pipeline.submit(
                             cb,
@@ -274,8 +274,8 @@ impl VulkanDevice {
             let dst = dst.clone();
             rgraph
                 .pass()
-                .read(in_buffer.clone(), vk::AccessFlags::TRANSFER_READ)
-                .write(dst.clone(), vk::AccessFlags::TRANSFER_WRITE)
+                .read(&in_buffer, vk::AccessFlags::TRANSFER_READ)
+                .write(&dst, vk::AccessFlags::TRANSFER_WRITE)
                 .record(move |device, cb, _| {
                     unsafe {
                         device.cmd_copy_buffer(

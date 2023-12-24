@@ -256,17 +256,14 @@ impl AccelerationStructure {
         rgraph
             .pass()
             .read(
-                scratch_buffer.clone(),
+                &scratch_buffer,
                 vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR,
             )
             .write(
-                scratch_buffer.clone(),
+                &scratch_buffer,
                 vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR,
             )
-            .write(
-                self.clone(),
-                vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR,
-            )
+            .write(self, vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
             .record(move |device, cb, _| unsafe {
                 let geometries = geometries;
                 let build_ranges = build_ranges;

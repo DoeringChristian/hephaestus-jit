@@ -111,11 +111,11 @@ impl VulkanDevice {
             let input = input.clone();
             rgraph
                 .pass()
-                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .read(input.clone(), vk::AccessFlags::SHADER_READ)
-                .read(scratch_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .write(scratch_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
-                .write(output.clone(), vk::AccessFlags::SHADER_WRITE)
+                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
+                .read(&input, vk::AccessFlags::SHADER_READ)
+                .read(&scratch_buffer, vk::AccessFlags::SHADER_READ)
+                .write(&scratch_buffer, vk::AccessFlags::SHADER_WRITE)
+                .write(&output, vk::AccessFlags::SHADER_WRITE)
                 .record(move |device, cb, pool| {
                     pipeline.submit(
                         cb,
@@ -217,8 +217,8 @@ impl VulkanDevice {
             let scratch_buffer = scratch_buffer.clone();
             rgraph
                 .pass()
-                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
-                .write(scratch_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
+                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
+                .write(&scratch_buffer, vk::AccessFlags::SHADER_WRITE)
                 .record(move |device, cb, pool| {
                     prefix_sum_large_init.submit(
                         cb,

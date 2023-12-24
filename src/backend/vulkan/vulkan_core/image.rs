@@ -101,9 +101,9 @@ impl Image {
             let src = src.clone();
             rgraph
                 .pass()
-                .read(src.clone(), vk::AccessFlags::TRANSFER_READ)
+                .read(&src, vk::AccessFlags::TRANSFER_READ)
                 .write(
-                    s.clone(),
+                    &s,
                     Access {
                         flags: vk::AccessFlags::TRANSFER_WRITE,
                         layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,

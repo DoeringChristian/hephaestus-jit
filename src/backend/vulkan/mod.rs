@@ -205,12 +205,12 @@ impl backend::BackendDevice for VulkanDevice {
 
                     let mut rpass = rgraph.pass();
                     for buffer in &buffers {
-                        rpass = rpass.read(buffer.clone(), vk::AccessFlags::SHADER_READ);
-                        rpass = rpass.write(buffer.clone(), vk::AccessFlags::SHADER_WRITE);
+                        rpass = rpass.read(&buffer, vk::AccessFlags::SHADER_READ);
+                        rpass = rpass.write(&buffer, vk::AccessFlags::SHADER_WRITE);
                     }
                     for image in &images {
                         rpass = rpass.read(
-                            image.clone(),
+                            &image,
                             Access {
                                 flags: vk::AccessFlags::SHADER_WRITE,
                                 layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -219,9 +219,9 @@ impl backend::BackendDevice for VulkanDevice {
                         );
                     }
                     for accel in &accels {
-                        rpass = rpass.read(accel.tlas.clone(), vk::AccessFlags::SHADER_READ);
+                        rpass = rpass.read(&accel.tlas, vk::AccessFlags::SHADER_READ);
                         for blas in accel.blases.iter() {
-                            rpass = rpass.read(blas.clone(), vk::AccessFlags::SHADER_READ);
+                            rpass = rpass.read(&blas, vk::AccessFlags::SHADER_READ);
                         }
                     }
 

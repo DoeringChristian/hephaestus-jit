@@ -33,12 +33,14 @@ impl RGraph {
     //         resources: Default::default(),
     //     }
     // }
-    pub fn resource(&mut self, resource: impl Into<Arc<dyn Resource>>) -> ResourceId {
-        let resource = resource.into();
+    pub fn resource<R: Resource + 'static>(&mut self, resource: &Arc<R>) -> ResourceId {
         let key = Arc::as_ptr(&resource) as *const () as usize;
         let entry = self.resources.entry(key);
         let id = ResourceId(entry.index());
-        entry.or_insert_with(|| resource.clone());
+        entry.or_insert_with(|| {
+            let resource: Arc<dyn Resource> = resource.clone();
+            resource
+        });
         id
     }
 }
@@ -185,13 +187,21 @@ impl From<Buffer> for Arc<dyn Resource> {
 }
 
 impl<'a> PassBuilder<'a> {
-    pub fn read(mut self, resource: Arc<dyn Resource>, access: impl Into<Access>) -> Self {
+    pub fn read<R: Resource + 'static>(
+        mut self,
+        resource: &Arc<R>,
+        access: impl Into<Access>,
+    ) -> Self {
         let id = self.graph.resource(resource);
         let access = access.into();
         self.read.push((id, access));
         self
     }
-    pub fn write(mut self, resource: Arc<dyn Resource>, access: impl Into<Access>) -> Self {
+    pub fn write<R: Resource + 'static>(
+        mut self,
+        resource: &Arc<R>,
+        access: impl Into<Access>,
+    ) -> Self {
         let id = self.graph.resource(resource);
         let access = access.into();
         self.write.push((id, access));
