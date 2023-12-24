@@ -1,7 +1,8 @@
-use std::sync::Mutex;
+use std::sync::Arc;
 
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::device::Device;
+use super::graph::RGraph;
 use ash::vk;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -212,64 +213,83 @@ impl AccelerationStructure {
             info,
         }
     }
-    // pub fn build(&self, cb: vk::CommandBuffer, pool: &mut Pool, info: &AccelerationStructureInfo) {
-    //     log::trace!("Building AccelerationStructure with {info:#?}");
-    //     let scratch_buffer = pool.buffer(BufferInfo {
-    //         size: self.sizes.build_scratch_size as _,
-    //         usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-    //             | vk::BufferUsageFlags::STORAGE_BUFFER,
-    //         memory_location: MemoryLocation::GpuOnly,
-    //         ..Default::default()
-    //     });
-    //     let scratch_buffer = scratch_buffer.device_address();
-    //
-    //     let (geometries, build_ranges): (Vec<_>, Vec<_>) = info
-    //         .geometries
-    //         .iter()
-    //         .map(|info| {
-    //             let (geometry_type, geometry) = info.data.to_vulkan();
-    //             (
-    //                 vk::AccelerationStructureGeometryKHR {
-    //                     geometry_type,
-    //                     geometry,
-    //                     flags: info.flags,
-    //                     ..Default::default()
-    //                 },
-    //                 vk::AccelerationStructureBuildRangeInfoKHR {
-    //                     primitive_count: info.max_primitive_count,
-    //                     primitive_offset: 0,
-    //                     first_vertex: 0,
-    //                     transform_offset: 0,
-    //                 },
-    //             )
-    //         })
-    //         .unzip();
-    //
-    //     let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-    //         .ty(self.info.ty)
-    //         .flags(self.info.flags)
-    //         .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
-    //         .dst_acceleration_structure(self.accel)
-    //         .geometries(&geometries)
-    //         .scratch_data(vk::DeviceOrHostAddressKHR {
-    //             device_address: scratch_buffer,
-    //         })
-    //         .build();
-    //
-    //     log::trace!("Using geometry info {geometry_info:#?}");
-    //
-    //     unsafe {
-    //         self.device
-    //             .acceleration_structure_ext
-    //             .as_ref()
-    //             .unwrap()
-    //             .cmd_build_acceleration_structures(cb, &[geometry_info], &[&build_ranges]);
-    //     }
-    //     log::trace!(
-    //         "Built AccelerationStructure with handle {handle:?}",
-    //         handle = self.accel
-    //     );
-    // }
+    pub fn build(self: &Arc<Self>, graph: &mut RGraph, info: &AccelerationStructureInfo) {
+        log::trace!("Building AccelerationStructure with {info:#?}");
+        // TODO: pool
+        let scratch_buffer = Arc::new(Buffer::create(
+            &self.device,
+            BufferInfo {
+                size: self.sizes.build_scratch_size as _,
+                alignment: 0,
+                usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::GpuOnly,
+            },
+        ));
+        let scratch_buffer_address = scratch_buffer.device_address();
+
+        let (geometries, build_ranges): (Vec<_>, Vec<_>) = info
+            .geometries
+            .iter()
+            .map(|info| {
+                let (geometry_type, geometry) = info.data.to_vulkan();
+                (
+                    vk::AccelerationStructureGeometryKHR {
+                        geometry_type,
+                        geometry,
+                        flags: info.flags,
+                        ..Default::default()
+                    },
+                    vk::AccelerationStructureBuildRangeInfoKHR {
+                        primitive_count: info.max_primitive_count,
+                        primitive_offset: 0,
+                        first_vertex: 0,
+                        transform_offset: 0,
+                    },
+                )
+            })
+            .unzip();
+
+        let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
+            .ty(self.info.ty)
+            .flags(self.info.flags)
+            .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
+            .dst_acceleration_structure(self.accel)
+            .geometries(&geometries)
+            .scratch_data(vk::DeviceOrHostAddressKHR {
+                device_address: scratch_buffer_address,
+            })
+            .build();
+
+        log::trace!("Using geometry info {geometry_info:#?}");
+
+        graph
+            .pass()
+            .read(
+                scratch_buffer.clone(),
+                vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR,
+            )
+            .write(
+                scratch_buffer.clone(),
+                vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR,
+            )
+            .write(
+                self.clone(),
+                vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR,
+            )
+            .record(move |device, cb| unsafe {
+                device
+                    .acceleration_structure_ext
+                    .as_ref()
+                    .unwrap()
+                    .cmd_build_acceleration_structures(cb, &[geometry_info], &[&build_ranges]);
+            });
+
+        log::trace!(
+            "Built AccelerationStructure with handle {handle:?}",
+            handle = self.accel
+        );
+    }
 }
 
 impl Drop for AccelerationStructure {
