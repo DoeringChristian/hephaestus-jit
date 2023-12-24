@@ -8,9 +8,9 @@ use crate::ir::IR;
 
 use super::accel::Accel;
 use super::buffer::Buffer;
-use super::device::Device;
 use super::image::Image;
 use super::pool::Pool;
+use super::vulkan_core::device::Device;
 use ash::vk;
 
 #[derive(Debug)]

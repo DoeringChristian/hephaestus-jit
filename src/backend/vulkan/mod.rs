@@ -3,10 +3,10 @@ mod acceleration_structure;
 mod buffer;
 mod codegen;
 mod compress;
-mod device;
+// mod device;
 mod glslext;
 mod image;
-mod physical_device;
+// mod physical_device;
 mod pipeline;
 mod pool;
 mod prefix_sum;
@@ -16,6 +16,7 @@ mod shader_cache;
 mod test;
 mod util;
 mod vkdevice;
+mod vulkan_core;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -29,9 +30,9 @@ use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
 use ash::vk;
 use buffer::{Buffer, BufferInfo};
-use device::Device;
 use gpu_allocator::MemoryLocation;
 use image::{Image, ImageInfo};
+use vulkan_core::device::Device;
 
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
@@ -210,8 +211,6 @@ impl backend::BackendDevice for VulkanDevice {
                         size_buffer
                             .mapped_slice_mut()
                             .copy_from_slice(bytemuck::cast_slice(&[*size as u32]));
-                        dbg!(size);
-                        dbg!(&*size_buffer);
                         let buffers = [&*size_buffer]
                             .into_iter()
                             .chain(buffers.into_iter())

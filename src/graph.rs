@@ -171,7 +171,7 @@ pub struct Pass {
     pub buffers: Vec<BufferId>,
     pub textures: Vec<TextureId>,
     pub accels: Vec<AccelId>,
-    // pub size: Option<BufferId>,
+    pub size_buffer: Option<BufferId>,
     pub op: PassOp,
 }
 
@@ -289,7 +289,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                         buffers,
                         textures,
                         accels,
-                        // size: None,
+                        size_buffer: None,
                         op: PassOp::DeviceOp(op),
                     })
                 }
@@ -322,7 +322,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 buffers,
                 textures,
                 accels,
-                // size: None,
+                size_buffer: None,
                 op: PassOp::Kernel {
                     ir: compiler.ir,
                     size,

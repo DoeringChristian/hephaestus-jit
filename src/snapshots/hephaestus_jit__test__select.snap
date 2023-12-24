@@ -15,6 +15,7 @@ Graph {
             ],
             textures: [],
             accels: [],
+            size_buffer: None,
             op: Kernel {
                 ir: IR {
                     vars: [

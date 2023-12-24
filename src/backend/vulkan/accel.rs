@@ -2,8 +2,8 @@ use ash::vk;
 use std::sync::Mutex;
 
 use super::buffer::{Buffer, BufferInfo, MemoryLocation};
-use super::device::Device;
 use super::pool::Pool;
+use super::vulkan_core::device::Device;
 use super::{acceleration_structure::*, VulkanDevice};
 
 use crate::backend::vulkan::pipeline::{

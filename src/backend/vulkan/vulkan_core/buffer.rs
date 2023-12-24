@@ -1,11 +1,8 @@
-use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
-
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
-use vk_sync::AccessType;
 
-use super::vulkan_core::device::Device;
+use super::device::Device;
 
 #[derive(Debug)]
 pub struct Buffer {
@@ -124,30 +121,5 @@ impl Buffer {
                 &vk::BufferDeviceAddressInfo::builder().buffer(self.buffer),
             )
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::super::{buffer::*, vulkan_core::device::*};
-    #[test]
-    fn upload_download_buffer() {
-        let device = Device::create(0);
-        let mut buffer = Buffer::create(
-            &device,
-            BufferInfo {
-                size: 4,
-                alignment: 0,
-                usage: vk::BufferUsageFlags::TRANSFER_SRC
-                    | vk::BufferUsageFlags::TRANSFER_DST
-                    | vk::BufferUsageFlags::STORAGE_BUFFER,
-                memory_location: MemoryLocation::CpuToGpu,
-            },
-        );
-        buffer
-            .mapped_slice_mut()
-            .copy_from_slice(bytemuck::cast_slice(&[1f32]));
-        let slice = bytemuck::cast_slice::<_, f32>(buffer.mapped_slice());
-        assert_eq!(slice, &[1f32]);
     }
 }

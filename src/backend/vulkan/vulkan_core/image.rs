@@ -6,8 +6,7 @@ use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
 use super::buffer::{Buffer, BufferInfo};
-use super::vulkan_core::device::Device;
-use super::VulkanDevice;
+use super::device::Device;
 
 pub struct Image {
     allocation: Option<Allocation>,
@@ -18,7 +17,10 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn create(device: &Device, info: &ImageInfo) -> Self {
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
+    pub fn create(device: &Device, info: ImageInfo) -> Self {
         log::trace!("Creating Image with {info:?}");
         let create_info = vk::ImageCreateInfo {
             image_type: info.ty,
@@ -76,7 +78,7 @@ impl Image {
             device: device.clone(),
             image,
             sampler,
-            info: *info,
+            info,
         }
     }
     pub fn copy_from_buffer(&self, cb: vk::CommandBuffer, src: &Buffer) {
@@ -153,11 +155,11 @@ impl Image {
     pub fn default_sampler(&self) -> vk::Sampler {
         self.sampler
     }
-    pub fn info(&self) -> &ImageInfo {
-        &self.info
-    }
     pub fn vk(&self) -> vk::Image {
         self.image
+    }
+    pub fn info(&self) -> &ImageInfo {
+        &self.info
     }
 }
 
@@ -195,7 +197,7 @@ impl Drop for Image {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ImageInfo {
     pub ty: vk::ImageType,
     pub format: vk::Format,
