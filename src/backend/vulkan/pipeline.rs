@@ -2,6 +2,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use crate::backend::vulkan::codegen;
 use crate::ir::IR;
@@ -10,6 +11,7 @@ use super::accel::Accel;
 use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::device::Device;
+use super::vulkan_core::graph::RGraphPool;
 use super::vulkan_core::image::Image;
 use ash::vk;
 
@@ -240,7 +242,7 @@ impl Pipeline {
     pub fn submit(
         &self,
         cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        pool: &mut RGraphPool,
         device: &Device,
         write_sets: &[WriteSet],
         extent: (u32, u32, u32),
@@ -295,18 +297,18 @@ impl Pipeline {
     pub fn submit_to_cbuffer(
         &self,
         cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        pool: &mut RGraphPool,
         num: usize,
-        buffers: &[&Buffer],
-        images: &[&Image],
-        accels: &[&Accel],
+        buffers: &[Arc<Buffer>],
+        images: &[Arc<Image>],
+        accels: &[Arc<Accel>],
     ) {
         let desc_sets = pool.desc_sets(&self.desc_set_layouts).to_vec();
         let image_views = images
             .iter()
             .map(|image| {
                 let info = vk::ImageViewCreateInfo::builder()
-                    .image(***image)
+                    .image(image.vk())
                     .view_type(match image.info().ty {
                         vk::ImageType::TYPE_1D => vk::ImageViewType::TYPE_1D,
                         vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,

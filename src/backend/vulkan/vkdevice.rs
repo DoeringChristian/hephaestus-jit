@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use ash::vk;
+use std::sync::Arc;
 use text_placeholder::Template;
 
 use super::pool::Pool;
 use super::shader_cache::ShaderKind;
+use super::vulkan_core::graph::RGraph;
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -80,11 +82,10 @@ impl VulkanDevice {
     }
     pub fn build_accel<'a>(
         &'a self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         accel_desc: &AccelDesc,
         accel: &Accel,
-        buffers: impl IntoIterator<Item = &'a Buffer>,
+        buffers: impl IntoIterator<Item = &'a Arc<Buffer>>,
     ) {
         // WARN: This is potentially very unsafe, since we are just randomly
         // accessing the buffers and hoping for them to be index/vertex
@@ -112,6 +113,6 @@ impl VulkanDevice {
             instances,
         };
 
-        accel.build(cb, pool, desc);
+        accel.build(rgraph, desc);
     }
 }

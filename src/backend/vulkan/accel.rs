@@ -1,10 +1,12 @@
 use ash::vk;
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use super::pool::Pool;
 use super::vulkan_core::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::vulkan_core::device::Device;
-use super::{acceleration_structure::*, VulkanDevice};
+use super::vulkan_core::graph::RGraph;
+use super::{vulkan_core::acceleration_structure::*, VulkanDevice};
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -13,22 +15,22 @@ use crate::backend::{AccelDesc, GeometryDesc};
 
 pub enum AccelGeometryBuildInfo<'a> {
     Triangles {
-        triangles: &'a Buffer,
-        vertices: &'a Buffer,
+        triangles: &'a Arc<Buffer>,
+        vertices: &'a Arc<Buffer>,
     },
 }
 pub struct AccelBuildInfo<'a> {
     pub geometries: &'a [AccelGeometryBuildInfo<'a>],
-    pub instances: &'a Buffer,
+    pub instances: &'a Arc<Buffer>,
 }
 
 #[derive(Debug)]
 pub struct Accel {
-    device: VulkanDevice,
-    blases: Vec<AccelerationStructure>,
-    tlas: AccelerationStructure,
-    instance_buffer: Mutex<Buffer>,
-    info: AccelDesc,
+    pub device: VulkanDevice,
+    pub blases: Vec<Arc<AccelerationStructure>>,
+    pub tlas: Arc<AccelerationStructure>,
+    pub instance_buffer: Arc<Buffer>,
+    pub info: AccelDesc,
 }
 
 impl Accel {
@@ -61,6 +63,7 @@ impl Accel {
                     AccelerationStructure::create(device, info)
                 }
             })
+            .map(|blas| Arc::new(blas))
             .collect::<Vec<_>>();
 
         let create_info = AccelerationStructureInfo {
@@ -75,7 +78,7 @@ impl Accel {
                 },
             }],
         };
-        let tlas = AccelerationStructure::create(device, create_info);
+        let tlas = Arc::new(AccelerationStructure::create(device, create_info));
 
         let instance_buffer = Buffer::create(
             &device,
@@ -92,11 +95,12 @@ impl Accel {
             blases,
             tlas,
             device: device.clone(),
-            instance_buffer: Mutex::new(instance_buffer),
+            // instance_buffer: Mutex::new(instance_buffer),
+            instance_buffer: Arc::new(instance_buffer),
             info: info.clone(),
         }
     }
-    pub fn build(&self, cb: vk::CommandBuffer, pool: &mut Pool, desc: AccelBuildInfo) {
+    pub fn build(&self, rgraph: &mut RGraph, desc: AccelBuildInfo) {
         for (i, blas) in self.blases.iter().enumerate() {
             let mut info = blas.info.clone();
             assert_eq!(info.geometries.len(), 1);
@@ -120,23 +124,12 @@ impl Accel {
                 _ => todo!(),
             }
 
-            blas.build(cb, pool, &info);
+            blas.build(rgraph, &info);
         }
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
-            .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR)
-            .build()];
-        unsafe {
-            self.device.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
-        }
+        // let memory_barriers = [vk::MemoryBarrier::builder()
+        //     .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
+        //     .dst_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR)
+        //     .build()];
 
         // Create references buffer
         let references = self
@@ -154,20 +147,24 @@ impl Accel {
             })
             .collect::<Vec<_>>();
 
-        let mut references_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u64>() * references.len(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
+        let mut references_buffer = Buffer::create(
+            &self.device,
+            BufferInfo {
+                size: std::mem::size_of::<u64>() * references.len(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER
+                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                    | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
 
         references_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&references));
+        let references_buffer = Arc::new(references_buffer);
 
         let copy2instances = self.device.get_pipeline(&PipelineDesc {
             code: inline_spirv::include_spirv!(
@@ -192,45 +189,38 @@ impl Accel {
             }],
         });
 
-        let instance_buffer = self.instance_buffer.lock().unwrap();
-
-        copy2instances.submit(
-            cb,
-            pool,
-            &self.device,
-            &[WriteSet {
-                set: 0,
-                binding: 0,
-                buffers: &[
-                    BufferWriteInfo {
-                        buffer: &desc.instances,
-                    },
-                    BufferWriteInfo {
-                        buffer: &references_buffer,
-                    },
-                    BufferWriteInfo {
-                        buffer: &instance_buffer,
-                    },
-                ],
-            }],
-            (self.info.instances as _, 1, 1),
-        );
-
-        // Memory Barrierr
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            self.device.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
+        {
+            let n_instances = self.info.instances;
+            let instance_buffer = self.instance_buffer.clone();
+            let desc = desc;
+            let instance_buffer = desc.instances.clone();
+            rgraph
+                .pass()
+                .read(references_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .write(instance_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
+                .record(move |device, cb, pool| {
+                    copy2instances.submit(
+                        cb,
+                        pool,
+                        device,
+                        &[WriteSet {
+                            set: 0,
+                            binding: 0,
+                            buffers: &[
+                                BufferWriteInfo {
+                                    buffer: &instance_buffer,
+                                },
+                                BufferWriteInfo {
+                                    buffer: &references_buffer,
+                                },
+                                BufferWriteInfo {
+                                    buffer: &instance_buffer,
+                                },
+                            ],
+                        }],
+                        (n_instances as _, 1, 1),
+                    );
+                });
         }
 
         let mut info = self.tlas.info.clone();
@@ -241,12 +231,12 @@ impl Accel {
                 array_of_pointers,
                 data,
             } => {
-                *data = DeviceOrHostAddress::DeviceAddress(instance_buffer.device_address());
+                *data = DeviceOrHostAddress::DeviceAddress(self.instance_buffer.device_address());
             }
             _ => todo!(),
         }
 
-        self.tlas.build(cb, pool, &info);
+        self.tlas.build(rgraph, &info);
     }
     pub fn get_blas_device_address(&self, id: usize) -> vk::DeviceAddress {
         unsafe {

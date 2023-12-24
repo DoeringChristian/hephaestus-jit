@@ -5,12 +5,14 @@ use super::acceleration_structure::AccelerationStructure;
 use super::buffer::Buffer;
 use super::device::Device;
 use super::image::Image;
+use std::fmt::Debug;
 use std::sync::Arc;
 
-pub trait Resource {
+pub trait Resource: Debug {
     fn transition(&self, cb: vk::CommandBuffer, old: Access, new: Access);
 }
 
+#[derive(Default, Debug)]
 pub struct RGraph {
     passes: Vec<Pass>,
     // We deduplicate resources by the pointers to their Arcs
@@ -18,12 +20,12 @@ pub struct RGraph {
     resources: IndexMap<usize, Arc<dyn Resource>>,
 }
 impl RGraph {
-    pub fn new(device: &Device) -> Self {
-        Self {
-            passes: vec![],
-            resources: Default::default(),
-        }
-    }
+    // pub fn new() -> Self {
+    //     Self {
+    //         passes: vec![],
+    //         resources: Default::default(),
+    //     }
+    // }
     pub fn resource(&mut self, resource: impl Into<Arc<dyn Resource>>) -> ResourceId {
         let resource = resource.into();
         let key = Arc::as_ptr(&resource) as *const () as usize;
@@ -70,7 +72,15 @@ impl From<vk::AccessFlags> for Access {
 pub struct Pass {
     read: Vec<(ResourceId, Access)>,
     write: Vec<(ResourceId, Access)>,
-    render_fn: Option<Box<dyn FnOnce(&Device, vk::CommandBuffer)>>,
+    render_fn: Option<Box<dyn FnOnce(&Device, vk::CommandBuffer, &mut RGraphPool)>>,
+}
+impl Debug for Pass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pass")
+            .field("read", &self.read)
+            .field("write", &self.write)
+            .finish()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -180,7 +190,10 @@ impl<'a> PassBuilder<'a> {
         self.write.push((id, access));
         self
     }
-    pub fn record(self, f: impl FnOnce(&Device, vk::CommandBuffer) + 'static) -> PassId {
+    pub fn record(
+        self,
+        f: impl FnOnce(&Device, vk::CommandBuffer, &mut RGraphPool) + 'static,
+    ) -> PassId {
         let id = PassId(self.graph.passes.len());
         self.graph.passes.push(Pass {
             read: self.read,
@@ -188,6 +201,81 @@ impl<'a> PassBuilder<'a> {
             render_fn: Some(Box::new(f)),
         });
         id
+    }
+}
+
+/// A Resource Pool for temporary resources such as image views or descriptor sets
+#[derive(Debug)]
+pub struct RGraphPool {
+    pub device: Device,
+    pub image_views: Vec<vk::ImageView>, // Image view cache in images
+    pub desc_sets: Vec<vk::DescriptorSet>,
+    pub desc_pools: Vec<vk::DescriptorPool>,
+}
+
+impl RGraphPool {
+    pub fn new(device: &Device) -> Self {
+        Self {
+            device: device.clone(),
+            image_views: vec![],
+            desc_sets: vec![],
+            desc_pools: vec![],
+        }
+    }
+    pub fn image_view(&mut self, info: &vk::ImageViewCreateInfo) -> vk::ImageView {
+        let view = unsafe { self.device.create_image_view(info, None).unwrap() };
+        self.image_views.push(view);
+        view
+    }
+    pub fn desc_sets(&mut self, set_layouts: &[vk::DescriptorSetLayout]) -> &[vk::DescriptorSet] {
+        let desc_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 2 ^ 16,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 2 ^ 16,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+                descriptor_count: 2 ^ 16,
+            },
+        ];
+        let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            .pool_sizes(&desc_sizes)
+            .max_sets(set_layouts.len() as _);
+        let desc_pool = unsafe {
+            self.device
+                .create_descriptor_pool(&desc_pool_info, None)
+                .unwrap()
+        };
+        self.desc_pools.push(desc_pool);
+
+        let desc_set_allocation_info = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(desc_pool)
+            .set_layouts(set_layouts);
+        let desc_sets = unsafe {
+            self.device
+                .allocate_descriptor_sets(&desc_set_allocation_info)
+                .unwrap()
+        };
+        let start = self.desc_sets.len();
+        self.desc_sets.extend_from_slice(&desc_sets);
+        &self.desc_sets[start..]
+    }
+}
+
+impl Drop for RGraphPool {
+    fn drop(&mut self) {
+        unsafe {
+            for image_view in self.image_views.drain(..) {
+                self.device.destroy_image_view(image_view, None);
+            }
+            for pool in self.desc_pools.drain(..) {
+                self.device.destroy_descriptor_pool(pool, None);
+            }
+        }
     }
 }
 
@@ -212,26 +300,31 @@ impl RGraph {
             .map(|(_, r)| r)
             .collect::<Vec<_>>();
 
+        let mut tmp_resource_pool = RGraphPool::new(device);
+
         device.submit_global(|device, cb| {
             for pass in self.passes {
                 // Transition resources
-                for (id, access) in pass.read {
+                log::trace!("Recording {pass:?} to command buffer");
+                for (id, access) in pass.read.iter().chain(pass.write.iter()) {
                     let prev = resource_accesses[id.0];
-                    if prev != access {
-                        resources[id.0].transition(cb, prev, access);
+                    if prev != *access {
+                        resources[id.0].transition(cb, prev, *access);
                         log::trace!("Barrier from {prev:?} -> {read:?}", read = access);
                     }
                 }
 
                 // Record content of pass
                 let render_fn = pass.render_fn.unwrap();
-                render_fn(device, cb);
+                render_fn(device, cb, &mut tmp_resource_pool);
 
                 // Modify resource_accesses when writing
-                for (id, access) in pass.write {
-                    resource_accesses[id.0] = access;
+                for (id, access) in pass.write.iter() {
+                    resource_accesses[id.0] = *access;
                 }
             }
         });
+
+        drop(tmp_resource_pool);
     }
 }

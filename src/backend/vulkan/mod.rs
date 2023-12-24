@@ -1,15 +1,11 @@
 mod accel;
-mod acceleration_structure;
-// mod buffer;
 mod codegen;
 mod compress;
-// mod device;
 mod glslext;
-// mod image;
-// mod physical_device;
 mod pipeline;
 mod pool;
 mod prefix_sum;
+// pub mod presenter;
 mod reduce;
 mod shader_cache;
 #[cfg(test)]
@@ -25,6 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::backend;
 use crate::backend::vulkan::pool::Pool;
+use crate::backend::vulkan::vulkan_core::graph::{Access, RGraph};
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
@@ -128,7 +125,7 @@ impl backend::BackendDevice for VulkanDevice {
                 | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
             memory_location: MemoryLocation::GpuOnly,
         };
-        let buffer = Buffer::create(self, info);
+        let buffer = Arc::new(Buffer::create(self, info));
         Ok(VulkanBuffer {
             buffer,
             device: self.clone(),
@@ -154,133 +151,137 @@ impl backend::BackendDevice for VulkanDevice {
         // submitted
         // FIX: Add a struct that can collect Arcs to those resources
         let mut pool = Pool::new(&self);
-        self.submit_global(|device, cb| {
-            for pass in graph.passes.iter() {
-                let buffers = pass
-                    .buffers
-                    .iter()
-                    .map(|id| {
-                        let buffer = graph.buffer(trace, *id);
-                        &buffer.vulkan().unwrap().buffer
-                    })
-                    .collect::<Vec<_>>();
-                let images = pass
-                    .textures
-                    .iter()
-                    .map(|id| {
-                        let buffer = graph.texture(trace, *id);
-                        &buffer.vulkan().unwrap().image
-                    })
-                    .collect::<Vec<_>>();
-                let accels = pass
-                    .accels
-                    .iter()
-                    .map(|id| {
-                        let accel = graph.accel(trace, *id);
-                        &accel.vulkan().unwrap().accel
-                    })
-                    .collect::<Vec<_>>();
-                match &pass.op {
-                    PassOp::Kernel { ir, size } => {
-                        let pipeline = self.compile_ir(ir);
+        let mut rgraph = RGraph::default();
 
-                        let memory_barriers = [vk::MemoryBarrier::builder()
-                            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-                            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                            .build()];
-                        unsafe {
-                            device.cmd_pipeline_barrier(
-                                cb,
-                                vk::PipelineStageFlags::ALL_COMMANDS,
-                                vk::PipelineStageFlags::ALL_COMMANDS,
-                                vk::DependencyFlags::empty(),
-                                &memory_barriers,
-                                &[],
-                                &[],
-                            );
-                        }
-                        // TODO: if we ever add dynamic sized kernels pass the buffer here
-                        let mut size_buffer = pool.buffer(BufferInfo {
+        for pass in graph.passes.iter() {
+            let buffers = pass
+                .buffers
+                .iter()
+                .map(|id| {
+                    let buffer = graph.buffer(trace, *id);
+                    buffer.vulkan().unwrap().buffer.clone()
+                })
+                .collect::<Vec<_>>();
+            let images = pass
+                .textures
+                .iter()
+                .map(|id| {
+                    let buffer = graph.texture(trace, *id);
+                    buffer.vulkan().unwrap().image.clone()
+                })
+                .collect::<Vec<_>>();
+            let accels = pass
+                .accels
+                .iter()
+                .map(|id| {
+                    let accel = graph.accel(trace, *id);
+                    accel.vulkan().unwrap().accel.clone()
+                })
+                .collect::<Vec<_>>();
+            match &pass.op {
+                PassOp::Kernel { ir, size } => {
+                    let size = *size;
+                    let pipeline = self.compile_ir(ir);
+                    // TODO: if we ever add dynamic sized kernels pass the buffer here
+                    let mut size_buffer = Buffer::create(
+                        self,
+                        BufferInfo {
                             size: std::mem::size_of::<u32>(),
                             usage: vk::BufferUsageFlags::TRANSFER_SRC
                                 | vk::BufferUsageFlags::TRANSFER_DST
                                 | vk::BufferUsageFlags::STORAGE_BUFFER,
                             memory_location: MemoryLocation::CpuToGpu,
                             ..Default::default()
-                        });
-                        size_buffer
-                            .mapped_slice_mut()
-                            .copy_from_slice(bytemuck::cast_slice(&[*size as u32]));
-                        let buffers = [&*size_buffer]
-                            .into_iter()
-                            .chain(buffers.into_iter())
-                            .collect::<Vec<_>>();
-                        pipeline
-                            .submit_to_cbuffer(cb, &mut pool, *size, &buffers, &images, &accels);
+                        },
+                    );
+                    size_buffer
+                        .mapped_slice_mut()
+                        .copy_from_slice(bytemuck::cast_slice(&[size as u32]));
+                    let size_buffer = Arc::new(size_buffer);
+                    let buffers = [size_buffer]
+                        .into_iter()
+                        .chain(buffers.into_iter())
+                        .collect::<Vec<_>>();
+
+                    let mut rpass = rgraph.pass();
+                    for buffer in &buffers {
+                        rpass = rpass.read(buffer.clone(), vk::AccessFlags::SHADER_READ);
+                        rpass = rpass.write(buffer.clone(), vk::AccessFlags::SHADER_WRITE);
                     }
-                    PassOp::DeviceOp(op) => match op {
-                        DeviceOp::ReduceOp(op) => {
-                            let dst = buffers[0];
-                            let src = buffers[1];
-                            let ty = trace
-                                .var(graph.buffer_desc(pass.buffers[0]).var.id())
-                                .ty
-                                .clone();
-                            let num = trace
-                                .var(graph.buffer_desc(pass.buffers[1]).var.id())
-                                .extent
-                                .size();
-                            self.reduce(cb, &mut pool, *op, &ty, num, src, dst);
+                    for image in &images {
+                        rpass = rpass.read(
+                            image.clone(),
+                            Access {
+                                flags: vk::AccessFlags::SHADER_WRITE,
+                                layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                    for accel in &accels {
+                        rpass = rpass.read(accel.tlas.clone(), vk::AccessFlags::SHADER_READ);
+                        for blas in accel.blases.iter() {
+                            rpass = rpass.read(blas.clone(), vk::AccessFlags::SHADER_READ);
                         }
-                        DeviceOp::PrefixSum { inclusive } => {
-                            let dst = buffers[0];
-                            let src = buffers[1];
-                            let ty = trace
-                                .var(graph.buffer_desc(pass.buffers[0]).var.id())
-                                .ty
-                                .clone();
-                            let num = graph.buffer_desc(pass.buffers[1]).size;
-                            self.prefix_sum(cb, &mut pool, &ty, num, *inclusive, src, dst);
-                        }
-                        DeviceOp::Compress => {
-                            let index_out = buffers[0];
-                            let count_out = buffers[1];
-                            let src = buffers[2];
-                            dbg!(buffers);
-                            dbg!(index_out);
-                            dbg!(count_out);
-                            dbg!(src);
+                    }
 
-                            let num = graph.buffer_desc(pass.buffers[2]).size;
-                            dbg!(num);
-
-                            // if num <= 1024 {
-                            //     self.compress_small(
-                            //         cb, &mut pool, num as _, count_out, src, index_out,
-                            //     );
-                            // } else {
-                            self.compress_large(cb, &mut pool, num as _, count_out, src, index_out);
-                        }
-                        DeviceOp::Buffer2Texture => {
-                            let src = buffers[0];
-                            let dst = images[0];
-                            dst.copy_from_buffer(cb, &src);
-                        }
-                        DeviceOp::BuildAccel => {
-                            let accel_desc = graph.accel_desc(pass.accels[0]);
-                            self.build_accel(
-                                cb,
-                                &mut pool,
-                                &accel_desc.desc,
-                                &accels[0],
-                                buffers.into_iter(),
-                            );
-                        }
-                    },
-                    _ => todo!(),
+                    rpass.record(move |device, cb, pool| {
+                        pipeline.submit_to_cbuffer(cb, pool, size, &buffers, &images, &accels);
+                    });
                 }
+                PassOp::DeviceOp(op) => match op {
+                    DeviceOp::ReduceOp(op) => {
+                        let dst = buffers[0].clone();
+                        let src = buffers[1].clone();
+                        let ty = trace
+                            .var(graph.buffer_desc(pass.buffers[0]).var.id())
+                            .ty
+                            .clone();
+                        let num = trace
+                            .var(graph.buffer_desc(pass.buffers[1]).var.id())
+                            .extent
+                            .size();
+                        self.reduce(&mut rgraph, *op, &ty, num, &src, &dst);
+                    }
+                    DeviceOp::PrefixSum { inclusive } => {
+                        let dst = buffers[0].clone();
+                        let src = buffers[1].clone();
+                        let ty = trace
+                            .var(graph.buffer_desc(pass.buffers[0]).var.id())
+                            .ty
+                            .clone();
+                        let num = graph.buffer_desc(pass.buffers[1]).size;
+                        self.prefix_sum(&mut rgraph, &ty, num, *inclusive, &src, &dst);
+                    }
+                    DeviceOp::Compress => {
+                        let index_out = buffers[0].clone();
+                        let count_out = buffers[1].clone();
+                        let src = buffers[2].clone();
+
+                        let num = graph.buffer_desc(pass.buffers[2]).size;
+
+                        // if num <= 1024 {
+                        //     self.compress_small(
+                        //         cb, &mut pool, num as _, count_out, src, index_out,
+                        //     );
+                        // } else {
+                        self.compress_large(&mut rgraph, num as _, &count_out, &src, &index_out);
+                    }
+                    DeviceOp::Buffer2Texture => {
+                        let src = buffers[0].clone();
+                        let dst = images[0].clone();
+                        dst.copy_from_buffer(&mut rgraph, &src);
+                    }
+                    DeviceOp::BuildAccel => {
+                        let accel_desc = graph.accel_desc(pass.accels[0]);
+                        self.build_accel(&mut rgraph, &accel_desc.desc, &accels[0], buffers.iter());
+                    }
+                },
+                _ => todo!(),
             }
-        });
+        }
+        rgraph.submit(self);
+        // self.submit_global(|device, cb| {});
         Ok(())
     }
 
@@ -311,7 +312,7 @@ impl backend::BackendDevice for VulkanDevice {
             _ => todo!(),
         };
 
-        let image = Image::create(
+        let image = Arc::new(Image::create(
             self,
             ImageInfo {
                 ty,
@@ -322,7 +323,7 @@ impl backend::BackendDevice for VulkanDevice {
                     depth,
                 },
             },
-        );
+        ));
 
         Ok(Self::Texture {
             image,
@@ -361,13 +362,13 @@ impl backend::BackendDevice for VulkanDevice {
 
     fn create_accel(&self, desc: &backend::AccelDesc) -> backend::Result<Self::Accel> {
         Ok(VulkanAccel {
-            accel: accel::Accel::create(&self, desc),
+            accel: Arc::new(accel::Accel::create(&self, desc)),
         })
     }
 }
 
 pub struct VulkanBuffer {
-    buffer: Buffer,
+    buffer: Arc<Buffer>,
     device: VulkanDevice,
 }
 
@@ -424,7 +425,7 @@ impl backend::BackendBuffer for VulkanBuffer {
 
 #[derive(Debug)]
 pub struct VulkanTexture {
-    image: Image,
+    image: Arc<Image>,
     device: VulkanDevice,
     shape: Vec<usize>,
     channels: usize,
@@ -435,15 +436,15 @@ impl backend::BackendTexture for VulkanTexture {
 }
 
 impl VulkanTexture {
-    fn copy_from_buffer(&self, cb: vk::CommandBuffer, src: &Buffer) {
+    fn copy_from_buffer(&self, rgraph: &mut RGraph, src: &Arc<Buffer>) {
         assert!(self.channels <= 4);
-        self.image.copy_from_buffer(cb, src);
+        self.image.copy_from_buffer(rgraph, src);
     }
 }
 
 #[derive(Debug)]
 pub struct VulkanAccel {
-    accel: accel::Accel,
+    accel: Arc<accel::Accel>,
 }
 
 impl backend::BackendAccel for VulkanAccel {

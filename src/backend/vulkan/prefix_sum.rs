@@ -1,5 +1,6 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use std::sync::Arc;
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -13,31 +14,30 @@ use crate::vartype::VarType;
 use super::pool::{Lease, Pool};
 use super::vkdevice::LaunchConfig;
 use super::vulkan_core::buffer::Buffer;
+use super::vulkan_core::graph::RGraph;
 use super::VulkanDevice;
 
 impl VulkanDevice {
     pub fn prefix_sum(
         &self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         ty: &VarType,
         num: usize,
         inclusive: bool,
-        src: &Buffer,
-        dst: &Buffer,
+        src: &Arc<Buffer>,
+        dst: &Arc<Buffer>,
     ) {
-        self.prefix_sum_large(cb, pool, ty, num, inclusive, src, dst);
+        self.prefix_sum_large(rgraph, ty, num, inclusive, src, dst);
     }
 
     pub fn prefix_sum_large(
         &self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         ty: &VarType,
         num: usize,
         inclusive: bool,
-        input: &Buffer,
-        output: &Buffer,
+        input: &Arc<Buffer>,
+        output: &Arc<Buffer>,
     ) {
         // let elem_size = std::mem::size_of::<u32>();
         let num = num;
@@ -85,80 +85,79 @@ impl VulkanDevice {
             }],
         });
 
-        let mut size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u32>(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
+        let mut size_buffer = Buffer::create(
+            &self,
+            BufferInfo {
+                size: std::mem::size_of::<u32>(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
 
         size_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
+        let size_buffer = Arc::new(size_buffer);
 
         // NOTE: don't need barrier here, as scratch buffer init is not depending on anything
 
-        let scratch_buffer = self.prefix_sum_scratch_buffer(cb, pool, scratch_items);
+        let scratch_buffer = self.prefix_sum_scratch_buffer(rgraph, scratch_items);
 
-        // Barrier
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            self.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
+        {
+            let output = output.clone();
+            let input = input.clone();
+            rgraph
+                .pass()
+                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .read(input.clone(), vk::AccessFlags::SHADER_READ)
+                .read(scratch_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .write(scratch_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
+                .write(output.clone(), vk::AccessFlags::SHADER_WRITE)
+                .record(move |device, cb, pool| {
+                    pipeline.submit(
+                        cb,
+                        pool,
+                        device,
+                        &[
+                            WriteSet {
+                                set: 0,
+                                binding: 0,
+                                buffers: &[BufferWriteInfo { buffer: &input }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 1,
+                                buffers: &[BufferWriteInfo { buffer: &output }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 2,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &size_buffer,
+                                }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 3,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &scratch_buffer,
+                                }],
+                            },
+                        ],
+                        (block_count as _, 1, 1),
+                    );
+                });
         }
-
-        pipeline.submit(
-            cb,
-            pool,
-            self,
-            &[
-                WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo { buffer: &input }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 1,
-                    buffers: &[BufferWriteInfo { buffer: &output }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 2,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &size_buffer,
-                    }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 3,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
-                    }],
-                },
-            ],
-            (block_count as _, 1, 1),
-        );
     }
 
     pub fn prefix_sum_scratch_buffer(
         &self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         scratch_items: usize,
-    ) -> Lease<Buffer> {
+    ) -> Arc<Buffer> {
         let LaunchConfig {
             block_size,
             grid_size,
@@ -185,50 +184,66 @@ impl VulkanDevice {
             }],
         });
 
-        let scratch_buffer = pool.lease_buffer(BufferInfo {
-            size: std::mem::size_of::<u64>() * scratch_items as usize,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        });
+        let scratch_buffer = Arc::new(Buffer::create(
+            self,
+            BufferInfo {
+                size: std::mem::size_of::<u64>() * scratch_items as usize,
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::GpuOnly,
+                ..Default::default()
+            },
+        ));
 
-        let mut size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u32>(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
+        let mut size_buffer = Buffer::create(
+            self,
+            BufferInfo {
+                size: std::mem::size_of::<u32>(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
 
         size_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[scratch_items as u32]));
+        let size_buffer = Arc::new(size_buffer);
 
-        prefix_sum_large_init.submit(
-            cb,
-            pool,
-            self,
-            &[
-                WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
-                    }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 1,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &size_buffer,
-                    }],
-                },
-            ],
-            (grid_size, 1, 1),
-        );
+        {
+            let scratch_buffer = scratch_buffer.clone();
+            rgraph
+                .pass()
+                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .write(scratch_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
+                .record(move |device, cb, pool| {
+                    prefix_sum_large_init.submit(
+                        cb,
+                        pool,
+                        device,
+                        &[
+                            WriteSet {
+                                set: 0,
+                                binding: 0,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &scratch_buffer,
+                                }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 1,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &size_buffer,
+                                }],
+                            },
+                        ],
+                        (grid_size, 1, 1),
+                    );
+                });
+        }
 
         scratch_buffer
     }

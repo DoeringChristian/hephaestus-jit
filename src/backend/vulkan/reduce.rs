@@ -1,5 +1,6 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use std::sync::Arc;
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -12,51 +13,61 @@ use crate::vartype::VarType;
 
 use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
+use super::vulkan_core::graph::RGraph;
 use super::VulkanDevice;
 
 impl VulkanDevice {
     pub fn reduce(
         &self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         op: ReduceOp,
         ty: &VarType,
         num: usize,
-        src: &Buffer,
-        dst: &Buffer,
+        src: &Arc<Buffer>,
+        dst: &Arc<Buffer>,
     ) {
         let ty_size = ty.size();
 
         let n_passes = (num - 1).ilog(32) + 1;
         let scratch_size = 32u32.pow(n_passes);
 
-        let mut in_buffer = pool.buffer(BufferInfo {
-            size: scratch_size as usize * ty_size,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        });
-        let mut out_buffer = pool.buffer(BufferInfo {
-            size: scratch_size as usize * ty_size,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        });
-        let mut size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u64>(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
+        let mut in_buffer = Arc::new(Buffer::create(
+            self,
+            BufferInfo {
+                size: scratch_size as usize * ty_size,
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::GpuOnly,
+                ..Default::default()
+            },
+        ));
+        let mut out_buffer = Arc::new(Buffer::create(
+            self,
+            BufferInfo {
+                size: scratch_size as usize * ty_size,
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::GpuOnly,
+                ..Default::default()
+            },
+        ));
+        let mut size_buffer = Buffer::create(
+            self,
+            BufferInfo {
+                size: std::mem::size_of::<u64>(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
         size_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[num as u64]));
+        let size_buffer = Arc::new(size_buffer);
 
         let reduction = match op {
             ReduceOp::Max => "max(a, b)",
@@ -185,33 +196,27 @@ impl VulkanDevice {
         });
         log::trace!("Created templated pipeline.");
 
-        unsafe {
-            self.cmd_copy_buffer(
-                cb,
-                src.vk(),
-                in_buffer.vk(),
-                &[vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: src.info().size as _,
-                }],
-            )
-        };
-
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            self.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
+        {
+            let src = src.clone();
+            let in_buffer = in_buffer.clone();
+            rgraph
+                .pass()
+                .read(src.clone(), vk::AccessFlags::TRANSFER_READ)
+                .write(in_buffer.clone(), vk::AccessFlags::TRANSFER_WRITE)
+                .record(move |device, cb, _| {
+                    unsafe {
+                        device.cmd_copy_buffer(
+                            cb,
+                            src.vk(),
+                            in_buffer.vk(),
+                            &[vk::BufferCopy {
+                                src_offset: 0,
+                                dst_offset: 0,
+                                size: src.info().size as _,
+                            }],
+                        )
+                    };
+                });
         }
 
         log::trace!("Reducing {num} elements with {reduction}");
@@ -219,64 +224,72 @@ impl VulkanDevice {
         log::trace!("Scratch Buffer size: {scratch_size}");
         for i in (0..n_passes).rev() {
             log::trace!("Launching shader");
-            pipeline.submit(
-                cb,
-                pool,
-                &self,
-                &[
-                    WriteSet {
-                        set: 0,
-                        binding: 0,
-                        buffers: &[BufferWriteInfo { buffer: &in_buffer }],
-                    },
-                    WriteSet {
-                        set: 0,
-                        binding: 1,
-                        buffers: &[BufferWriteInfo {
-                            buffer: &out_buffer,
-                        }],
-                    },
-                    WriteSet {
-                        set: 0,
-                        binding: 2,
-                        buffers: &[BufferWriteInfo {
-                            buffer: &size_buffer,
-                        }],
-                    },
-                ],
-                (32u32.pow(i), 1, 1),
-            );
-
-            let memory_barriers = [vk::MemoryBarrier::builder()
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                .build()];
-            unsafe {
-                self.cmd_pipeline_barrier(
-                    cb,
-                    vk::PipelineStageFlags::ALL_COMMANDS,
-                    vk::PipelineStageFlags::ALL_COMMANDS,
-                    vk::DependencyFlags::empty(),
-                    &memory_barriers,
-                    &[],
-                    &[],
-                );
+            {
+                let in_buffer = in_buffer.clone();
+                let out_buffer = out_buffer.clone();
+                let size_buffer = size_buffer.clone();
+                let pipeline = pipeline.clone();
+                rgraph
+                    .pass()
+                    .read(in_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                    .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                    .write(out_buffer.clone(), vk::AccessFlags::TRANSFER_WRITE)
+                    .record(move |device, cb, pool| {
+                        pipeline.submit(
+                            cb,
+                            pool,
+                            device,
+                            &[
+                                WriteSet {
+                                    set: 0,
+                                    binding: 0,
+                                    buffers: &[BufferWriteInfo { buffer: &in_buffer }],
+                                },
+                                WriteSet {
+                                    set: 0,
+                                    binding: 1,
+                                    buffers: &[BufferWriteInfo {
+                                        buffer: &out_buffer,
+                                    }],
+                                },
+                                WriteSet {
+                                    set: 0,
+                                    binding: 2,
+                                    buffers: &[BufferWriteInfo {
+                                        buffer: &size_buffer,
+                                    }],
+                                },
+                            ],
+                            (32u32.pow(i), 1, 1),
+                        );
+                    });
             }
+
             // Swap In/Out buffers
             std::mem::swap(&mut in_buffer, &mut out_buffer);
         }
 
-        unsafe {
-            self.cmd_copy_buffer(
-                cb,
-                in_buffer.vk(),
-                dst.vk(),
-                &[vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: ty_size as _,
-                }],
-            )
-        };
+        {
+            let in_buffer = in_buffer.clone();
+            let dst = dst.clone();
+            rgraph
+                .pass()
+                .read(in_buffer.clone(), vk::AccessFlags::TRANSFER_READ)
+                .write(dst.clone(), vk::AccessFlags::TRANSFER_WRITE)
+                .record(move |device, cb, _| {
+                    unsafe {
+                        device.cmd_copy_buffer(
+                            cb,
+                            in_buffer.vk(),
+                            dst.vk(),
+                            &[vk::BufferCopy {
+                                src_offset: 0,
+                                dst_offset: 0,
+                                size: ty_size as _,
+                            }],
+                        )
+                    };
+                });
+        }
     }
 }

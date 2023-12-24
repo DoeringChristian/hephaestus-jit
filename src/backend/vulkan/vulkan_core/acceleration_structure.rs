@@ -213,7 +213,7 @@ impl AccelerationStructure {
             info,
         }
     }
-    pub fn build(self: &Arc<Self>, graph: &mut RGraph, info: &AccelerationStructureInfo) {
+    pub fn build(self: &Arc<Self>, rgraph: &mut RGraph, info: &AccelerationStructureInfo) {
         log::trace!("Building AccelerationStructure with {info:#?}");
         // TODO: pool
         let scratch_buffer = Arc::new(Buffer::create(
@@ -250,20 +250,10 @@ impl AccelerationStructure {
             })
             .unzip();
 
-        let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
-            .ty(self.info.ty)
-            .flags(self.info.flags)
-            .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
-            .dst_acceleration_structure(self.accel)
-            .geometries(&geometries)
-            .scratch_data(vk::DeviceOrHostAddressKHR {
-                device_address: scratch_buffer_address,
-            })
-            .build();
+        // log::trace!("Using geometry info {geometry_info:#?}");
 
-        log::trace!("Using geometry info {geometry_info:#?}");
-
-        graph
+        let s = self.clone();
+        rgraph
             .pass()
             .read(
                 scratch_buffer.clone(),
@@ -277,7 +267,23 @@ impl AccelerationStructure {
                 self.clone(),
                 vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR,
             )
-            .record(move |device, cb| unsafe {
+            .record(move |device, cb, _| unsafe {
+                let geometries = geometries;
+                let build_ranges = build_ranges;
+
+                // We need to construct geometry_info here, because vulkan uses pointers
+                let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
+                    .ty(s.info.ty)
+                    .flags(s.info.flags)
+                    .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
+                    .dst_acceleration_structure(s.accel)
+                    .geometries(&geometries)
+                    .scratch_data(vk::DeviceOrHostAddressKHR {
+                        device_address: scratch_buffer_address,
+                    })
+                    .build();
+                dbg!(&geometry_info);
+
                 device
                     .acceleration_structure_ext
                     .as_ref()

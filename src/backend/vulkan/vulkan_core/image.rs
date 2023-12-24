@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
+use std::sync::Arc;
 
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
@@ -7,6 +8,7 @@ pub use gpu_allocator::MemoryLocation;
 
 use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
+use super::graph::{Access, RGraph};
 
 pub struct Image {
     allocation: Option<Allocation>,
@@ -81,31 +83,7 @@ impl Image {
             info,
         }
     }
-    pub fn copy_from_buffer(&self, cb: vk::CommandBuffer, src: &Buffer) {
-        let image_memory_barrier = vk::ImageMemoryBarrier {
-            dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            image: self.image,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        unsafe {
-            self.device.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[image_memory_barrier],
-            );
-        };
-
+    pub fn copy_from_buffer(self: &Arc<Self>, rgraph: &mut RGraph, src: &Arc<Buffer>) {
         let region = vk::BufferImageCopy::builder()
             .image_subresource(
                 vk::ImageSubresourceLayers::builder()
@@ -116,40 +94,31 @@ impl Image {
             .image_extent(self.info().extent)
             .build();
 
-        unsafe {
-            self.device.cmd_copy_buffer_to_image(
-                cb,
-                src.vk(),
-                self.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[region],
-            );
-        }
+        let s = self.clone();
 
-        let texture_barrier_end = vk::ImageMemoryBarrier {
-            src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-            dst_access_mask: vk::AccessFlags::SHADER_READ,
-            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            image: self.image,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        unsafe {
-            self.device.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[texture_barrier_end],
-            );
+        {
+            let s = self.clone();
+            let src = src.clone();
+            rgraph
+                .pass()
+                .read(src.clone(), vk::AccessFlags::TRANSFER_READ)
+                .write(
+                    s.clone(),
+                    Access {
+                        flags: vk::AccessFlags::TRANSFER_WRITE,
+                        layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        ..Default::default()
+                    },
+                )
+                .record(move |device, cb, _| unsafe {
+                    device.cmd_copy_buffer_to_image(
+                        cb,
+                        src.vk(),
+                        s.image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        &[region],
+                    );
+                });
         }
     }
     pub fn default_sampler(&self) -> vk::Sampler {

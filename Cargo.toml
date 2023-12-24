@@ -23,7 +23,8 @@ bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "derive"] }
 ash = { version = "0.37.3+1.3.251", features = ["linked", "debug"] }
 vk-sync = { version = "0.4.0", package = "vk-sync-fork" }
 gpu-allocator = "0.22"
-rspirv = { git = "https://github.com/gfx-rs/rspirv.git", version = "0.11" }
+# rspirv = { git = "https://github.com/gfx-rs/rspirv.git", version = "0.11" }
+rspirv = "0.12"
 inline-spirv = "0.1.6"
 slotmap = "1.0.6"
 itertools = "0.11.0"
@@ -39,6 +40,10 @@ lazy_static = "1.4.0"
 half = "2.3.1"
 once_cell = "1.19.0"
 indexmap = "2.1.0"
+
+winit = "0.27.1"
+raw-window-handle = "0.5"
+ash-window = "0.12.0"
 
 [dev-dependecies]
 rusty-hook = "^0.11.2"

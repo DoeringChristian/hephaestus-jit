@@ -1,5 +1,6 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use std::sync::Arc;
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -10,17 +11,17 @@ use crate::backend::vulkan::vulkan_core::buffer::BufferInfo;
 
 use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
+use super::vulkan_core::graph::RGraph;
 use super::VulkanDevice;
 
 impl VulkanDevice {
     pub fn compress_small(
         &self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         num: u32,
-        out_count: &Buffer,
-        src: &Buffer,
-        dst: &Buffer,
+        out_count: &Arc<Buffer>,
+        src: &Arc<Buffer>,
+        dst: &Arc<Buffer>,
     ) {
         const ITEMS_PER_THREAD: u32 = 4;
         let thread_count = round_pow2((num + ITEMS_PER_THREAD - 1) / ITEMS_PER_THREAD);
@@ -34,17 +35,21 @@ impl VulkanDevice {
 
         // TODO: in the end we might get the size buffer as an argument when suporting dynamic
         // indices
-        let mut size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u32>(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
+        let mut size_buffer = Buffer::create(
+            self,
+            BufferInfo {
+                size: std::mem::size_of::<u32>(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
         size_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
+        let size_buffer = Arc::new(size_buffer);
 
         let pipeline = self.get_pipeline(&PipelineDesc {
             code: &shader,
@@ -70,62 +75,59 @@ impl VulkanDevice {
             }],
         });
 
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            self.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
-        }
         log::trace!("Counting {num} elements with count_small");
-
-        pipeline.submit(
-            cb,
-            pool,
-            self,
-            &[
-                WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo { buffer: src }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 1,
-                    buffers: &[BufferWriteInfo { buffer: dst }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 2,
-                    buffers: &[BufferWriteInfo { buffer: out_count }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 3,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &size_buffer,
-                    }],
-                },
-            ],
-            (1, 1, 1),
-        );
+        {
+            let src = src.clone();
+            let size_buffer = size_buffer.clone();
+            let dst = dst.clone();
+            let out_count = out_count.clone();
+            rgraph
+                .pass()
+                .read(src.clone(), vk::AccessFlags::SHADER_READ)
+                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .write(dst.clone(), vk::AccessFlags::SHADER_WRITE)
+                .write(out_count.clone(), vk::AccessFlags::SHADER_READ)
+                .record(move |device, cb, pool| {
+                    pipeline.submit(
+                        cb,
+                        pool,
+                        device,
+                        &[
+                            WriteSet {
+                                set: 0,
+                                binding: 0,
+                                buffers: &[BufferWriteInfo { buffer: &src }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 1,
+                                buffers: &[BufferWriteInfo { buffer: &dst }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 2,
+                                buffers: &[BufferWriteInfo { buffer: &out_count }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 3,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &size_buffer,
+                                }],
+                            },
+                        ],
+                        (1, 1, 1),
+                    );
+                });
+        }
     }
     pub fn compress_large(
         &self,
-        cb: vk::CommandBuffer,
-        pool: &mut Pool,
+        rgraph: &mut RGraph,
         num: usize,
-        out_count: &Buffer,
-        src: &Buffer,
-        dst: &Buffer,
+        out_count: &Arc<Buffer>,
+        src: &Arc<Buffer>,
+        dst: &Arc<Buffer>,
     ) {
         let items_per_thread = 16;
         let block_size = 128;
@@ -161,74 +163,78 @@ impl VulkanDevice {
             }],
         });
 
-        let mut size_buffer = pool.buffer(BufferInfo {
-            size: std::mem::size_of::<u32>(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        });
+        let mut size_buffer = Buffer::create(
+            self,
+            BufferInfo {
+                size: std::mem::size_of::<u32>(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
 
         size_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
+        let size_buffer = Arc::new(size_buffer);
 
-        let scratch_buffer = self.prefix_sum_scratch_buffer(cb, pool, scratch_items as _);
+        let scratch_buffer = self.prefix_sum_scratch_buffer(rgraph, scratch_items as _);
 
-        // Barrier
-        let memory_barriers = [vk::MemoryBarrier::builder()
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .build()];
-        unsafe {
-            self.cmd_pipeline_barrier(
-                cb,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::PipelineStageFlags::ALL_COMMANDS,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &[],
-                &[],
-            );
+        {
+            let size_buffer = size_buffer.clone();
+            let src = src.clone();
+            let scratch_buffer = scratch_buffer.clone();
+            let dst = dst.clone();
+            let out_count = out_count.clone();
+            rgraph
+                .pass()
+                .read(size_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .read(src.clone(), vk::AccessFlags::SHADER_READ)
+                .read(scratch_buffer.clone(), vk::AccessFlags::SHADER_READ)
+                .write(out_count.clone(), vk::AccessFlags::SHADER_WRITE)
+                .write(scratch_buffer.clone(), vk::AccessFlags::SHADER_WRITE)
+                .write(dst.clone(), vk::AccessFlags::SHADER_WRITE)
+                .record(move |device, cb, pool| {
+                    compress_large.submit(
+                        cb,
+                        pool,
+                        device,
+                        &[
+                            WriteSet {
+                                set: 0,
+                                binding: 0,
+                                buffers: &[BufferWriteInfo { buffer: &src }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 1,
+                                buffers: &[BufferWriteInfo { buffer: &dst }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 2,
+                                buffers: &[BufferWriteInfo { buffer: &out_count }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 3,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &size_buffer,
+                                }],
+                            },
+                            WriteSet {
+                                set: 0,
+                                binding: 4,
+                                buffers: &[BufferWriteInfo {
+                                    buffer: &scratch_buffer,
+                                }],
+                            },
+                        ],
+                        (block_count as _, 1, 1),
+                    );
+                });
         }
-
-        compress_large.submit(
-            cb,
-            pool,
-            self,
-            &[
-                WriteSet {
-                    set: 0,
-                    binding: 0,
-                    buffers: &[BufferWriteInfo { buffer: &src }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 1,
-                    buffers: &[BufferWriteInfo { buffer: &dst }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 2,
-                    buffers: &[BufferWriteInfo { buffer: &out_count }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 3,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &size_buffer,
-                    }],
-                },
-                WriteSet {
-                    set: 0,
-                    binding: 4,
-                    buffers: &[BufferWriteInfo {
-                        buffer: &scratch_buffer,
-                    }],
-                },
-            ],
-            (block_count as _, 1, 1),
-        );
     }
 }
