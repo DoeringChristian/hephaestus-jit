@@ -10,8 +10,42 @@ use std::sync::Arc;
 use vk_sync::{cmd::pipeline_barrier, BufferBarrier, GlobalBarrier, ImageBarrier};
 use vk_sync::{AccessType, ImageLayout};
 
-pub trait Resource: Debug {
+pub trait ResourceTrait: Debug {
     fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType);
+}
+
+#[derive(Debug)]
+pub enum Resource {
+    Buffer(Arc<Buffer>),
+    Image(Arc<Image>),
+    AccelerationStructure(Arc<AccelerationStructure>),
+}
+impl Resource {
+    pub fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
+        match self {
+            Resource::Buffer(buffer) => buffer.transition(cb, prev, next),
+            Resource::Image(image) => image.transition(cb, prev, next),
+            Resource::AccelerationStructure(acceleration_structure) => {
+                acceleration_structure.transition(cb, prev, next)
+            }
+        }
+    }
+}
+
+impl From<Arc<Buffer>> for Resource {
+    fn from(value: Arc<Buffer>) -> Self {
+        Resource::Buffer(value)
+    }
+}
+impl From<Arc<Image>> for Resource {
+    fn from(value: Arc<Image>) -> Self {
+        Resource::Image(value)
+    }
+}
+impl From<Arc<AccelerationStructure>> for Resource {
+    fn from(value: Arc<AccelerationStructure>) -> Self {
+        Resource::AccelerationStructure(value)
+    }
 }
 
 #[derive(Default, Debug)]
@@ -26,17 +60,18 @@ pub struct RGraph {
     passes: Vec<Pass>,
     // We deduplicate resources by the pointers to their Arcs
     // Could also do enum instead of dyn, allowing for Rcs as well
-    resources: IndexMap<usize, Arc<dyn Resource>>,
+    // resources: IndexMap<usize, Arc<dyn Resource>>,
+    resources: IndexMap<usize, Resource>,
 }
 impl RGraph {
-    pub fn resource<R: Resource + 'static>(&mut self, resource: &Arc<R>) -> ResourceId {
+    pub fn resource<R>(&mut self, resource: &Arc<R>) -> ResourceId
+    where
+        Arc<R>: Into<Resource>,
+    {
         let key = Arc::as_ptr(&resource) as *const () as usize;
         let entry = self.resources.entry(key);
         let id = ResourceId(entry.index());
-        entry.or_insert_with(|| {
-            let resource: Arc<dyn Resource> = resource.clone();
-            resource
-        });
+        entry.or_insert_with(|| resource.clone().into());
         id
     }
 }
@@ -46,33 +81,8 @@ pub struct ResourceId(usize);
 #[derive(Debug, Clone, Copy)]
 pub struct PassId(usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Access {
-    pub flags: vk::AccessFlags,
-    pub layout: vk::ImageLayout,
-    pub stage: vk::PipelineStageFlags,
-}
-impl Default for Access {
-    fn default() -> Self {
-        Self {
-            flags: vk::AccessFlags::NONE,
-            layout: vk::ImageLayout::default(),
-            stage: vk::PipelineStageFlags::ALL_COMMANDS,
-        }
-    }
-}
-
-impl From<vk::AccessFlags> for Access {
-    fn from(value: vk::AccessFlags) -> Self {
-        Access {
-            flags: value,
-            ..Default::default()
-        }
-    }
-}
-
 ///
-/// Represents a Pass
+/// Represents a recorded Pass
 ///
 pub struct Pass {
     read: Vec<(ResourceId, AccessType)>,
@@ -88,12 +98,11 @@ impl Debug for Pass {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct PassApi<'a> {
-    pub cb: &'a vk::CommandBuffer,
-    pub device: &'a Device,
-}
-
+/// Builder, used to construct a pass.
+///
+/// * `graph`: The graph on which the pass is constructed
+/// * `read`: Read accesses
+/// * `write`: Write accesses
 pub struct PassBuilder<'a> {
     graph: &'a mut RGraph,
     read: Vec<(ResourceId, AccessType)>,
@@ -101,7 +110,7 @@ pub struct PassBuilder<'a> {
 }
 
 // Impl resource for all 3 resource types
-impl Resource for Buffer {
+impl ResourceTrait for Buffer {
     fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
         pipeline_barrier(
             self.device(),
@@ -120,7 +129,7 @@ impl Resource for Buffer {
         );
     }
 }
-impl Resource for Image {
+impl ResourceTrait for Image {
     fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
         pipeline_barrier(
             self.device(),
@@ -146,7 +155,7 @@ impl Resource for Image {
         )
     }
 }
-impl Resource for AccelerationStructure {
+impl ResourceTrait for AccelerationStructure {
     fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
         pipeline_barrier(
             self.device(),
@@ -161,20 +170,26 @@ impl Resource for AccelerationStructure {
     }
 }
 
-impl From<Buffer> for Arc<dyn Resource> {
+impl From<Buffer> for Arc<dyn ResourceTrait> {
     fn from(value: Buffer) -> Self {
         Arc::new(value)
     }
 }
 
 impl<'a> PassBuilder<'a> {
-    pub fn read<R: Resource + 'static>(mut self, resource: &Arc<R>, access: AccessType) -> Self {
+    pub fn read<R>(mut self, resource: &Arc<R>, access: AccessType) -> Self
+    where
+        Arc<R>: Into<Resource>,
+    {
         let id = self.graph.resource(resource);
         let access = access.into();
         self.read.push((id, access));
         self
     }
-    pub fn write<R: Resource + 'static>(mut self, resource: &Arc<R>, access: AccessType) -> Self {
+    pub fn write<R>(mut self, resource: &Arc<R>, access: AccessType) -> Self
+    where
+        Arc<R>: Into<Resource>,
+    {
         let id = self.graph.resource(resource);
         let access = access.into();
         self.write.push((id, access));

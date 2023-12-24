@@ -10,7 +10,7 @@ use vk_sync::AccessType;
 
 use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
-use super::graph::{Access, RGraph};
+use super::graph::RGraph;
 
 pub struct Image {
     allocation: Option<Allocation>,

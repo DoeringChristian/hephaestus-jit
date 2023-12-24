@@ -130,6 +130,13 @@ impl AccelerationStructureGeometryData {
 }
 
 #[derive(Debug)]
+/// General AccelerationStructure Abstraction over vk::AccelerationstructureKHR
+///
+/// * `buffer`: Buffer storing the actual data of the AccelerationStructure
+/// * `accel`: Vulkan AccelerationStructure
+/// * `device`: Device
+/// * `sizes`: Various sizes for scratch buffer etc
+/// * `info`: The info struct with which the AccelerationStructure was created
 pub struct AccelerationStructure {
     pub(crate) buffer: Buffer, // Buffer to store AccelerationStructure
     pub accel: vk::AccelerationStructureKHR,

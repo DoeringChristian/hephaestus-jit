@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::backend;
 use crate::backend::vulkan::pool::Pool;
-use crate::backend::vulkan::vulkan_core::graph::{Access, RGraph};
+use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
