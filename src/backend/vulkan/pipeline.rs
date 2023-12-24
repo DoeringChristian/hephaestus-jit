@@ -7,10 +7,10 @@ use crate::backend::vulkan::codegen;
 use crate::ir::IR;
 
 use super::accel::Accel;
-use super::image::Image;
 use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::device::Device;
+use super::vulkan_core::image::Image;
 use ash::vk;
 
 #[derive(Debug)]

@@ -5,7 +5,7 @@ mod codegen;
 mod compress;
 // mod device;
 mod glslext;
-mod image;
+// mod image;
 // mod physical_device;
 mod pipeline;
 mod pool;
@@ -30,9 +30,9 @@ use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
 use ash::vk;
 use gpu_allocator::MemoryLocation;
-use image::{Image, ImageInfo};
 use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
+use vulkan_core::image::{Image, ImageInfo};
 
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
@@ -313,7 +313,7 @@ impl backend::BackendDevice for VulkanDevice {
 
         let image = Image::create(
             self,
-            &ImageInfo {
+            ImageInfo {
                 ty,
                 format,
                 extent: vk::Extent3D {
