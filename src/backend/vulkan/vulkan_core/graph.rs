@@ -13,6 +13,13 @@ pub trait Resource: Debug {
 }
 
 #[derive(Default, Debug)]
+/// The most simpel Render Graph implementation I could come up with.
+/// It is not efficient (it heavily relies on Rust's smart pointers)
+///
+/// * `passes`: A number of passes, that can be recorded into a command buffer
+/// * `resources`: A hashmap mapping from the pointer addresses of resources to their owned types
+/// usize -> (Arc<dyn Resouce>)
+/// This let's us deduplicate resources (a better mechanism wouls be use indices)
 pub struct RGraph {
     passes: Vec<Pass>,
     // We deduplicate resources by the pointers to their Arcs
