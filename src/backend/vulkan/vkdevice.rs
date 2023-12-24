@@ -6,17 +6,17 @@ use text_placeholder::Template;
 use super::pool::Pool;
 use super::shader_cache::ShaderKind;
 
-use crate::backend::vulkan::buffer::{BufferInfo, MemoryLocation};
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
 };
+use crate::backend::vulkan::vulkan_core::buffer::{BufferInfo, MemoryLocation};
 use crate::backend::{self, AccelDesc};
 use crate::graph::{Pass, PassOp};
 use crate::op::{DeviceOp, ReduceOp};
 use crate::vartype::VarType;
 
 use super::accel::Accel;
-use super::buffer::Buffer;
+use super::vulkan_core::buffer::Buffer;
 use super::{accel, VulkanDevice};
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {

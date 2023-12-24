@@ -1,6 +1,6 @@
 mod accel;
 mod acceleration_structure;
-mod buffer;
+// mod buffer;
 mod codegen;
 mod compress;
 // mod device;
@@ -29,9 +29,9 @@ use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
 use ash::vk;
-use buffer::{Buffer, BufferInfo};
 use gpu_allocator::MemoryLocation;
 use image::{Image, ImageInfo};
+use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
 
 use self::pipeline::PipelineDesc;

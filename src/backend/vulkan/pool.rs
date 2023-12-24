@@ -5,9 +5,9 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::rc::Rc;
 
-use super::buffer;
-use super::buffer::Buffer;
-use super::buffer::BufferInfo;
+use super::vulkan_core::buffer;
+use super::vulkan_core::buffer::Buffer;
+use super::vulkan_core::buffer::BufferInfo;
 use super::Device;
 use super::VulkanDevice;
 use ash::vk;

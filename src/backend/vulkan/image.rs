@@ -5,7 +5,7 @@ use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
-use super::buffer::{Buffer, BufferInfo};
+use super::vulkan_core::buffer::{Buffer, BufferInfo};
 use super::vulkan_core::device::Device;
 use super::VulkanDevice;
 

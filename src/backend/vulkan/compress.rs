@@ -1,15 +1,15 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 
-use crate::backend::vulkan::buffer::BufferInfo;
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
 };
 use crate::backend::vulkan::shader_cache::ShaderKind;
 use crate::backend::vulkan::vkdevice::round_pow2;
+use crate::backend::vulkan::vulkan_core::buffer::BufferInfo;
 
-use super::buffer::Buffer;
 use super::pool::Pool;
+use super::vulkan_core::buffer::Buffer;
 use super::VulkanDevice;
 
 impl VulkanDevice {

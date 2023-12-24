@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
-use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::pool::Pool;
+use super::vulkan_core::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::vulkan_core::device::Device;
 use crate::backend::{AccelDesc, GeometryDesc};
 use ash::vk;
