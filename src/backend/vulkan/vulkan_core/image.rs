@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
+use vk_sync::AccessType;
 
 use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
@@ -104,15 +105,8 @@ impl Image {
             let src = src.clone();
             rgraph
                 .pass()
-                .read(&src, vk::AccessFlags::TRANSFER_READ)
-                .write(
-                    &s,
-                    Access {
-                        flags: vk::AccessFlags::TRANSFER_WRITE,
-                        layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        ..Default::default()
-                    },
-                )
+                .read(&src, AccessType::TransferRead)
+                .write(&s, AccessType::TransferWrite)
                 .record(move |device, cb, _| unsafe {
                     device.cmd_copy_buffer_to_image(
                         cb,

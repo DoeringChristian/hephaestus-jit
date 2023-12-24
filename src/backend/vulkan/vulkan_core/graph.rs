@@ -7,9 +7,11 @@ use super::device::Device;
 use super::image::Image;
 use std::fmt::Debug;
 use std::sync::Arc;
+use vk_sync::{cmd::pipeline_barrier, BufferBarrier, GlobalBarrier, ImageBarrier};
+use vk_sync::{AccessType, ImageLayout};
 
 pub trait Resource: Debug {
-    fn transition(&self, cb: vk::CommandBuffer, old: Access, new: Access);
+    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType);
 }
 
 #[derive(Default, Debug)]
@@ -27,12 +29,6 @@ pub struct RGraph {
     resources: IndexMap<usize, Arc<dyn Resource>>,
 }
 impl RGraph {
-    // pub fn new() -> Self {
-    //     Self {
-    //         passes: vec![],
-    //         resources: Default::default(),
-    //     }
-    // }
     pub fn resource<R: Resource + 'static>(&mut self, resource: &Arc<R>) -> ResourceId {
         let key = Arc::as_ptr(&resource) as *const () as usize;
         let entry = self.resources.entry(key);
@@ -79,8 +75,8 @@ impl From<vk::AccessFlags> for Access {
 /// Represents a Pass
 ///
 pub struct Pass {
-    read: Vec<(ResourceId, Access)>,
-    write: Vec<(ResourceId, Access)>,
+    read: Vec<(ResourceId, AccessType)>,
+    write: Vec<(ResourceId, AccessType)>,
     render_fn: Option<Box<dyn FnOnce(&Device, vk::CommandBuffer, &mut RGraphPool)>>,
 }
 impl Debug for Pass {
@@ -100,83 +96,68 @@ pub struct PassApi<'a> {
 
 pub struct PassBuilder<'a> {
     graph: &'a mut RGraph,
-    read: Vec<(ResourceId, Access)>,
-    write: Vec<(ResourceId, Access)>,
+    read: Vec<(ResourceId, AccessType)>,
+    write: Vec<(ResourceId, AccessType)>,
 }
 
 // Impl resource for all 3 resource types
 impl Resource for Buffer {
-    fn transition(&self, cb: vk::CommandBuffer, old: Access, new: Access) {
-        let buffer_memory_barriers = &[vk::BufferMemoryBarrier {
-            src_access_mask: old.flags,
-            dst_access_mask: new.flags,
-            buffer: self.vk(),
-            offset: 0,
-            size: self.size() as _,
-            ..Default::default()
-        }];
-
-        unsafe {
-            self.device().cmd_pipeline_barrier(
-                cb,
-                old.stage,
-                new.stage,
-                vk::DependencyFlags::empty(),
-                &[],
-                buffer_memory_barriers,
-                &[],
-            );
-        }
+    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
+        pipeline_barrier(
+            self.device(),
+            cb,
+            None,
+            &[BufferBarrier {
+                previous_accesses: &[prev],
+                next_accesses: &[next],
+                src_queue_family_index: 0,
+                dst_queue_family_index: 0,
+                buffer: self.vk(),
+                offset: 0,
+                size: self.size(),
+            }],
+            &[],
+        );
     }
 }
 impl Resource for Image {
-    fn transition(&self, cb: vk::CommandBuffer, old: Access, new: Access) {
-        let image_memory_barriers = &[vk::ImageMemoryBarrier {
-            src_access_mask: old.flags,
-            dst_access_mask: new.flags,
-            old_layout: old.layout,
-            new_layout: new.layout,
-            image: self.vk(),
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                level_count: 1,
-                layer_count: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        }];
-
-        unsafe {
-            self.device().cmd_pipeline_barrier(
-                cb,
-                old.stage,
-                new.stage,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                image_memory_barriers,
-            );
-        }
+    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
+        pipeline_barrier(
+            self.device(),
+            cb,
+            None,
+            &[],
+            &[ImageBarrier {
+                previous_accesses: &[prev],
+                next_accesses: &[next],
+                previous_layout: ImageLayout::Optimal,
+                next_layout: ImageLayout::Optimal,
+                discard_contents: prev == AccessType::Nothing,
+                src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                image: self.vk(),
+                range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                },
+            }],
+        )
     }
 }
 impl Resource for AccelerationStructure {
-    fn transition(&self, cb: vk::CommandBuffer, old: Access, new: Access) {
-        let memory_barriers = &[vk::MemoryBarrier {
-            src_access_mask: old.flags,
-            dst_access_mask: new.flags,
-            ..Default::default()
-        }];
-        unsafe {
-            self.device().cmd_pipeline_barrier(
-                cb,
-                old.stage,
-                new.stage,
-                vk::DependencyFlags::empty(),
-                memory_barriers,
-                &[],
-                &[],
-            );
-        }
+    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
+        pipeline_barrier(
+            self.device(),
+            cb,
+            Some(GlobalBarrier {
+                previous_accesses: &[prev],
+                next_accesses: &[next],
+            }),
+            &[],
+            &[],
+        )
     }
 }
 
@@ -187,21 +168,13 @@ impl From<Buffer> for Arc<dyn Resource> {
 }
 
 impl<'a> PassBuilder<'a> {
-    pub fn read<R: Resource + 'static>(
-        mut self,
-        resource: &Arc<R>,
-        access: impl Into<Access>,
-    ) -> Self {
+    pub fn read<R: Resource + 'static>(mut self, resource: &Arc<R>, access: AccessType) -> Self {
         let id = self.graph.resource(resource);
         let access = access.into();
         self.read.push((id, access));
         self
     }
-    pub fn write<R: Resource + 'static>(
-        mut self,
-        resource: &Arc<R>,
-        access: impl Into<Access>,
-    ) -> Self {
+    pub fn write<R: Resource + 'static>(mut self, resource: &Arc<R>, access: AccessType) -> Self {
         let id = self.graph.resource(resource);
         let access = access.into();
         self.write.push((id, access));
@@ -299,7 +272,7 @@ impl RGraph {
         let mut resource_accesses = self
             .resources
             .iter()
-            .map(|_| Access::default())
+            .map(|_| AccessType::Nothing)
             .collect::<Vec<_>>();
 
         let resources = self
@@ -314,6 +287,7 @@ impl RGraph {
             for pass in self.passes {
                 // Transition resources
                 log::trace!("Recording {pass:?} to command buffer");
+
                 for (id, access) in pass.read.iter().chain(pass.write.iter()) {
                     let prev = resource_accesses[id.0];
                     if prev != *access {

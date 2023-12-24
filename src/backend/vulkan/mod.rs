@@ -27,6 +27,7 @@ use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use vk_sync::AccessType;
 use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
@@ -205,23 +206,19 @@ impl backend::BackendDevice for VulkanDevice {
 
                     let mut rpass = rgraph.pass();
                     for buffer in &buffers {
-                        rpass = rpass.read(&buffer, vk::AccessFlags::SHADER_READ);
-                        rpass = rpass.write(&buffer, vk::AccessFlags::SHADER_WRITE);
+                        rpass = rpass.read(&buffer, AccessType::ComputeShaderReadOther);
+                        rpass = rpass.write(&buffer, AccessType::ComputeShaderWrite);
                     }
                     for image in &images {
                         rpass = rpass.read(
                             &image,
-                            Access {
-                                flags: vk::AccessFlags::SHADER_WRITE,
-                                layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                                ..Default::default()
-                            },
+                            AccessType::ComputeShaderReadSampledImageOrUniformTexelBuffer,
                         );
                     }
                     for accel in &accels {
-                        rpass = rpass.read(&accel.tlas, vk::AccessFlags::SHADER_READ);
+                        rpass = rpass.read(&accel.tlas, AccessType::ComputeShaderReadOther);
                         for blas in accel.blases.iter() {
-                            rpass = rpass.read(&blas, vk::AccessFlags::SHADER_READ);
+                            rpass = rpass.read(&blas, AccessType::ComputeShaderReadOther);
                         }
                     }
 

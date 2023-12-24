@@ -4,6 +4,7 @@ use super::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::device::Device;
 use super::graph::RGraph;
 use ash::vk;
+use vk_sync::AccessType;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum DeviceOrHostAddress {
@@ -255,15 +256,9 @@ impl AccelerationStructure {
         let s = self.clone();
         rgraph
             .pass()
-            .read(
-                &scratch_buffer,
-                vk::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR,
-            )
-            .write(
-                &scratch_buffer,
-                vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR,
-            )
-            .write(self, vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
+            .read(&scratch_buffer, AccessType::AccelerationStructureBuildRead)
+            .write(&scratch_buffer, AccessType::AccelerationStructureBuildWrite)
+            .write(self, AccessType::AccelerationStructureBuildWrite)
             .record(move |device, cb, _| unsafe {
                 let geometries = geometries;
                 let build_ranges = build_ranges;

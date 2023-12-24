@@ -1,6 +1,7 @@
 use ash::vk;
 use std::sync::Arc;
 use std::sync::Mutex;
+use vk_sync::AccessType;
 
 use super::pool::Pool;
 use super::vulkan_core::buffer::{Buffer, BufferInfo, MemoryLocation};
@@ -85,6 +86,7 @@ impl Accel {
             BufferInfo {
                 size: info.instances * std::mem::size_of::<vk::AccelerationStructureInstanceKHR>(),
                 usage: vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR
+                    | vk::BufferUsageFlags::STORAGE_BUFFER
                     | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                 memory_location: MemoryLocation::GpuOnly,
                 ..Default::default()
@@ -196,9 +198,9 @@ impl Accel {
             let instance_buffer = self.instance_buffer.clone();
             rgraph
                 .pass()
-                .read(&references_buffer, vk::AccessFlags::SHADER_READ)
-                .read(&desc_instance_buffer, vk::AccessFlags::SHADER_READ)
-                .write(&instance_buffer, vk::AccessFlags::SHADER_WRITE)
+                .read(&references_buffer, AccessType::ComputeShaderReadOther)
+                .read(&desc_instance_buffer, AccessType::ComputeShaderReadOther)
+                .write(&instance_buffer, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, pool| {
                     copy2instances.submit(
                         cb,

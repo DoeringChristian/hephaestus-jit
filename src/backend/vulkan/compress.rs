@@ -1,6 +1,7 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use std::sync::Arc;
+use vk_sync::AccessType;
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -83,10 +84,10 @@ impl VulkanDevice {
             let out_count = out_count.clone();
             rgraph
                 .pass()
-                .read(&src, vk::AccessFlags::SHADER_READ)
-                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
-                .write(&dst, vk::AccessFlags::SHADER_WRITE)
-                .write(&out_count, vk::AccessFlags::SHADER_READ)
+                .read(&src, AccessType::ComputeShaderReadOther)
+                .read(&size_buffer, AccessType::ComputeShaderReadOther)
+                .write(&dst, AccessType::ComputeShaderWrite)
+                .write(&out_count, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, pool| {
                     pipeline.submit(
                         cb,
@@ -190,12 +191,12 @@ impl VulkanDevice {
             let out_count = out_count.clone();
             rgraph
                 .pass()
-                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
-                .read(&src, vk::AccessFlags::SHADER_READ)
-                .read(&scratch_buffer, vk::AccessFlags::SHADER_READ)
-                .write(&out_count, vk::AccessFlags::SHADER_WRITE)
-                .write(&scratch_buffer, vk::AccessFlags::SHADER_WRITE)
-                .write(&dst, vk::AccessFlags::SHADER_WRITE)
+                .read(&size_buffer, AccessType::ComputeShaderReadOther)
+                .read(&src, AccessType::ComputeShaderReadOther)
+                .read(&scratch_buffer, AccessType::ComputeShaderReadOther)
+                .write(&out_count, AccessType::ComputeShaderWrite)
+                .write(&scratch_buffer, AccessType::ComputeShaderWrite)
+                .write(&dst, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, pool| {
                     compress_large.submit(
                         cb,

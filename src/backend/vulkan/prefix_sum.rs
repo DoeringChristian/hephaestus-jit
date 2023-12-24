@@ -1,6 +1,7 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use std::sync::Arc;
+use vk_sync::AccessType;
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
@@ -111,11 +112,11 @@ impl VulkanDevice {
             let input = input.clone();
             rgraph
                 .pass()
-                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
-                .read(&input, vk::AccessFlags::SHADER_READ)
-                .read(&scratch_buffer, vk::AccessFlags::SHADER_READ)
-                .write(&scratch_buffer, vk::AccessFlags::SHADER_WRITE)
-                .write(&output, vk::AccessFlags::SHADER_WRITE)
+                .read(&size_buffer, AccessType::ComputeShaderReadOther)
+                .read(&input, AccessType::ComputeShaderReadOther)
+                .read(&scratch_buffer, AccessType::ComputeShaderReadOther)
+                .write(&scratch_buffer, AccessType::ComputeShaderWrite)
+                .write(&output, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, pool| {
                     pipeline.submit(
                         cb,
@@ -217,8 +218,8 @@ impl VulkanDevice {
             let scratch_buffer = scratch_buffer.clone();
             rgraph
                 .pass()
-                .read(&size_buffer, vk::AccessFlags::SHADER_READ)
-                .write(&scratch_buffer, vk::AccessFlags::SHADER_WRITE)
+                .read(&size_buffer, AccessType::ComputeShaderReadOther)
+                .write(&scratch_buffer, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, pool| {
                     prefix_sum_large_init.submit(
                         cb,
