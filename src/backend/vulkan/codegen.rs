@@ -21,10 +21,19 @@ pub const ACCEL_BINDING: u32 = 2;
 //     #[error("{0}")]
 //     RspirvError(#[from] dr::Error, Backtrace),
 // }
+//
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct CompileInfo {
+    pub work_group_size: u32,
+}
 
-pub fn assemble_trace(trace: &IR, entry_point: &str) -> Result<Vec<u32>, dr::Error> {
+pub fn assemble_trace(
+    trace: &IR,
+    info: &CompileInfo,
+    entry_point: &str,
+) -> Result<Vec<u32>, dr::Error> {
     let mut b = SpirvBuilder::default();
-    b.assemble(trace, entry_point)?;
+    b.assemble(trace, info, entry_point)?;
 
     let module = b.module();
     print!("{}", module.disassemble());
@@ -113,15 +122,18 @@ impl SpirvBuilder {
     pub fn module(self) -> dr::Module {
         self.b.module()
     }
-    pub fn assemble(&mut self, ir: &IR, entry_point: &str) -> Result<(), dr::Error> {
-        // let param_layout = ParamLayout::generate(trace);
+    pub fn assemble(
+        &mut self,
+        ir: &IR,
+        info: &CompileInfo,
+        entry_point: &str,
+    ) -> Result<(), dr::Error> {
         self.n_buffers = 1 + ir.n_buffers; // [size_buffer, ir buffers]
         self.n_textures = ir.n_textures;
         self.n_accels = ir.n_accels;
 
+        // Advance Id idk. why this didn't work without
         self.id();
-
-        // self.acquire_ids(ir);
 
         self.set_version(1, 5);
 
@@ -133,10 +145,10 @@ impl SpirvBuilder {
         self.capability(spirv::Capability::Int64);
         self.capability(spirv::Capability::Float16);
         self.capability(spirv::Capability::Float64);
-        // self.capability(spirv::Capability::AtomicFloat16AddEXT);
+        self.capability(spirv::Capability::AtomicFloat16AddEXT);
         self.capability(spirv::Capability::AtomicFloat32AddEXT);
         self.capability(spirv::Capability::AtomicFloat64AddEXT);
-        // self.capability(spirv::Capability::AtomicFloat16MinMaxEXT);
+        self.capability(spirv::Capability::AtomicFloat16MinMaxEXT);
         self.capability(spirv::Capability::AtomicFloat32MinMaxEXT);
         self.capability(spirv::Capability::AtomicFloat64MinMaxEXT);
         self.capability(spirv::Capability::Int64Atomics);
@@ -231,7 +243,11 @@ impl SpirvBuilder {
         );
         //OpEntryPoint GLCompute %main "main" %test %gl_GlobalInvocationID %test2
         // TODO: get prefered local size from device (somehow)
-        self.execution_mode(func, spirv::ExecutionMode::LocalSize, [128, 1, 1]);
+        self.execution_mode(
+            func,
+            spirv::ExecutionMode::LocalSize,
+            [info.work_group_size, 1, 1],
+        );
 
         Ok(())
     }

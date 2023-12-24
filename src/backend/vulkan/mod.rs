@@ -14,9 +14,10 @@ mod util;
 mod vkdevice;
 mod vulkan_core;
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use crate::backend;
@@ -32,6 +33,7 @@ use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
 
+use self::codegen::CompileInfo;
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
 
@@ -43,12 +45,17 @@ pub struct InternalVkDevice {
     shader_cache: Mutex<ShaderCache>,
 }
 impl InternalVkDevice {
-    fn compile_ir(&self, ir: &IR) -> Arc<pipeline::Pipeline> {
+    fn compile_ir(&self, ir: &IR, info: &CompileInfo) -> Arc<pipeline::Pipeline> {
+        let mut hasher = DefaultHasher::new();
+        ir.internal_hash().hash(&mut hasher);
+        info.hash(&mut hasher);
+        let hash = hasher.finish();
+
         self.pipeline_cache
             .lock()
             .unwrap()
-            .entry(ir.hash())
-            .or_insert_with(|| Arc::new(pipeline::Pipeline::from_ir(&self.device, ir)))
+            .entry(hash)
+            .or_insert_with(|| Arc::new(pipeline::Pipeline::from_ir(&self.device, ir, info)))
             .clone()
     }
     fn get_pipeline<'a>(&'a self, desc: &PipelineDesc<'a>) -> Arc<pipeline::Pipeline> {
@@ -134,12 +141,7 @@ impl backend::BackendDevice for VulkanDevice {
     }
 
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> backend::Result<()> {
-        let pipeline = self.compile_ir(ir);
-
-        todo!();
-        // pipeline.launch_fenced(num, buffers.iter().map(|b| &b.buffer));
-
-        Ok(())
+        todo!()
     }
 
     fn execute_graph(
@@ -182,7 +184,10 @@ impl backend::BackendDevice for VulkanDevice {
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
                     let size = *size;
-                    let pipeline = self.compile_ir(ir);
+                    let compile_info = CompileInfo {
+                        work_group_size: 128,
+                    };
+                    let pipeline = self.compile_ir(ir, &compile_info);
                     // TODO: if we ever add dynamic sized kernels pass the buffer here
                     let mut size_buffer = Buffer::create(
                         self,
@@ -222,8 +227,11 @@ impl backend::BackendDevice for VulkanDevice {
                         }
                     }
 
+                    let grid_size = (size + compile_info.work_group_size as usize - 1)
+                        / compile_info.work_group_size as usize;
+
                     rpass.record(move |device, cb, pool| {
-                        pipeline.submit_to_cbuffer(cb, pool, size, &buffers, &images, &accels);
+                        pipeline.submit_to_cbuffer(cb, pool, grid_size, &buffers, &images, &accels);
                     });
                 }
                 PassOp::DeviceOp(op) => match op {

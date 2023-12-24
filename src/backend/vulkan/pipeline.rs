@@ -8,6 +8,7 @@ use crate::backend::vulkan::codegen;
 use crate::ir::IR;
 
 use super::accel::Accel;
+use super::codegen::CompileInfo;
 use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::device::Device;
@@ -129,8 +130,8 @@ impl Pipeline {
             }
         }
     }
-    pub fn from_ir(device: &Device, ir: &IR) -> Self {
-        let spirv = codegen::assemble_trace(ir, "main").unwrap();
+    pub fn from_ir(device: &Device, ir: &IR, info: &CompileInfo) -> Self {
+        let spirv = codegen::assemble_trace(ir, info, "main").unwrap();
 
         let num_buffers = 1 + ir.n_buffers; // Add one for size buffer
         let num_textures = ir.n_textures;
@@ -141,28 +142,6 @@ impl Pipeline {
                 .code(spirv.as_slice())
                 .build();
             let shader = device.create_shader_module(&shader_info, None).unwrap();
-
-            // Create Descriptor Pool
-            // let desc_sizes = [
-            //     vk::DescriptorPoolSize {
-            //         ty: vk::DescriptorType::STORAGE_BUFFER,
-            //         descriptor_count: num_buffers.max(1) as _,
-            //     },
-            //     vk::DescriptorPoolSize {
-            //         ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            //         descriptor_count: num_textures.max(1) as _,
-            //     },
-            //     vk::DescriptorPoolSize {
-            //         ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-            //         descriptor_count: num_accels.max(1) as _,
-            //     },
-            // ];
-            // let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
-            //     .pool_sizes(&desc_sizes)
-            //     .max_sets(1);
-            // let desc_pool = device
-            //     .create_descriptor_pool(&desc_pool_info, None)
-            //     .unwrap();
 
             // Create Layout
             let desc_layout_bindings = [

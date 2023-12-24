@@ -128,7 +128,7 @@ impl IR {
         let (deps_start, deps_end) = self.var(id).deps;
         &self.deps[deps_start..deps_end]
     }
-    pub fn hash(&self) -> u64 {
+    pub fn internal_hash(&self) -> u64 {
         *self.hash.lock().unwrap().get_or_insert_with(|| {
             let mut hasher = DefaultHasher::default();
             self.vars.hash(&mut hasher);
