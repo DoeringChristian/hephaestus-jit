@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct GraphBuilder {
-    device: backend::Device,
     buffers: Vec<trace::VarId>,
     id2buffer: HashMap<trace::VarId, BufferId>,
     textures: Vec<trace::VarId>,
@@ -21,9 +20,8 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn new(device: &backend::Device) -> Self {
+    pub fn new() -> Self {
         Self {
-            device: device.clone(),
             buffers: Default::default(),
             id2buffer: Default::default(),
             textures: Default::default(),
@@ -216,7 +214,7 @@ pub fn compile(
     // dbg!(&vars);
 
     // We can now insert the variables as well as the
-    let mut graph_builder = GraphBuilder::new(device);
+    let mut graph_builder = GraphBuilder::new();
     for group in groups.iter() {
         if trace.var(vars[group.start].id()).op.is_device_op() {
             // Handle Device Ops (precompiled)

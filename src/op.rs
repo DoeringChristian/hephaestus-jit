@@ -1,5 +1,3 @@
-use crate::ir;
-
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Bop {
     // Normal Binary Operations
