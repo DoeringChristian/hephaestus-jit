@@ -82,14 +82,15 @@ fn scatter_chain1() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
-    let b0 = tr::sized_literal(0, 5);
+    let b0 = tr::sized_literal(0, 10);
 
-    log::trace!("Buffer variable {b0:?}");
+    dbg!(&b0);
 
     tr::literal(1).scatter(&b0, &tr::index(10));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
+    dbg!(&b1);
 
     tr::with_trace(|trace| {
         dbg!(&trace);
@@ -102,6 +103,7 @@ fn scatter_chain1() {
     dbg!(&graph);
     graph.launch();
 
+    // dbg!(b0.to_vec::<i32>());
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
     assert_eq!(b1.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
 }

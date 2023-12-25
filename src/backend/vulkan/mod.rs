@@ -380,6 +380,7 @@ impl backend::BackendBuffer for VulkanBuffer {
         &self,
         range: std::ops::Range<usize>,
     ) -> backend::Result<Vec<T>> {
+        log::trace!("Copying {buffer:?} to host", buffer = self.buffer);
         let len = range.len();
         let ty_size = T::var_ty().size();
         let size = len * ty_size;

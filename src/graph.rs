@@ -34,8 +34,6 @@ impl GraphBuilder {
         }
     }
     pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
-        let var = trace.var_mut(id);
-        assert_eq!(var.op.resulting_op(), op::Op::Buffer);
         // TODO: use better method to get VarRef
         *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
@@ -44,7 +42,6 @@ impl GraphBuilder {
         })
     }
     pub fn push_texture(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> TextureId {
-        let var = trace.var_mut(id);
         // TODO: use better method to get VarRef
         *self.id2texture.entry(id).or_insert_with(|| {
             let texture_id = TextureId(self.textures.len());
@@ -53,7 +50,6 @@ impl GraphBuilder {
         })
     }
     pub fn push_accel(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> AccelId {
-        let var = trace.var_mut(id);
         *self.id2accel.entry(id).or_insert_with(|| {
             let accel_id = AccelId(self.accels.len());
             self.accels.push(id);
@@ -285,7 +281,6 @@ pub fn compile(
                 .map(|id| graph_builder.push_accel(trace, *id))
                 .collect::<Vec<_>>();
             let size = trace.var(vars[group.start].id()).extent.size();
-            dbg!(size);
             let pass = Pass {
                 buffers,
                 textures,
