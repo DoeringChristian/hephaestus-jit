@@ -8,7 +8,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GraphBuilder {
     buffers: Vec<trace::VarId>,
     id2buffer: HashMap<trace::VarId, BufferId>,
@@ -20,17 +20,6 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn new() -> Self {
-        Self {
-            buffers: Default::default(),
-            id2buffer: Default::default(),
-            textures: Default::default(),
-            id2texture: Default::default(),
-            accels: Default::default(),
-            id2accel: Default::default(),
-            passes: Default::default(),
-        }
-    }
     pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
         // TODO: use better method to get VarRef
         *self.id2buffer.entry(id).or_insert_with(|| {
@@ -214,7 +203,7 @@ pub fn compile(
     // dbg!(&vars);
 
     // We can now insert the variables as well as the
-    let mut graph_builder = GraphBuilder::new();
+    let mut graph_builder = GraphBuilder::default();
     for group in groups.iter() {
         if trace.var(vars[group.start].id()).op.is_device_op() {
             // Handle Device Ops (precompiled)
