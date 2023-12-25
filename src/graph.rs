@@ -294,6 +294,16 @@ pub fn compile(
             };
             graph_builder.push_pass(pass);
         }
+        // Change op to resulting op
+        for i in group.clone() {
+            let id = vars[i].id();
+            let var = trace.var_mut(id);
+            if var.data.is_buffer() {
+                continue;
+            }
+
+            var.op = var.op.resulting_op();
+        }
     }
 
     // Create missing resources
@@ -368,9 +378,6 @@ pub fn compile(
             if var.data.is_buffer() {
                 continue;
             }
-            // Set op and type for next kernel:
-            var.op = var.op.resulting_op();
-            // var.dirty = false;
 
             // Clear dependencies:
             let deps = std::mem::take(&mut trace.entry_mut(id).deps);
