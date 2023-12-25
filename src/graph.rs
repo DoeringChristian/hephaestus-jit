@@ -105,6 +105,9 @@ impl Graph {
     }
     pub fn launch(&mut self, device: &backend::Device) {
         // Capture Environment
+        // TODO: it would be nice if we could unify Buffer, Texture and Accel under some common
+        // resource typ.
+        // This would however also mean changes to the IR representation
         let mut env = Env::default();
         trace::with_trace(|trace| {
             env.buffers = self
