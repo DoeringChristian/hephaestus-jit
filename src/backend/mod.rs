@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
 
+use crate::graph::Env;
 use crate::graph::Graph;
 use crate::ir::IR;
 use crate::trace;
@@ -69,10 +70,10 @@ impl Device {
             Device::VulkanDevice(device) => Ok(Accel::VulkanAccel(device.create_accel(desc)?)),
         }
     }
-    pub fn execute_graph(&self, graph: &Graph) -> Result<()> {
+    pub fn execute_graph(&self, graph: &Graph, env: &Env) -> Result<()> {
         match self {
             Device::CudaDevice(_) => todo!(),
-            Device::VulkanDevice(device) => device.execute_graph(graph),
+            Device::VulkanDevice(device) => device.execute_graph(graph, env),
         }
     }
     pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Buffer]) -> Result<()> {
@@ -176,7 +177,7 @@ pub trait BackendDevice: Clone {
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
     fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
-    fn execute_graph(&self, graph: &Graph) -> Result<()> {
+    fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<()> {
         todo!()
     }
 }

@@ -3,25 +3,6 @@ source: src/test.rs
 expression: graph
 ---
 Graph {
-    device: VulkanDevice(
-        VulkanDevice(
-            InternalVkDevice {
-                device: Device,
-                pipeline_cache: Mutex {
-                    data: {},
-                    poisoned: false,
-                    ..
-                },
-                shader_cache: Mutex {
-                    data: ShaderCache(
-                        {},
-                    ),
-                    poisoned: false,
-                    ..
-                },
-            },
-        ),
-    ),
     passes: [
         Pass {
             buffers: [
@@ -211,28 +192,42 @@ Graph {
             },
         },
     ],
-    buffers: [
+    buffer_descs: [
         BufferDesc {
             size: 10,
             ty: I32,
-            buffer: VulkanBuffer(
-                VulkanBuffer {
-                    size: 40,
-                },
+            var_id: VarId(
+                DefaultKey(
+                    1v1,
+                ),
             ),
         },
         BufferDesc {
             size: 10,
             ty: Bool,
-            buffer: VulkanBuffer(
-                VulkanBuffer {
-                    size: 10,
-                },
+            var_id: VarId(
+                DefaultKey(
+                    2v1,
+                ),
             ),
         },
     ],
-    textures: [],
-    accels: [],
+    texture_descs: [],
+    accel_descs: [],
+    env: Env {
+        buffers: [
+            None,
+            Some(
+                VulkanBuffer(
+                    VulkanBuffer {
+                        size: 10,
+                    },
+                ),
+            ),
+        ],
+        textures: [],
+        accels: [],
+    },
     schedule: [
         VarRef {
             id: VarId(

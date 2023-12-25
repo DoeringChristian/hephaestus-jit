@@ -13,17 +13,17 @@ struct ScheduleGroup {
     range: Range<usize>,
 }
 
-#[derive(Debug, Default)]
-pub struct Env {
-    pub buffers: Vec<trace::VarId>,
-}
-impl Env {
-    pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
-        let i = self.buffers.len();
-        self.buffers.push(id);
-        i
-    }
-}
+// #[derive(Debug, Default)]
+// pub struct Env {
+//     pub buffers: Vec<trace::VarId>,
+// }
+// impl Env {
+//     pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
+//         let i = self.buffers.len();
+//         self.buffers.push(id);
+//         i
+//     }
+// }
 
 #[derive(Debug, Default)]
 pub struct Compiler {

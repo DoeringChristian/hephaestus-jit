@@ -59,6 +59,9 @@ impl Trace {
     pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
         self.entries.get(id.0).map(|entry| &entry.var)
     }
+    pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
+        self.entries.get_mut(id.0).map(|entry| &mut entry.var)
+    }
     pub fn push_var(&mut self, var: Var, deps: Vec<VarId>) -> VarId {
         for id in deps.iter() {
             self.inc_rc(*id);
@@ -187,12 +190,12 @@ fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     res
 }
 
-pub fn compile(device: &backend::Device) -> graph::Graph {
+pub fn compile() -> graph::Graph {
     schedule_eval();
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
         let schedule = std::mem::take(&mut (*s));
-        let graph = with_trace(|t| graph::compile(t, schedule, device));
+        let graph = with_trace(|t| graph::compile(t, schedule));
         graph
     })
 }

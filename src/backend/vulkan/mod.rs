@@ -144,38 +144,32 @@ impl backend::BackendDevice for VulkanDevice {
         todo!()
     }
 
-    fn execute_graph(&self, graph: &crate::graph::Graph) -> backend::Result<()> {
+    fn execute_graph(
+        &self,
+        graph: &crate::graph::Graph,
+        env: &crate::graph::Env,
+    ) -> backend::Result<()> {
         use crate::graph::PassOp;
         // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
         // submitted
         // FIX: Add a struct that can collect Arcs to those resources
-        let mut pool = Pool::new(&self);
         let mut rgraph = RGraph::default();
 
         for pass in graph.passes.iter() {
             let buffers = pass
                 .buffers
                 .iter()
-                .map(|id| {
-                    let buffer = graph.buffer(*id);
-                    buffer.vulkan().unwrap().buffer.clone()
-                })
+                .map(|id| env.buffer(*id).vulkan().unwrap().buffer.clone())
                 .collect::<Vec<_>>();
             let images = pass
                 .textures
                 .iter()
-                .map(|id| {
-                    let buffer = graph.texture(*id);
-                    buffer.vulkan().unwrap().image.clone()
-                })
+                .map(|id| env.texture(*id).vulkan().unwrap().image.clone())
                 .collect::<Vec<_>>();
             let accels = pass
                 .accels
                 .iter()
-                .map(|id| {
-                    let accel = graph.accel(*id);
-                    accel.vulkan().unwrap().accel.clone()
-                })
+                .map(|id| env.accel(*id).vulkan().unwrap().accel.clone())
                 .collect::<Vec<_>>();
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
