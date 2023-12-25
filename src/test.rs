@@ -86,7 +86,7 @@ fn scatter_chain1() {
 
     dbg!(&b0);
 
-    tr::literal(1).scatter(&b0, &tr::index(10));
+    tr::literal(2).scatter(&b0, &tr::index(10));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
@@ -95,15 +95,13 @@ fn scatter_chain1() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    tr::SCHEDULE.with(|s| {
-        dbg!(&s);
-    });
 
     let graph = tr::compile(&device);
-    dbg!(&graph);
+    insta::assert_debug_snapshot!(graph);
     graph.launch();
 
-    // dbg!(b0.to_vec::<i32>());
+    dbg!(b0.to_vec::<i32>());
+    dbg!(b1.to_vec::<i32>());
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
     assert_eq!(b1.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
 }

@@ -172,6 +172,7 @@ pub fn compile(
     schedule: trace::Schedule,
     device: &backend::Device,
 ) -> Graph {
+    dbg!(&schedule);
     let trace::Schedule {
         mut vars,
         mut groups,
