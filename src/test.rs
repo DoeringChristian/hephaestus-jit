@@ -26,10 +26,10 @@ fn simple1() {
         dbg!(&s);
     });
 
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     dbg!(&graph);
     for i in 0..1000 {
-        graph.launch(&device);
+        graph.launch();
     }
 
     dbg!(graph.n_passes());
@@ -54,9 +54,9 @@ fn simple_u16() {
     tr::SCHEDULE.with(|s| {
         dbg!(&s);
     });
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     dbg!(&graph);
-    graph.launch(&device);
+    graph.launch();
 
     dbg!(c.to_vec::<u16>());
     assert_eq!(c.to_vec::<u16>(), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
@@ -70,8 +70,8 @@ fn simple_f16() {
 
     c.schedule();
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     let reference = (0..10).map(|i| f16::from_f32(i as _)).collect::<Vec<_>>();
     assert_eq!(reference, c.to_vec::<f16>());
@@ -79,9 +79,12 @@ fn simple_f16() {
 
 #[test]
 fn scatter_chain1() {
+    pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
     let b0 = tr::sized_literal(0, 5);
+
+    log::trace!("Buffer variable {b0:?}");
 
     tr::literal(1).scatter(&b0, &tr::index(10));
 
@@ -95,9 +98,9 @@ fn scatter_chain1() {
         dbg!(&s);
     });
 
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     dbg!(&graph);
-    graph.launch(&device);
+    graph.launch();
 
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
     assert_eq!(b1.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
@@ -112,9 +115,9 @@ fn scatter_chain2() {
 
     b.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     dbg!(&graph);
-    graph.launch(&device);
+    graph.launch();
 
     dbg!(b.to_vec::<i32>());
     dbg!(a.to_vec::<i32>());
@@ -137,7 +140,7 @@ fn extract() {
     a.schedule();
     b.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile(&device).launch();
 
     dbg!(v.to_vec::<f32>());
     dbg!(a.to_vec::<f32>());
@@ -155,7 +158,7 @@ fn extract2() {
 
     s.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile(&device).launch();
 
     dbg!(&s.to_vec::<u8>());
 }
@@ -175,7 +178,7 @@ fn test_struct() {
     a.schedule();
     b.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile(&device).launch();
 
     dbg!(s.to_vec::<u8>());
     dbg!(a.to_vec::<u8>());
@@ -198,7 +201,7 @@ fn texture2d() {
     let v = tex.tex_lookup(&[&x, &y]);
 
     v.schedule();
-    tr::compile().launch(&device);
+    tr::compile(&device).launch();
 
     tr::with_trace(|trace| {
         dbg!(&trace);
@@ -223,7 +226,7 @@ fn texture3d() {
 
     v.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile(&device).launch();
 
     tr::with_trace(|trace| {
         dbg!(&trace);
@@ -240,9 +243,9 @@ fn conditionals() {
 
     dst.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     insta::assert_debug_snapshot!(graph);
-    graph.launch(&device);
+    graph.launch();
 
     dbg!(&dst.to_vec::<u8>());
 }
@@ -264,9 +267,9 @@ fn conditional_scatter() {
 
     dst.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     insta::assert_debug_snapshot!(graph);
-    graph.launch(&device);
+    graph.launch();
 
     assert_eq!(dst.to_vec::<i32>(), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0])
 }
@@ -283,9 +286,9 @@ fn select() {
     let res = cond.select(&true_val, &false_val);
     res.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile(&device);
     insta::assert_debug_snapshot!(graph);
-    graph.launch(&device);
+    graph.launch();
 
     assert_eq!(res.to_vec::<i32>(), vec![10, 5]);
 }
@@ -373,8 +376,8 @@ fn accel() {
         }
     });
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     dbg!(intersection.to_vec::<i32>());
     let intersections = intersection.to_vec::<Intersection>();
@@ -401,8 +404,8 @@ fn reduce_max() {
             let x = tr::array(&x, &device);
             let max = x.reduce_max();
             max.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(max.to_vec::<$ty>()[0], reduced)
         };
@@ -426,8 +429,8 @@ fn reduce_min() {
             let x = tr::array(&x, &device);
             let min = x.reduce_min();
             min.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(min.to_vec::<$ty>()[0], reduced)
         };
@@ -460,8 +463,8 @@ fn reduce_sum() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(sum.to_vec::<$ty>()[0], reduced)
         };
@@ -494,8 +497,8 @@ fn reduce_prod() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(sum.to_vec::<$ty>()[0], reduced)
         };
@@ -515,8 +518,8 @@ fn reduce_prod() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             let res = sum.to_vec::<$ty>()[0];
             dbg!(&res);
@@ -562,8 +565,8 @@ fn reduce_and() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(sum.to_vec::<$ty>()[0], reduced)
         };
@@ -581,8 +584,8 @@ fn reduce_and() {
         let x = tr::array(&x, &device);
         let res = x.reduce_and();
         res.schedule();
-        let graph = tr::compile();
-        graph.launch(&device);
+        let graph = tr::compile(&device);
+        graph.launch();
 
         assert_eq!(res.to_vec::<bool>()[0], reduced)
     };
@@ -612,8 +615,8 @@ fn reduce_or() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(sum.to_vec::<$ty>()[0], reduced)
         };
@@ -631,8 +634,8 @@ fn reduce_or() {
         let x = tr::array(&x, &device);
         let res = x.reduce_or();
         res.schedule();
-        let graph = tr::compile();
-        graph.launch(&device);
+        let graph = tr::compile(&device);
+        graph.launch();
 
         assert_eq!(res.to_vec::<bool>()[0], reduced)
     };
@@ -661,8 +664,8 @@ fn reduce_xor() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
-            graph.launch(&device);
+            let graph = tr::compile(&device);
+            graph.launch();
 
             assert_eq!(sum.to_vec::<$ty>()[0], reduced)
         };
@@ -680,8 +683,8 @@ fn reduce_xor() {
         let x = tr::array(&x, &device);
         let res = x.reduce_or();
         res.schedule();
-        let graph = tr::compile();
-        graph.launch(&device);
+        let graph = tr::compile(&device);
+        graph.launch();
 
         assert_eq!(res.to_vec::<bool>()[0], reduced)
     };
@@ -705,8 +708,8 @@ fn uop_cos() {
     let pred = x.cos();
     pred.schedule();
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     for (reference, pred) in reference.into_iter().zip(pred.to_vec::<f32>().into_iter()) {
         approx::assert_abs_diff_eq!(reference, pred, epsilon = 0.001);
@@ -731,8 +734,8 @@ fn scatter_atomic() {
     // result as it could lead to unintended evaluation of the result.
     prev.schedule();
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     assert_eq!(dst.to_vec::<u32>()[0], n as u32);
 
@@ -760,8 +763,8 @@ fn scatter_reduce() {
 
     src.scatter_reduce(&dst, &idx, crate::op::ReduceOp::Sum);
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     assert_eq!(dst.to_vec::<u32>()[0], n as u32);
 }
@@ -787,8 +790,8 @@ fn compress_small() {
 
     let (count, index) = src_tr.compress();
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     let count = count.to_vec::<u32>()[0] as usize;
     let mut prediction = index.to_vec::<u32>();
@@ -819,8 +822,8 @@ fn compress_large() {
 
     let (count, index) = src_tr.compress();
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     let count = count.to_vec::<u32>()[0] as usize;
     let mut prediction = index.to_vec::<u32>();
@@ -846,8 +849,8 @@ fn prefix_sum() {
     let prediction = x.prefix_sum(true);
     prediction.schedule();
 
-    let graph = tr::compile();
-    graph.launch(&device);
+    let graph = tr::compile(&device);
+    graph.launch();
 
     let reference = input
         .into_iter()

@@ -2,61 +2,61 @@ use crate::backend;
 use crate::backend::Device;
 use crate::data::Data;
 use crate::extent::Extent;
+use crate::vartype::VarType;
 use crate::{compiler, ir, op, trace};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct GraphBuilder {
-    buffers: Vec<BufferDesc>,
+    device: backend::Device,
+    buffers: Vec<trace::VarId>,
     id2buffer: HashMap<trace::VarId, BufferId>,
-    textures: Vec<TextureDesc>,
+    textures: Vec<trace::VarId>,
     id2texture: HashMap<trace::VarId, TextureId>,
-    accels: Vec<AccelDesc>,
+    accels: Vec<trace::VarId>,
     id2accel: HashMap<trace::VarId, AccelId>,
     passes: Vec<Pass>,
 }
 
 impl GraphBuilder {
+    pub fn new(device: &backend::Device) -> Self {
+        Self {
+            device: device.clone(),
+            buffers: Default::default(),
+            id2buffer: Default::default(),
+            textures: Default::default(),
+            id2texture: Default::default(),
+            accels: Default::default(),
+            id2accel: Default::default(),
+            passes: Default::default(),
+        }
+    }
     pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
-        assert_eq!(trace.var(id).op.resulting_op(), op::Op::Buffer);
+        let var = trace.var_mut(id);
+        assert_eq!(var.op.resulting_op(), op::Op::Buffer);
         // TODO: use better method to get VarRef
         *self.id2buffer.entry(id).or_insert_with(|| {
             let buffer_id = BufferId(self.buffers.len());
-            self.buffers.push(BufferDesc {
-                var: trace.ref_borrow(id),
-                size: trace.var(id).extent.capacity(),
-            });
+            self.buffers.push(id);
             buffer_id
         })
     }
     pub fn push_texture(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> TextureId {
-        let (shape, channels) = trace.var(id).extent.shape_and_channles();
+        let var = trace.var_mut(id);
         // TODO: use better method to get VarRef
         *self.id2texture.entry(id).or_insert_with(|| {
             let texture_id = TextureId(self.textures.len());
-            self.textures.push(TextureDesc {
-                shape,
-                channels,
-                var: trace.ref_borrow(id),
-            });
+            self.textures.push(id);
             texture_id
         })
     }
     pub fn push_accel(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> AccelId {
-        // TODO: use better method to get VarRef
+        let var = trace.var_mut(id);
         *self.id2accel.entry(id).or_insert_with(|| {
-            // TODO: reevaluate method here. We are loading the instances from buffer => struct
-            // layout has to be correct.
-
-            let accel_desc = trace.var(id).extent.accel_desc().clone();
-
             let accel_id = AccelId(self.accels.len());
-            self.accels.push(AccelDesc {
-                desc: accel_desc,
-                var: trace.ref_borrow(id),
-            });
+            self.accels.push(id);
             accel_id
         })
     }
@@ -65,19 +65,21 @@ impl GraphBuilder {
         self.passes.push(pass);
         id
     }
-    pub fn build(self) -> Graph {
-        Graph {
-            passes: self.passes,
-            buffers: self.buffers,
-            textures: self.textures,
-            accels: self.accels,
-            schedule: vec![],
-        }
-    }
+    // pub fn build(self) -> Graph {
+    //     Graph {
+    //         device: self.device,
+    //         passes: self.passes,
+    //         buffers: self.buffers,
+    //         textures: self.textures,
+    //         accels: self.accels,
+    //         schedule: vec![],
+    //     }
+    // }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Graph {
+    pub device: backend::Device,
     pub passes: Vec<Pass>,
     pub buffers: Vec<BufferDesc>,
     pub textures: Vec<TextureDesc>,
@@ -89,70 +91,29 @@ impl Graph {
     pub fn buffer_desc(&self, buffer_id: BufferId) -> &BufferDesc {
         &self.buffers[buffer_id.0]
     }
-    pub fn buffer<'a>(
-        &'a self,
-        trace: &'a trace::Trace,
-        buffer_id: BufferId,
-    ) -> &'a backend::Buffer {
-        let desc = self.buffer_desc(buffer_id);
-        trace.var(desc.var.id()).data.buffer().unwrap()
+    pub fn buffer<'a>(&'a self, buffer_id: BufferId) -> &'a backend::Buffer {
+        &self.buffer_desc(buffer_id).buffer
     }
 
     pub fn texture_desc(&self, texture_id: TextureId) -> &TextureDesc {
         &self.textures[texture_id.0]
     }
-    pub fn texture<'a>(
-        &'a self,
-        trace: &'a trace::Trace,
-        texture_id: TextureId,
-    ) -> &'a backend::Texture {
-        let desc = self.texture_desc(texture_id);
-        trace.var(desc.var.id()).data.texture().unwrap()
+    pub fn texture<'a>(&'a self, texture_id: TextureId) -> &'a backend::Texture {
+        &self.texture_desc(texture_id).texture
     }
 
     pub fn accel_desc(&self, accel_id: AccelId) -> &AccelDesc {
         &self.accels[accel_id.0]
     }
-    pub fn accel<'a>(&'a self, trace: &'a trace::Trace, accel_id: AccelId) -> &'a backend::Accel {
-        let desc = self.accel_desc(accel_id);
-        trace.var(desc.var.id()).data.accel().unwrap()
+    pub fn accel<'a>(&'a self, accel_id: AccelId) -> &'a backend::Accel {
+        &self.accel_desc(accel_id).accel
     }
 
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
-    pub fn launch(&self, device: &Device) {
-        trace::with_trace(|trace| {
-            for desc in self.buffers.iter() {
-                log::trace!("{:#?}", trace);
-                let var = trace.var_mut(desc.var.id());
-                // log::trace!("{var:#?}");
-
-                let size = var.extent.capacity();
-                let ty_size = var.ty.size();
-                log::trace!("Creating Buffer for {desc:?} {size:?} {ty_size:?}");
-                if !var.data.is_storage() {
-                    var.data = Data::Buffer(device.create_buffer(size * ty_size).unwrap());
-                }
-            }
-            for desc in self.textures.iter() {
-                let var = trace.var_mut(desc.var.id());
-
-                let (shape, channels) = var.extent.shape_and_channles();
-
-                if !var.data.is_storage() {
-                    var.data = Data::Texture(device.create_texture(shape, channels).unwrap());
-                }
-            }
-            for desc in self.accels.iter() {
-                let var = trace.var_mut(desc.var.id());
-
-                if !var.data.is_storage() {
-                    var.data = Data::Accel(device.create_accel(&desc.desc).unwrap());
-                }
-            }
-            device.execute_graph(trace, self).unwrap();
-        })
+    pub fn launch(&self) {
+        self.device.execute_graph(self).unwrap();
     }
 }
 
@@ -188,18 +149,19 @@ pub enum PassOp {
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
     pub size: usize,
-    pub var: trace::VarRef,
+    pub ty: VarType,
+    pub buffer: backend::Buffer,
 }
 #[derive(Debug, Clone)]
 pub struct TextureDesc {
     pub shape: [usize; 3],
     pub channels: usize,
-    pub var: trace::VarRef,
+    pub texture: backend::Texture,
 }
 #[derive(Debug, Clone)]
 pub struct AccelDesc {
     pub desc: backend::AccelDesc,
-    pub var: trace::VarRef,
+    pub accel: backend::Accel,
 }
 
 /// Might not be the best but we keep references to `trace::VarRef`s arround to ensure the rc is
@@ -207,7 +169,13 @@ pub struct AccelDesc {
 ///
 /// * `trace`: Trace from which the variables come
 /// * `refs`: Variable references
-pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
+///
+/// TODO: should we compile for a device?
+pub fn compile(
+    trace: &mut trace::Trace,
+    schedule: trace::Schedule,
+    device: &backend::Device,
+) -> Graph {
     let trace::Schedule {
         mut vars,
         mut groups,
@@ -251,8 +219,8 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
     // dbg!(&vars);
 
     // We can now insert the variables as well as the
-    let mut graph_builder = GraphBuilder::default();
-    for group in groups {
+    let mut graph_builder = GraphBuilder::new(device);
+    for group in groups.iter() {
         if trace.var(vars[group.start].id()).op.is_device_op() {
             // Handle Device Ops (precompiled)
             assert_eq!(group.len(), 1);
@@ -330,7 +298,71 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             };
             graph_builder.push_pass(pass);
         }
+    }
 
+    // Create missing resources
+    let buffers = graph_builder
+        .buffers
+        .into_iter()
+        .map(|id| {
+            log::trace!("Creating buffer for var {id:?}");
+            let var = trace.var_mut(id);
+            let size = var.extent.capacity();
+            let buffer = if let Some(buffer) = var.data.buffer() {
+                buffer.clone()
+            } else {
+                let ty_size = var.ty.size();
+                let buffer = device.create_buffer(size * ty_size).unwrap();
+                var.data = Data::Buffer(buffer.clone());
+                buffer
+            };
+            BufferDesc {
+                size,
+                ty: var.ty.clone(),
+                buffer,
+            }
+        })
+        .collect::<Vec<_>>();
+    let textures = graph_builder
+        .textures
+        .into_iter()
+        .map(|id| {
+            let var = trace.var_mut(id);
+            let (shape, channels) = var.extent.shape_and_channles();
+            let texture = if let Some(texture) = var.data.texture() {
+                texture.clone()
+            } else {
+                let texture = device.create_texture(shape, channels).unwrap();
+                var.data = Data::Texture(texture.clone());
+                texture
+            };
+            TextureDesc {
+                shape,
+                channels,
+                texture,
+            }
+        })
+        .collect::<Vec<_>>();
+    let accels = graph_builder
+        .accels
+        .into_iter()
+        .map(|id| {
+            let var = trace.var_mut(id);
+            let desc = var.extent.accel_desc().clone();
+
+            let accel = if let Some(accel) = var.data.accel() {
+                accel.clone()
+            } else {
+                let accel = device.create_accel(&desc).unwrap();
+                var.data = Data::Accel(accel.clone());
+                accel
+            };
+            AccelDesc { desc, accel }
+        })
+        .collect::<Vec<_>>();
+
+    // Cleanup
+    for group in groups {
         // Clear Dependecies for schedule variables, so that we don't collect to many in the next
         // iteration
         for i in group {
@@ -353,7 +385,13 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         }
     }
 
-    let mut graph = graph_builder.build();
-    graph.schedule = vars;
+    let graph = Graph {
+        device: device.clone(),
+        passes: graph_builder.passes,
+        buffers,
+        textures,
+        accels,
+        schedule: vars,
+    };
     graph
 }

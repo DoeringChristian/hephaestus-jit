@@ -187,12 +187,12 @@ fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     res
 }
 
-pub fn compile() -> graph::Graph {
+pub fn compile(device: &backend::Device) -> graph::Graph {
     schedule_eval();
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
         let schedule = std::mem::take(&mut (*s));
-        let graph = with_trace(|t| graph::compile(t, schedule));
+        let graph = with_trace(|t| graph::compile(t, schedule, device));
         graph
     })
 }

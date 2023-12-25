@@ -19,7 +19,7 @@ impl CudaDevice {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CudaBuffer {
     device: CudaDevice,
     // buffer: core::CudaSlice<u8>,
@@ -73,14 +73,14 @@ impl BackendBuffer for CudaBuffer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CudaTexture;
 
 impl backend::BackendTexture for CudaTexture {
     type Device = CudaDevice;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CudaAccel;
 
 impl backend::BackendAccel for CudaAccel {

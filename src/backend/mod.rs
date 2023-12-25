@@ -69,10 +69,10 @@ impl Device {
             Device::VulkanDevice(device) => Ok(Accel::VulkanAccel(device.create_accel(desc)?)),
         }
     }
-    pub fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
+    pub fn execute_graph(&self, graph: &Graph) -> Result<()> {
         match self {
             Device::CudaDevice(_) => todo!(),
-            Device::VulkanDevice(device) => device.execute_graph(trace, graph),
+            Device::VulkanDevice(device) => device.execute_graph(graph),
         }
     }
     pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Buffer]) -> Result<()> {
@@ -102,7 +102,7 @@ impl Device {
 }
 
 // TODO: we might not need it to be cloneable
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Buffer {
     CudaBuffer(CudaBuffer),
     VulkanBuffer(VulkanBuffer),
@@ -140,7 +140,7 @@ impl Buffer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Texture {
     VulkanTexture(VulkanTexture),
 }
@@ -154,7 +154,7 @@ impl Texture {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Accel {
     VulkanAccel(VulkanAccel),
 }
@@ -176,12 +176,12 @@ pub trait BackendDevice: Clone {
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
     fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
     fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
-    fn execute_graph(&self, trace: &trace::Trace, graph: &Graph) -> Result<()> {
+    fn execute_graph(&self, graph: &Graph) -> Result<()> {
         todo!()
     }
 }
 
-pub trait BackendBuffer {
+pub trait BackendBuffer: Clone {
     type Device: BackendDevice;
     fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>>;
     fn size(&self) -> usize;
@@ -197,11 +197,11 @@ impl AsRef<CudaBuffer> for Buffer {
     }
 }
 
-pub trait BackendTexture: Debug {
+pub trait BackendTexture: Debug + Clone {
     type Device: BackendDevice;
 }
 
-pub trait BackendAccel {
+pub trait BackendAccel: Clone {
     type Device: BackendDevice;
 }
 

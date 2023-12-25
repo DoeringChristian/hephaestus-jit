@@ -144,11 +144,7 @@ impl backend::BackendDevice for VulkanDevice {
         todo!()
     }
 
-    fn execute_graph(
-        &self,
-        trace: &crate::tr::Trace,
-        graph: &crate::graph::Graph,
-    ) -> backend::Result<()> {
+    fn execute_graph(&self, graph: &crate::graph::Graph) -> backend::Result<()> {
         use crate::graph::PassOp;
         // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
         // submitted
@@ -161,7 +157,7 @@ impl backend::BackendDevice for VulkanDevice {
                 .buffers
                 .iter()
                 .map(|id| {
-                    let buffer = graph.buffer(trace, *id);
+                    let buffer = graph.buffer(*id);
                     buffer.vulkan().unwrap().buffer.clone()
                 })
                 .collect::<Vec<_>>();
@@ -169,7 +165,7 @@ impl backend::BackendDevice for VulkanDevice {
                 .textures
                 .iter()
                 .map(|id| {
-                    let buffer = graph.texture(trace, *id);
+                    let buffer = graph.texture(*id);
                     buffer.vulkan().unwrap().image.clone()
                 })
                 .collect::<Vec<_>>();
@@ -177,7 +173,7 @@ impl backend::BackendDevice for VulkanDevice {
                 .accels
                 .iter()
                 .map(|id| {
-                    let accel = graph.accel(trace, *id);
+                    let accel = graph.accel(*id);
                     accel.vulkan().unwrap().accel.clone()
                 })
                 .collect::<Vec<_>>();
@@ -238,23 +234,14 @@ impl backend::BackendDevice for VulkanDevice {
                     DeviceOp::ReduceOp(op) => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
-                        let ty = trace
-                            .var(graph.buffer_desc(pass.buffers[0]).var.id())
-                            .ty
-                            .clone();
-                        let num = trace
-                            .var(graph.buffer_desc(pass.buffers[1]).var.id())
-                            .extent
-                            .size();
+                        let ty = &graph.buffer_desc(pass.buffers[0]).ty;
+                        let num = graph.buffer_desc(pass.buffers[1]).size;
                         self.reduce(&mut rgraph, *op, &ty, num, &src, &dst);
                     }
                     DeviceOp::PrefixSum { inclusive } => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
-                        let ty = trace
-                            .var(graph.buffer_desc(pass.buffers[0]).var.id())
-                            .ty
-                            .clone();
+                        let ty = &graph.buffer_desc(pass.buffers[0]).ty;
                         let num = graph.buffer_desc(pass.buffers[1]).size;
                         self.prefix_sum(&mut rgraph, &ty, num, *inclusive, &src, &dst);
                     }
@@ -332,9 +319,9 @@ impl backend::BackendDevice for VulkanDevice {
 
         Ok(Self::Texture {
             image,
-            device: self.clone(),
-            shape: Vec::from(shape),
-            channels,
+            // device: self.clone(),
+            // shape: Vec::from(shape),
+            // channels,
         })
     }
 
@@ -372,6 +359,7 @@ impl backend::BackendDevice for VulkanDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct VulkanBuffer {
     buffer: Arc<Buffer>,
     device: VulkanDevice,
@@ -428,12 +416,12 @@ impl backend::BackendBuffer for VulkanBuffer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VulkanTexture {
     image: Arc<Image>,
-    device: VulkanDevice,
-    shape: Vec<usize>,
-    channels: usize,
+    // device: VulkanDevice,
+    // shape: Vec<usize>,
+    // channels: usize,
 }
 
 impl backend::BackendTexture for VulkanTexture {
@@ -442,12 +430,12 @@ impl backend::BackendTexture for VulkanTexture {
 
 impl VulkanTexture {
     fn copy_from_buffer(&self, rgraph: &mut RGraph, src: &Arc<Buffer>) {
-        assert!(self.channels <= 4);
+        // assert!(self.channels <= 4);
         self.image.copy_from_buffer(rgraph, src);
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VulkanAccel {
     accel: Arc<accel::Accel>,
 }
