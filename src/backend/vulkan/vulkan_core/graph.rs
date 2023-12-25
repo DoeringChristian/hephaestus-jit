@@ -7,11 +7,95 @@ use super::device::Device;
 use super::image::Image;
 use std::fmt::Debug;
 use std::sync::Arc;
-use vk_sync::{cmd::pipeline_barrier, BufferBarrier, GlobalBarrier, ImageBarrier};
+use vk_sync::cmd::pipeline_barrier;
 use vk_sync::{AccessType, ImageLayout};
 
-pub trait ResourceTrait: Debug {
-    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType);
+#[derive(Debug)]
+struct ImageBarrier {
+    pub prev: AccessType,
+    pub next: AccessType,
+    pub previous_layout: ImageLayout,
+    pub next_layout: ImageLayout,
+    pub discard_contents: bool,
+    pub src_queue_family_index: u32,
+    pub dst_queue_family_index: u32,
+    pub image: vk::Image,
+    pub range: vk::ImageSubresourceRange,
+}
+#[derive(Debug)]
+struct BufferBarrier {
+    pub prev: AccessType,
+    pub next: AccessType,
+    pub src_queue_family_index: u32,
+    pub dst_queue_family_index: u32,
+    pub buffer: vk::Buffer,
+    pub offset: usize,
+    pub size: usize,
+}
+
+#[derive(Debug, Default)]
+struct Barriers {
+    prev: Vec<AccessType>,
+    next: Vec<AccessType>,
+    buffer_barriers: Vec<BufferBarrier>,
+    image_barriers: Vec<ImageBarrier>,
+}
+impl Barriers {
+    pub fn record(&self, device: &Device, cb: vk::CommandBuffer) {
+        let buffer_barriers = self
+            .buffer_barriers
+            .iter()
+            .map(|barrier| vk_sync::BufferBarrier {
+                previous_accesses: std::slice::from_ref(&barrier.prev),
+                next_accesses: std::slice::from_ref(&barrier.next),
+                src_queue_family_index: barrier.src_queue_family_index,
+                dst_queue_family_index: barrier.dst_queue_family_index,
+                buffer: barrier.buffer,
+                offset: barrier.offset,
+                size: barrier.size,
+            })
+            .collect::<Vec<_>>();
+        let image_barriers = self
+            .image_barriers
+            .iter()
+            .map(|barrier| vk_sync::ImageBarrier {
+                previous_accesses: std::slice::from_ref(&barrier.prev),
+                next_accesses: std::slice::from_ref(&barrier.next),
+                previous_layout: barrier.previous_layout,
+                next_layout: barrier.next_layout,
+                discard_contents: barrier.discard_contents,
+                src_queue_family_index: barrier.src_queue_family_index,
+                dst_queue_family_index: barrier.dst_queue_family_index,
+                image: barrier.image,
+                range: barrier.range,
+            })
+            .collect::<Vec<_>>();
+
+        let global_barrier = vk_sync::GlobalBarrier {
+            previous_accesses: &self.prev,
+            next_accesses: &self.next,
+        };
+        log::trace!("Barrier with Global {global_barrier:?}, Buffer {buffer_barriers:?}, and Image {image_barriers:?}");
+        let global_barrier = Some(global_barrier);
+
+        pipeline_barrier(
+            device,
+            cb,
+            global_barrier,
+            &buffer_barriers,
+            &image_barriers,
+        );
+    }
+    pub fn global_barrier(&mut self, prev: AccessType, next: AccessType) {
+        self.prev.push(prev);
+        self.next.push(next);
+    }
+    pub fn buffer_barrier(&mut self, barrier: BufferBarrier) {
+        self.buffer_barriers.push(barrier)
+    }
+    pub fn image_barrierr(&mut self, barrier: ImageBarrier) {
+        self.image_barriers.push(barrier)
+    }
 }
 
 #[derive(Debug)]
@@ -21,12 +105,36 @@ pub enum Resource {
     AccelerationStructure(Arc<AccelerationStructure>),
 }
 impl Resource {
-    pub fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
+    fn transition(&self, barriers: &mut Barriers, prev: AccessType, next: AccessType) {
+        // TODO: Image Layout transitions
         match self {
-            Resource::Buffer(buffer) => buffer.transition(cb, prev, next),
-            Resource::Image(image) => image.transition(cb, prev, next),
+            Resource::Buffer(buffer) => barriers.buffer_barrier(BufferBarrier {
+                prev,
+                next,
+                src_queue_family_index: 0,
+                dst_queue_family_index: 0,
+                buffer: buffer.vk(),
+                offset: 0,
+                size: buffer.size(),
+            }),
+            Resource::Image(image) => barriers.image_barrierr(ImageBarrier {
+                prev,
+                next,
+                previous_layout: ImageLayout::Optimal,
+                next_layout: ImageLayout::Optimal,
+                discard_contents: prev == AccessType::Nothing,
+                src_queue_family_index: 0,
+                dst_queue_family_index: 0,
+                image: image.vk(),
+                range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                },
+            }),
             Resource::AccelerationStructure(acceleration_structure) => {
-                acceleration_structure.transition(cb, prev, next)
+                barriers.global_barrier(prev, next);
             }
         }
     }
@@ -48,14 +156,14 @@ impl From<Arc<AccelerationStructure>> for Resource {
     }
 }
 
-#[derive(Default, Debug)]
-/// The most simpel Render Graph implementation I could come up with.
+/// The simple most Render Graph implementation I could come up with.
 /// It is not efficient (it heavily relies on Rust's smart pointers)
 ///
 /// * `passes`: A number of passes, that can be recorded into a command buffer
 /// * `resources`: A hashmap mapping from the pointer addresses of resources to their owned types
 /// usize -> (Arc<dyn Resouce>)
 /// This let's us deduplicate resources (a better mechanism wouls be use indices)
+#[derive(Default, Debug)]
 pub struct RGraph {
     passes: Vec<Pass>,
     // We deduplicate resources by the pointers to their Arcs
@@ -107,73 +215,6 @@ pub struct PassBuilder<'a> {
     graph: &'a mut RGraph,
     read: Vec<(ResourceId, AccessType)>,
     write: Vec<(ResourceId, AccessType)>,
-}
-
-// Impl resource for all 3 resource types
-impl ResourceTrait for Buffer {
-    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
-        pipeline_barrier(
-            self.device(),
-            cb,
-            None,
-            &[BufferBarrier {
-                previous_accesses: &[prev],
-                next_accesses: &[next],
-                src_queue_family_index: 0,
-                dst_queue_family_index: 0,
-                buffer: self.vk(),
-                offset: 0,
-                size: self.size(),
-            }],
-            &[],
-        );
-    }
-}
-impl ResourceTrait for Image {
-    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
-        pipeline_barrier(
-            self.device(),
-            cb,
-            None,
-            &[],
-            &[ImageBarrier {
-                previous_accesses: &[prev],
-                next_accesses: &[next],
-                previous_layout: ImageLayout::Optimal,
-                next_layout: ImageLayout::Optimal,
-                discard_contents: prev == AccessType::Nothing,
-                src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                image: self.vk(),
-                range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    level_count: 1,
-                    layer_count: 1,
-                    ..Default::default()
-                },
-            }],
-        )
-    }
-}
-impl ResourceTrait for AccelerationStructure {
-    fn transition(&self, cb: vk::CommandBuffer, prev: AccessType, next: AccessType) {
-        pipeline_barrier(
-            self.device(),
-            cb,
-            Some(GlobalBarrier {
-                previous_accesses: &[prev],
-                next_accesses: &[next],
-            }),
-            &[],
-            &[],
-        )
-    }
-}
-
-impl From<Buffer> for Arc<dyn ResourceTrait> {
-    fn from(value: Buffer) -> Self {
-        Arc::new(value)
-    }
 }
 
 impl<'a> PassBuilder<'a> {
@@ -303,13 +344,20 @@ impl RGraph {
                 // Transition resources
                 log::trace!("Recording {pass:?} to command buffer");
 
+                let mut barriers = Barriers::default();
+
                 for (id, access) in pass.read.iter().chain(pass.write.iter()) {
                     let prev = resource_accesses[id.0];
                     if prev != *access {
-                        resources[id.0].transition(cb, prev, *access);
-                        log::trace!("Barrier from {prev:?} -> {read:?}", read = access);
+                        resources[id.0].transition(&mut barriers, prev, *access);
+                        log::trace!(
+                            "\tTransition Resource {resource:?} {prev:?} -> {read:?}",
+                            resource = id.0,
+                            read = access
+                        );
                     }
                 }
+                barriers.record(device, cb);
 
                 // Record content of pass
                 let render_fn = pass.render_fn.unwrap();
