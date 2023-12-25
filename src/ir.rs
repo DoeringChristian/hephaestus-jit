@@ -1,6 +1,4 @@
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct VarId(pub(crate) usize);
-
+use crate::op::KernelOp;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
@@ -8,84 +6,15 @@ use std::sync::Mutex;
 use crate::op;
 use crate::vartype::VarType;
 
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct VarId(pub(crate) usize);
+
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Var {
     pub(crate) ty: VarType,
-    pub(crate) op: Op,
+    pub(crate) op: KernelOp,
     pub(crate) deps: (usize, usize),
     pub(crate) data: u64,
-}
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum Bop {
-    // Normal Binary Operations
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Modulus,
-    Min,
-    Max,
-    // Bitwise
-    And,
-    Or,
-    Xor,
-    // Shift
-    Shl,
-    Shr,
-
-    // Comparisons
-    Eq,
-    Neq,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-}
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum Uop {
-    // Casting
-    Cast,
-    BitCast,
-    // Arithmetic
-    Neg,
-    Sqrt,
-    Abs,
-    Sin,
-    Cos,
-    Exp2,
-    Log2,
-}
-
-/// Intermediary Representation Specific Operations
-#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
-pub enum Op {
-    #[default]
-    Nop,
-
-    Scatter(Option<op::ReduceOp>),
-    Gather,
-    Index,
-    Literal,
-
-    Extract(usize),
-    Construct,
-
-    Select,
-
-    TexLookup,
-    TraceRay,
-
-    Bop(Bop),
-    Uop(Uop),
-
-    // Operations that are only available in IR
-    BufferRef,
-    TextureRef {
-        dim: usize,
-    }, // not sure if it's a good idea to put it here
-    AccelRef,
 }
 
 #[derive(Debug, Default)]

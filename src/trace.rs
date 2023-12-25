@@ -6,7 +6,7 @@ use std::thread::ThreadId;
 
 use crate::data::Data;
 use crate::extent::Extent;
-use crate::op::{DeviceOp, Op, ReduceOp};
+use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::vartype::{AsVarType, Instance, Intersection, VarType};
 use crate::{backend, ir};
 use crate::{compiler, graph};
@@ -207,7 +207,7 @@ pub fn schedule_eval() {
 pub fn index(size: usize) -> VarRef {
     push_var(
         Var {
-            op: Op::KernelOp(ir::Op::Index),
+            op: Op::KernelOp(KernelOp::Index),
             ty: VarType::U32,
             extent: Extent::Size(size),
             ..Default::default()
@@ -224,7 +224,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     unsafe { *(&mut data as *mut _ as *mut T) = val };
     push_var(
         Var {
-            op: Op::KernelOp(ir::Op::Literal),
+            op: Op::KernelOp(KernelOp::Literal),
             ty: ty.clone(),
             extent: Extent::Size(size),
             data: Data::Literal(data),
@@ -264,7 +264,7 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
     let extent = resulting_extent(refs.iter().map(|r| *r));
     push_var(
         Var {
-            op: Op::KernelOp(ir::Op::Construct),
+            op: Op::KernelOp(KernelOp::Construct),
             ty,
             extent,
             ..Default::default()
@@ -285,7 +285,7 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
     };
     push_var(
         Var {
-            op: Op::KernelOp(ir::Op::Construct),
+            op: Op::KernelOp(KernelOp::Construct),
             ty,
             extent,
             ..Default::default()
@@ -398,7 +398,7 @@ macro_rules! bop {
                 $(let ty = $result_type;)?
                 push_var(
                     Var {
-                        op: Op::KernelOp(ir::Op::Bop(ir::Bop::[<$op:camel>])),
+                        op: Op::KernelOp(KernelOp::Bop(Bop::[<$op:camel>])),
                         extent,
                         ty,
                         ..Default::default()
@@ -422,7 +422,7 @@ macro_rules! uop {
                 $(let ty = $result_type;)?
                 push_var(
                     Var {
-                        op: Op::KernelOp(ir::Op::Uop(ir::Uop::[<$op:camel>])),
+                        op: Op::KernelOp(KernelOp::Uop(Uop::[<$op:camel>])),
                         extent,
                         ty,
                         ..Default::default()
@@ -477,7 +477,7 @@ impl VarRef {
 
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Uop(ir::Uop::Cast)),
+                op: Op::KernelOp(KernelOp::Uop(Uop::Cast)),
                 extent,
                 ty,
                 ..Default::default()
@@ -502,7 +502,7 @@ impl VarRef {
 
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Uop(ir::Uop::BitCast)),
+                op: Op::KernelOp(KernelOp::Uop(Uop::BitCast)),
                 extent,
                 ty,
                 ..Default::default()
@@ -519,7 +519,7 @@ impl VarRef {
         let src_ref = self.get_ref();
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Gather),
+                op: Op::KernelOp(KernelOp::Gather),
                 ty,
                 extent,
                 ..Default::default()
@@ -535,7 +535,7 @@ impl VarRef {
         let src_ref = self.get_ref();
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Gather),
+                op: Op::KernelOp(KernelOp::Gather),
                 ty,
                 extent,
                 ..Default::default()
@@ -552,7 +552,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Scatter(None)),
+                op: Op::KernelOp(KernelOp::Scatter(None)),
                 ty: VarType::Void,
                 extent,
                 ..Default::default()
@@ -570,7 +570,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Scatter(None)),
+                op: Op::KernelOp(KernelOp::Scatter(None)),
                 ty: VarType::Void,
                 extent,
                 ..Default::default()
@@ -588,7 +588,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
                 ty: VarType::Void,
                 extent,
                 ..Default::default()
@@ -606,7 +606,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
                 ty: VarType::Void,
                 extent,
                 ..Default::default()
@@ -625,7 +625,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
                 ty,
                 extent,
                 ..Default::default()
@@ -644,7 +644,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
                 ty,
                 extent,
                 ..Default::default()
@@ -711,7 +711,7 @@ impl VarRef {
         };
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Extract(elem)),
+                op: Op::KernelOp(KernelOp::Extract(elem)),
                 ty,
                 extent,
                 ..Default::default()
@@ -729,7 +729,7 @@ impl VarRef {
 
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::Select),
+                op: Op::KernelOp(KernelOp::Select),
                 ty,
                 extent,
                 ..Default::default()
@@ -755,7 +755,7 @@ impl VarRef {
 
         let composite = push_var(
             Var {
-                op: Op::KernelOp(ir::Op::TexLookup),
+                op: Op::KernelOp(KernelOp::TexLookup),
                 ty,
                 extent,
                 ..Default::default()
@@ -801,7 +801,7 @@ impl VarRef {
 
         push_var(
             Var {
-                op: Op::KernelOp(ir::Op::TraceRay),
+                op: Op::KernelOp(KernelOp::TraceRay),
                 ty: ty.clone(),
                 extent,
                 ..Default::default()

@@ -1,6 +1,78 @@
 use crate::ir;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Bop {
+    // Normal Binary Operations
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Modulus,
+    Min,
+    Max,
+    // Bitwise
+    And,
+    Or,
+    Xor,
+    // Shift
+    Shl,
+    Shr,
+
+    // Comparisons
+    Eq,
+    Neq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Uop {
+    // Casting
+    Cast,
+    BitCast,
+    // Arithmetic
+    Neg,
+    Sqrt,
+    Abs,
+    Sin,
+    Cos,
+    Exp2,
+    Log2,
+}
+
+/// Intermediary Representation Specific Operations
+#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
+pub enum KernelOp {
+    #[default]
+    Nop,
+
+    Scatter(Option<ReduceOp>),
+    Gather,
+    Index,
+    Literal,
+
+    Extract(usize),
+    Construct,
+
+    Select,
+
+    TexLookup,
+    TraceRay,
+
+    Bop(Bop),
+    Uop(Uop),
+
+    // Operations that are only available in IR
+    BufferRef,
+    TextureRef {
+        dim: usize,
+    }, // not sure if it's a good idea to put it here
+    AccelRef,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum ReduceOp {
     Max,
     Min,
@@ -48,7 +120,7 @@ pub enum Op {
     Texture,
     Accel,
     DeviceOp(DeviceOp),
-    KernelOp(ir::Op),
+    KernelOp(KernelOp),
 }
 impl Op {
     pub fn is_device_op(self) -> bool {

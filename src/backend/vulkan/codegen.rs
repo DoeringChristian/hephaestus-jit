@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
 use crate::backend::vulkan::glslext::GLSL450Instruction;
-use crate::ir::{Bop, Op, VarId, IR};
-use crate::op::ReduceOp;
+use crate::ir::{VarId, IR};
+use crate::op::{Bop, KernelOp, ReduceOp, Uop};
 use crate::vartype::{AsVarType, Intersection, VarType};
 use lazy_static::lazy_static;
 use rspirv::binary::{Assemble, Disassemble};
@@ -155,7 +155,7 @@ impl SpirvBuilder {
 
         // Add ray query capability only if it is needed
         // TODO: Refactor into properties?
-        if ir.vars.iter().any(|var| var.op == Op::TraceRay) {
+        if ir.vars.iter().any(|var| var.op == KernelOp::TraceRay) {
             self.capability(spirv::Capability::RayQueryKHR);
         }
 
@@ -716,8 +716,8 @@ impl SpirvBuilder {
             let var = ir.var(varid);
             let deps = ir.deps(varid);
             let res = match var.op {
-                Op::Nop => 0,
-                Op::Bop(bop) => {
+                KernelOp::Nop => 0,
+                KernelOp::Bop(bop) => {
                     let res = self.id();
                     let lhs = self.reg(deps[0]);
                     let rhs = self.reg(deps[1]);
@@ -993,7 +993,7 @@ impl SpirvBuilder {
                     };
                     res
                 }
-                Op::Uop(op) => {
+                KernelOp::Uop(op) => {
                     // let res = self.id();
                     let src = self.reg(deps[0]);
                     let ty = &var.ty;
@@ -1001,7 +1001,7 @@ impl SpirvBuilder {
                     let spirv_ty = self.spirv_ty(&var.ty);
 
                     match op {
-                        crate::ir::Uop::Cast => match (src_ty, ty) {
+                        Uop::Cast => match (src_ty, ty) {
                             (
                                 VarType::F16 | VarType::F32 | VarType::F64,
                                 VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64,
@@ -1042,8 +1042,8 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        crate::ir::Uop::BitCast => self.bitcast(spirv_ty, None, src)?,
-                        crate::ir::Uop::Neg => match ty {
+                        Uop::BitCast => self.bitcast(spirv_ty, None, src)?,
+                        Uop::Neg => match ty {
                             VarType::Bool => self.logical_not(spirv_ty, None, src)?,
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.s_negate(spirv_ty, None, src)?
@@ -1053,12 +1053,12 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        crate::ir::Uop::Sqrt => {
+                        Uop::Sqrt => {
                             let res = self.id();
                             glsl_ext!(self; res: spirv_ty = Sqrt, src);
                             res
                         }
-                        crate::ir::Uop::Abs => {
+                        Uop::Abs => {
                             let res = self.id();
                             match ty {
                                 VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
@@ -1071,7 +1071,7 @@ impl SpirvBuilder {
                             };
                             res
                         }
-                        crate::ir::Uop::Sin => {
+                        Uop::Sin => {
                             let res = self.id();
                             match ty {
                                 VarType::F16 | VarType::F32 | VarType::F64 => {
@@ -1081,7 +1081,7 @@ impl SpirvBuilder {
                             }
                             res
                         }
-                        crate::ir::Uop::Cos => {
+                        Uop::Cos => {
                             let res = self.id();
                             match ty {
                                 VarType::F16 | VarType::F32 | VarType::F64 => {
@@ -1091,7 +1091,7 @@ impl SpirvBuilder {
                             }
                             res
                         }
-                        crate::ir::Uop::Exp2 => {
+                        Uop::Exp2 => {
                             let res = self.id();
                             match ty {
                                 VarType::F16 | VarType::F32 | VarType::F64 => {
@@ -1101,7 +1101,7 @@ impl SpirvBuilder {
                             }
                             res
                         }
-                        crate::ir::Uop::Log2 => {
+                        Uop::Log2 => {
                             let res = self.id();
                             match ty {
                                 VarType::F16 | VarType::F32 | VarType::F64 => {
@@ -1113,23 +1113,23 @@ impl SpirvBuilder {
                         }
                     }
                 }
-                Op::Select => {
+                KernelOp::Select => {
                     let ty = self.spirv_ty(&var.ty);
                     let cond = self.reg(deps[0]);
                     let true_val = self.reg(deps[1]);
                     let false_val = self.reg(deps[2]);
                     self.select(ty, None, cond, true_val, false_val)?
                 }
-                Op::Construct => {
+                KernelOp::Construct => {
                     let deps = deps.iter().map(|id| self.reg(*id)).collect::<Vec<_>>();
                     self.composite_construct(&var.ty, deps)?
                 }
-                Op::Extract(elem) => {
+                KernelOp::Extract(elem) => {
                     let ty = self.spirv_ty(&ir.var(varid).ty);
                     let src = self.reg(deps[0]);
                     self.composite_extract(ty, None, src, [elem as u32])?
                 }
-                Op::TraceRay => {
+                KernelOp::TraceRay => {
                     let accels = deps[0];
                     let accel_idx = ir.var(accels).data;
                     let o = deps[1];
@@ -1246,12 +1246,12 @@ impl SpirvBuilder {
 
                     intersection
                 }
-                Op::TexLookup => {
+                KernelOp::TexLookup => {
                     let img = deps[0];
                     let coord = self.reg(deps[1]);
 
                     let dim = match ir.var(img).op {
-                        Op::TextureRef { dim } => match dim {
+                        KernelOp::TextureRef { dim } => match dim {
                             1 => spirv::Dim::Dim1D,
                             2 => spirv::Dim::Dim2D,
                             3 => spirv::Dim::Dim3D,
@@ -1298,7 +1298,7 @@ impl SpirvBuilder {
                         [dr::Operand::IdRef(float_0)],
                     )?
                 }
-                Op::Scatter(reduce_op) => {
+                KernelOp::Scatter(reduce_op) => {
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];
@@ -1345,7 +1345,7 @@ impl SpirvBuilder {
                         self.store_reduce(src, ptr, ty, &reduce_op)?.unwrap_or(0)
                     }
                 }
-                Op::Gather => {
+                KernelOp::Gather => {
                     let src = deps[0];
                     let idx = deps[1];
                     let cond = deps.get(2);
@@ -1430,7 +1430,7 @@ impl SpirvBuilder {
                         }
                     }
                 }
-                Op::Index => {
+                KernelOp::Index => {
                     let u32_ty = self.type_int(32, 0);
                     let ptr_ty = self.type_pointer(None, spirv::StorageClass::Input, u32_ty);
                     let u32_0 = self.constant_bit32(u32_ty, 0);
@@ -1438,7 +1438,7 @@ impl SpirvBuilder {
 
                     self.load(u32_ty, None, ptr, None, None)?
                 }
-                Op::Literal => {
+                KernelOp::Literal => {
                     let ty = self.spirv_ty(&var.ty);
                     match &var.ty {
                         VarType::Bool => {
