@@ -169,7 +169,7 @@ impl Graph {
 
         device.execute_graph(self, &env).unwrap();
 
-        // Update output variables and graph input variables
+        // Update data of output variables and graph input variables.
         trace::with_trace(|trace| {
             for (i, buffer) in env.buffers.into_iter().map(|r| r.unwrap()).enumerate() {
                 let desc = &self.buffer_descs[i];
