@@ -41,7 +41,7 @@ pub struct GraphBuilder {
 impl GraphBuilder {
     pub fn try_push_resource(
         &mut self,
-        trace: &mut trace::Trace,
+        trace: &trace::Trace,
         id: trace::VarId,
     ) -> Option<ResourceId> {
         if let Some(id) = self.resources.get_index_of(&id) {
@@ -141,6 +141,8 @@ impl Graph {
                         // 1. The trace of this thread (if the variable is still alive)
                         // 2. The resources maintained by this graph
                         // 3. Creating new resources
+                        // TODO: simplify data->resource and resource->data conversions (maybe add
+                        // resource as subelement in data)
                         if let Some(resource) = trace.get_var(*id).and_then(|var| match desc {
                             ResourceDesc::BufferDesc(_) => {
                                 Some(Resource::Buffer(var.data.buffer().cloned()?))
@@ -200,18 +202,12 @@ impl Graph {
 pub struct PassId(usize);
 
 #[derive(Debug, Clone, Copy)]
-pub struct BufferId(pub usize);
-#[derive(Debug, Clone, Copy)]
-pub struct TextureId(pub usize);
-#[derive(Debug, Clone, Copy)]
-pub struct AccelId(pub usize);
-#[derive(Debug, Clone, Copy)]
 pub struct ResourceId(pub usize);
 
 #[derive(Default, Debug)]
 pub struct Pass {
     pub resources: Vec<ResourceId>,
-    pub size_buffer: Option<BufferId>,
+    pub size_buffer: Option<ResourceId>,
     pub op: PassOp,
 }
 
