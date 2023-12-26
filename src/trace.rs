@@ -12,6 +12,14 @@ use crate::{backend, ir};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
+/// This struct describes a set of variables, which are scheduled for evaluation as well as groups
+/// of these variables, that can be evaluated at once.
+/// Where mitsuba calles `dr.eval` for certain operations, which causes evaluation and potential
+/// CPU side stalls, we just record these evaluations by calling [schedule_eval].
+///
+/// We also deduplicate scheduled variables using the [Self::var_set] hash set, allowing a variable
+/// to only be scheduled once.
+///
 #[derive(Debug, Default)]
 pub struct Schedule {
     pub var_set: HashSet<VarId>,
@@ -39,6 +47,10 @@ thread_local! {
     pub static SCHEDULE: RefCell<Schedule> = RefCell::new(Default::default());
 }
 
+///
+/// A Directed Acyclic Graph (DAG), representing the traced computations.
+/// Variables are tracked using reference counters, similar to mitsuba.
+///
 #[derive(Default, Debug)]
 pub struct Trace {
     entries: SlotMap<DefaultKey, Entry>,
@@ -72,15 +84,18 @@ impl Trace {
     pub fn inc_rc(&mut self, id: VarId) {
         self.entries[id.0].rc += 1;
     }
+    ///
+    /// Decrement the reference count of an entry in the trace.
+    /// If the [Entry::rc] reaches 0, delte the variable and decrement the [Entry::rc] values of
+    /// it's dependencies.
+    ///
     pub fn dec_rc(&mut self, id: VarId) {
-        let var = self.var_mut(id);
         let entry = &mut self.entries[id.0];
         entry.rc -= 1;
         if entry.rc == 0 {
             for dep in entry.deps.clone() {
                 self.dec_rc(dep);
             }
-            let var = self.var_mut(id);
             self.entries.remove(id.0);
         }
     }
@@ -98,9 +113,18 @@ impl Drop for Trace {
     }
 }
 
+///
+/// This struct represents the id to a variable in the trace.
+/// It allows for internal references within the trace, without causing reference counters to
+/// change when copying.
+///
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(DefaultKey);
 
+///
+/// This is a wrapper over the [VarId] id struct.
+/// In contrast to [VarId], [VarRef] causes reference counter increments/decrements on clone/drop
+///
 pub struct VarRef {
     id: VarId,
     _thread_id: ThreadId,
@@ -132,6 +156,10 @@ impl Drop for VarRef {
     }
 }
 
+///
+/// A entry in the trace, wrapping a [Var] struct.
+/// It is responsible for holding dependencies and reference counting.
+///
 #[derive(Debug, Default)]
 pub struct Entry {
     pub(crate) deps: Vec<VarId>,
@@ -139,6 +167,10 @@ pub struct Entry {
     pub(crate) rc: usize,
 }
 
+///
+/// The [Var] struct represents a variable in the trace.
+/// Every variable is the result of some operation [Op] and might hold some [Resource].
+///
 #[derive(Debug, Default)]
 pub struct Var {
     pub op: Op,         // Operation used to construct the variable
@@ -155,6 +187,14 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
         f(&mut t)
     })
 }
+///
+/// This function is used to push a Variable ([Var]) to the trace.
+/// It takes care of certain special cases, such as:
+/// - scheduling device wide dependencies
+/// - scheduling evaluation of the previous group if the variable represents a device wide operation
+/// - scheduling evaluation of the previous group if the variable depends on 'dirty' variables
+/// - scheduling evaluation of the current group if the variable represents a device wide operation
+///
 fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
@@ -168,7 +208,8 @@ fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
         })
         .collect::<Vec<_>>();
 
-    // Schedule evaluation in some cases
+    // Schedule the current group for evaluation if the variable is a device wide operation or it
+    // depends on a variable marked dirty
     if is_device_op {
         schedule_eval();
     }
@@ -190,6 +231,11 @@ fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     res
 }
 
+///
+/// Compiles the currently scheduled variables (see [Schedule]) into a [graph::Graph], which can be
+/// launched on any device.
+/// This captures the current environment (variables which are already evaluated).
+///
 pub fn compile() -> graph::Graph {
     schedule_eval();
     SCHEDULE.with(|s| {
@@ -199,6 +245,9 @@ pub fn compile() -> graph::Graph {
         graph
     })
 }
+///
+/// Schedules the current group of scheduled variables for evaluation (see [Schedule]).
+///
 pub fn schedule_eval() {
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
@@ -207,6 +256,10 @@ pub fn schedule_eval() {
 }
 
 // Trace Functions
+
+///
+/// Returns a variable that represents a global index within a kernel.
+///
 pub fn index(size: usize) -> VarRef {
     push_var(
         Var {
@@ -218,9 +271,18 @@ pub fn index(size: usize) -> VarRef {
         [],
     )
 }
+///
+/// Returns a variable representing a literal within a kernel.
+/// In contrast to [sized_literal], it cannot be evaluated.
+///
 pub fn literal<T: AsVarType>(val: T) -> VarRef {
     sized_literal(val, 0)
 }
+///
+/// Returns a variable representing a literal within a kernel.
+/// This operation also has an inpact on the size of variables depending on it.
+/// It might be used to initialize buffers for device operations.
+///
 pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     let ty = T::var_ty();
     let mut data = 0;
@@ -236,6 +298,11 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
         [],
     )
 }
+///
+/// Returns a variable, representing an array on the device.
+/// It requires a reference to the device to which the data should be uploaded and is the only user
+/// space function to do so.
+///
 pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
     let ty = T::var_ty();
     let size = slice.len();
@@ -253,11 +320,17 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
         [],
     )
 }
+///
+/// Returns the [Extent], resulting from an operation on some variables.
+///
 fn resulting_extent<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> Extent {
     refs.into_iter()
         .map(|r| r.extent())
         .fold(Default::default(), |a, b| a.resulting_extent(&b))
 }
+///
+/// Creates a composite struct, over a number of variables.
+///
 pub fn composite(refs: &[&VarRef]) -> VarRef {
     let tys = refs.iter().map(|r| r.ty()).collect();
     let ty = VarType::Struct { tys };
@@ -275,6 +348,10 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
         refs.into_iter().cloned(),
     )
 }
+///
+/// Returns a variable of type [VarType::Vec], from the elements given.
+/// The input variables should all have the same type.
+///
 pub fn vec(refs: &[&VarRef]) -> VarRef {
     // TODO: validate
     //
@@ -367,6 +444,7 @@ impl VarRef {
     pub fn same_trace(&self, other: &VarRef) -> bool {
         self._thread_id == other._thread_id
     }
+    /// Schedule the variable for execution in the current group
     pub fn schedule(&self) {
         if self.evaluated() {
             return;
