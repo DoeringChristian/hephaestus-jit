@@ -10,6 +10,7 @@ use crate::graph::Graph;
 use crate::ir::IR;
 use crate::trace;
 use crate::vartype::AsVarType;
+use crate::vartype::VarType;
 
 use self::vulkan::VulkanAccel;
 
@@ -98,6 +99,17 @@ impl Device {
                     .collect::<Vec<_>>();
                 device.execute_ir(ir, num, &buffers)
             }
+        }
+    }
+    pub fn create_resource(&self, desc: &ResourceDesc) -> Result<Resource> {
+        match desc {
+            ResourceDesc::BufferDesc(desc) => Ok(Resource::Buffer(
+                self.create_buffer(desc.size * desc.ty.size())?,
+            )),
+            ResourceDesc::TextureDesc(desc) => Ok(Resource::Texture(
+                self.create_texture(desc.shape, desc.channels)?,
+            )),
+            ResourceDesc::AccelDesc(desc) => Ok(Resource::Accel(self.create_accel(desc)?)),
         }
     }
 }
@@ -226,4 +238,29 @@ pub enum GeometryDesc {
 pub struct AccelDesc {
     pub geometries: Vec<GeometryDesc>,
     pub instances: usize,
+}
+
+#[derive(Debug)]
+pub struct BufferDesc {
+    pub size: usize,
+    pub ty: VarType,
+}
+#[derive(Debug)]
+pub struct TextureDesc {
+    pub shape: [usize; 3],
+    pub channels: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum Resource {
+    Buffer(Buffer),
+    Texture(Texture),
+    Accel(Accel),
+}
+
+#[derive(Debug)]
+pub enum ResourceDesc {
+    BufferDesc(BufferDesc),
+    TextureDesc(TextureDesc),
+    AccelDesc(AccelDesc),
 }

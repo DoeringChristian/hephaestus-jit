@@ -4,6 +4,7 @@ use crate::data::Data;
 use crate::extent::Extent;
 use crate::vartype::VarType;
 use crate::{compiler, ir, op, trace};
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,10 +17,38 @@ pub struct GraphBuilder {
     id2texture: HashMap<trace::VarId, TextureId>,
     accels: Vec<trace::VarId>,
     id2accel: HashMap<trace::VarId, AccelId>,
+    resources: IndexMap<trace::VarId, backend::ResourceDesc>,
     passes: Vec<Pass>,
 }
 
 impl GraphBuilder {
+    pub fn try_push_resource(
+        &mut self,
+        trace: &trace::Trace,
+        id: trace::VarId,
+    ) -> Option<ResourceId> {
+        // let entry = self.resources.entry(id);
+        // let id = ResourceId(entry.index());
+        if let Some(id) = self.resources.get_index_of(&id) {
+            Some(ResourceId(id))
+        } else {
+            let var = trace.var(id);
+            let desc = match var.op.resulting_op() {
+                op::Op::Buffer => backend::ResourceDesc::BufferDesc(backend::BufferDesc {
+                    size: var.extent.capacity(),
+                    ty: var.ty.clone(),
+                }),
+                op::Op::Texture => {
+                    let (shape, channels) = var.extent.shape_and_channles();
+
+                    backend::ResourceDesc::TextureDesc(backend::TextureDesc { shape, channels })
+                }
+                op::Op::Accel => backend::ResourceDesc::AccelDesc(var.extent.accel_desc().clone()),
+                _ => return None,
+            };
+            Some(ResourceId(self.resources.insert_full(id, desc).0))
+        }
+    }
     pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
         // TODO: use better method to get VarRef
         *self.id2buffer.entry(id).or_insert_with(|| {
@@ -52,54 +81,20 @@ impl GraphBuilder {
 
 #[derive(Debug, Default, Clone)]
 pub struct Env {
-    buffers: Vec<Option<backend::Buffer>>,
-    textures: Vec<Option<backend::Texture>>,
-    accels: Vec<Option<backend::Accel>>,
+    resources: Vec<Option<backend::Resource>>,
 }
-impl Env {
-    pub fn buffer(&self, id: BufferId) -> &backend::Buffer {
-        self.buffers[id.0].as_ref().unwrap()
-    }
-    pub fn texture(&self, id: TextureId) -> &backend::Texture {
-        self.textures[id.0].as_ref().unwrap()
-    }
-    pub fn accel(&self, id: AccelId) -> &backend::Accel {
-        self.accels[id.0].as_ref().unwrap()
-    }
-}
+impl Env {}
 
 #[derive(Debug)]
 pub struct Graph {
     pub passes: Vec<Pass>,
-    pub buffer_descs: Vec<BufferDesc>,
-    pub texture_descs: Vec<TextureDesc>,
-    pub accel_descs: Vec<AccelDesc>,
+    pub resource_descs: Vec<backend::ResourceDesc>,
+    pub resource_ids: Vec<trace::VarId>,
     pub env: Env,
     pub schedule: Vec<trace::VarRef>,
 }
 
 impl Graph {
-    pub fn buffer_ids(&self) -> impl Iterator<Item = BufferId> {
-        (0..self.buffer_descs.len()).map(|i| BufferId(i))
-    }
-    pub fn buffer_desc(&self, buffer_id: BufferId) -> &BufferDesc {
-        &self.buffer_descs[buffer_id.0]
-    }
-
-    pub fn texture_ids(&self) -> impl Iterator<Item = TextureId> {
-        (0..self.buffer_descs.len()).map(|i| TextureId(i))
-    }
-    pub fn texture_desc(&self, texture_id: TextureId) -> &TextureDesc {
-        &self.texture_descs[texture_id.0]
-    }
-
-    pub fn accel_ids(&self) -> impl Iterator<Item = AccelId> {
-        (0..self.buffer_descs.len()).map(|i| AccelId(i))
-    }
-    pub fn accel_desc(&self, accel_id: AccelId) -> &AccelDesc {
-        &self.accel_descs[accel_id.0]
-    }
-
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
@@ -110,6 +105,11 @@ impl Graph {
         // This would however also mean changes to the IR representation
         let mut env = Env::default();
         trace::with_trace(|trace| {
+            env.resources = self.resource_ids.iter().enumerate().map(|(i, id)|{
+                Some(
+                    match 
+                )
+            })
             env.buffers = self
                 .buffer_descs
                 .iter()
@@ -213,12 +213,15 @@ pub struct BufferId(pub usize);
 pub struct TextureId(pub usize);
 #[derive(Debug, Clone, Copy)]
 pub struct AccelId(pub usize);
+#[derive(Debug, Clone, Copy)]
+pub struct ResourceId(pub usize);
 
 #[derive(Default, Debug)]
 pub struct Pass {
-    pub buffers: Vec<BufferId>,
-    pub textures: Vec<TextureId>,
-    pub accels: Vec<AccelId>,
+    // pub buffers: Vec<BufferId>,
+    // pub textures: Vec<TextureId>,
+    // pub accels: Vec<AccelId>,
+    pub resources: Vec<ResourceId>,
     pub size_buffer: Option<BufferId>,
     pub op: PassOp,
 }
@@ -315,32 +318,16 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 op::Op::DeviceOp(op) => {
                     let deps = trace.deps(id).to_vec();
 
-                    let mut buffers = vec![];
-                    let mut textures = vec![];
-                    let mut accels = vec![];
-
                     // TODO: Improve the readability here. atm. we are pushing all the
                     // dependenceis into multiple vecs starting with [id]
-                    for id in [id].iter().chain(deps.iter()) {
-                        match trace.var(*id).op.resulting_op() {
-                            op::Op::Buffer => {
-                                buffers.push(graph_builder.push_buffer(trace, *id));
-                            }
-                            op::Op::Texture { .. } => {
-                                textures.push(graph_builder.push_texture(trace, *id));
-                            }
-                            op::Op::Accel => {
-                                accels.push(graph_builder.push_accel(trace, *id));
-                            }
-                            _ => {
-                                log::trace!("No valid resulting operation, skipping!");
-                            }
-                        };
-                    }
+                    let resources = [id]
+                        .iter()
+                        .chain(deps.iter())
+                        .flat_map(|id| graph_builder.try_push_resource(trace, *id))
+                        .collect();
+
                     graph_builder.push_pass(Pass {
-                        buffers,
-                        textures,
-                        accels,
+                        resources,
                         size_buffer: None,
                         op: PassOp::DeviceOp(op),
                     })
@@ -353,26 +340,16 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
 
             compiler.collect_vars(trace, group.clone().map(|i| vars[i].id()));
 
-            let buffers = compiler
+            let resources = compiler
                 .buffers
                 .iter()
-                .map(|id| graph_builder.push_buffer(trace, *id))
-                .collect::<Vec<_>>();
-            let textures = compiler
-                .textures
-                .iter()
-                .map(|id| graph_builder.push_texture(trace, *id))
-                .collect::<Vec<_>>();
-            let accels = compiler
-                .accels
-                .iter()
-                .map(|id| graph_builder.push_accel(trace, *id))
-                .collect::<Vec<_>>();
+                .chain(compiler.textures.iter())
+                .chain(compiler.accels.iter())
+                .map(|id| graph_builder.try_push_resource(trace, *id).unwrap())
+                .collect();
             let size = trace.var(vars[group.start].id()).extent.size();
             let pass = Pass {
-                buffers,
-                textures,
-                accels,
+                resources,
                 size_buffer: None,
                 op: PassOp::Kernel {
                     ir: compiler.ir,
@@ -394,50 +371,6 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         }
     }
 
-    // Collect descriptors and input resources
-    let (buffer_descs, buffers): (Vec<_>, Vec<_>) = graph_builder
-        .buffers
-        .into_iter()
-        .map(|id| {
-            let var = trace.var_mut(id);
-            let size = var.extent.capacity();
-
-            (
-                BufferDesc {
-                    size,
-                    ty: var.ty.clone(),
-                    var_id: id,
-                },
-                var.data.buffer().cloned(),
-            )
-        })
-        .unzip();
-    let (texture_descs, textures): (Vec<_>, Vec<_>) = graph_builder
-        .textures
-        .into_iter()
-        .map(|id| {
-            let var = trace.var_mut(id);
-            let (shape, channels) = var.extent.shape_and_channles();
-            (
-                TextureDesc {
-                    shape,
-                    channels,
-                    var_id: id,
-                },
-                var.data.texture().cloned(),
-            )
-        })
-        .unzip();
-    let (accel_descs, accels): (Vec<_>, Vec<_>) = graph_builder
-        .accels
-        .into_iter()
-        .map(|id| {
-            let var = trace.var_mut(id);
-            let desc = var.extent.accel_desc().clone();
-            (AccelDesc { desc, var_id: id }, var.data.accel().cloned())
-        })
-        .unzip();
-
     // Cleanup
     for group in groups {
         // Clear Dependecies for schedule variables
@@ -458,16 +391,32 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         }
     }
 
+    let (ids, resource_descs): (Vec<_>, Vec<_>) = graph_builder.resources.into_iter().unzip();
+
+    let resources = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| -> Option<backend::Resource> {
+            let var = trace.var(*id);
+            Some(match resource_descs[i] {
+                backend::ResourceDesc::BufferDesc(_) => {
+                    backend::Resource::Buffer(var.data.buffer().cloned()?)
+                }
+                backend::ResourceDesc::TextureDesc(_) => {
+                    backend::Resource::Texture(var.data.texture().cloned()?)
+                }
+                backend::ResourceDesc::AccelDesc(_) => {
+                    backend::Resource::Accel(var.data.accel().cloned()?)
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
     let graph = Graph {
         passes: graph_builder.passes,
-        buffer_descs,
-        texture_descs,
-        accel_descs,
-        env: Env {
-            buffers,
-            textures,
-            accels,
-        },
+        resource_descs,
+        resource_ids: ids,
+        env: Env { resources },
         schedule: vars,
     };
     graph
