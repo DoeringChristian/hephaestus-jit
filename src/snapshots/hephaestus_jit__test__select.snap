@@ -5,16 +5,14 @@ expression: graph
 Graph {
     passes: [
         Pass {
-            buffers: [
-                BufferId(
+            resources: [
+                ResourceId(
                     0,
                 ),
-                BufferId(
+                ResourceId(
                     1,
                 ),
             ],
-            textures: [],
-            accels: [],
             size_buffer: None,
             op: Kernel {
                 ir: IR {
@@ -142,41 +140,47 @@ Graph {
             },
         },
     ],
-    buffer_descs: [
-        BufferDesc {
-            size: 2,
-            ty: Bool,
-            var_id: VarId(
+    resource_descs: [
+        (
+            VarId(
                 DefaultKey(
                     1v1,
                 ),
             ),
-        },
-        BufferDesc {
-            size: 2,
-            ty: I32,
-            var_id: VarId(
+            BufferDesc(
+                BufferDesc {
+                    size: 2,
+                    ty: Bool,
+                },
+            ),
+        ),
+        (
+            VarId(
                 DefaultKey(
                     4v1,
                 ),
             ),
-        },
+            BufferDesc(
+                BufferDesc {
+                    size: 2,
+                    ty: I32,
+                },
+            ),
+        ),
     ],
-    texture_descs: [],
-    accel_descs: [],
     env: Env {
-        buffers: [
+        resources: [
             Some(
-                VulkanBuffer(
-                    VulkanBuffer {
-                        size: 2,
-                    },
+                Buffer(
+                    VulkanBuffer(
+                        VulkanBuffer {
+                            size: 2,
+                        },
+                    ),
                 ),
             ),
             None,
         ],
-        textures: [],
-        accels: [],
     },
     schedule: [
         VarRef {

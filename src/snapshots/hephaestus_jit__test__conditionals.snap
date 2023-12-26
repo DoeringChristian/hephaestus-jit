@@ -5,13 +5,11 @@ expression: graph
 Graph {
     passes: [
         Pass {
-            buffers: [
-                BufferId(
+            resources: [
+                ResourceId(
                     0,
                 ),
             ],
-            textures: [],
-            accels: [],
             size_buffer: None,
             op: Kernel {
                 ir: IR {
@@ -79,25 +77,25 @@ Graph {
             },
         },
     ],
-    buffer_descs: [
-        BufferDesc {
-            size: 100,
-            ty: Bool,
-            var_id: VarId(
+    resource_descs: [
+        (
+            VarId(
                 DefaultKey(
                     1v1,
                 ),
             ),
-        },
+            BufferDesc(
+                BufferDesc {
+                    size: 100,
+                    ty: Bool,
+                },
+            ),
+        ),
     ],
-    texture_descs: [],
-    accel_descs: [],
     env: Env {
-        buffers: [
+        resources: [
             None,
         ],
-        textures: [],
-        accels: [],
     },
     schedule: [
         VarRef {

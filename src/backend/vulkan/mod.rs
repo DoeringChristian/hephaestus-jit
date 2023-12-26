@@ -157,19 +157,22 @@ impl backend::BackendDevice for VulkanDevice {
 
         for pass in graph.passes.iter() {
             let buffers = pass
-                .buffers
+                .resources
                 .iter()
-                .map(|id| env.buffer(*id).vulkan().unwrap().buffer.clone())
+                .flat_map(|id| env.buffer(*id))
+                .map(|buffer| buffer.vulkan().unwrap().buffer.clone())
                 .collect::<Vec<_>>();
             let images = pass
-                .textures
+                .resources
                 .iter()
-                .map(|id| env.texture(*id).vulkan().unwrap().image.clone())
+                .flat_map(|id| env.texture(*id))
+                .map(|texture| texture.vulkan().unwrap().image.clone())
                 .collect::<Vec<_>>();
             let accels = pass
-                .accels
+                .resources
                 .iter()
-                .map(|id| env.accel(*id).vulkan().unwrap().accel.clone())
+                .flat_map(|id| env.accel(*id))
+                .map(|accel| accel.vulkan().unwrap().accel.clone())
                 .collect::<Vec<_>>();
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
@@ -228,15 +231,15 @@ impl backend::BackendDevice for VulkanDevice {
                     DeviceOp::ReduceOp(op) => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
-                        let ty = &graph.buffer_desc(pass.buffers[0]).ty;
-                        let num = graph.buffer_desc(pass.buffers[1]).size;
+                        let ty = &graph.buffer_desc(pass.resources[0]).ty;
+                        let num = graph.buffer_desc(pass.resources[1]).size;
                         self.reduce(&mut rgraph, *op, &ty, num, &src, &dst);
                     }
                     DeviceOp::PrefixSum { inclusive } => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
-                        let ty = &graph.buffer_desc(pass.buffers[0]).ty;
-                        let num = graph.buffer_desc(pass.buffers[1]).size;
+                        let ty = &graph.buffer_desc(pass.resources[0]).ty;
+                        let num = graph.buffer_desc(pass.resources[1]).size;
                         self.prefix_sum(&mut rgraph, &ty, num, *inclusive, &src, &dst);
                     }
                     DeviceOp::Compress => {
@@ -244,7 +247,7 @@ impl backend::BackendDevice for VulkanDevice {
                         let count_out = buffers[1].clone();
                         let src = buffers[2].clone();
 
-                        let num = graph.buffer_desc(pass.buffers[2]).size;
+                        let num = graph.buffer_desc(pass.resources[2]).size;
 
                         // if num <= 1024 {
                         //     self.compress_small(
@@ -259,8 +262,8 @@ impl backend::BackendDevice for VulkanDevice {
                         dst.copy_from_buffer(&mut rgraph, &src);
                     }
                     DeviceOp::BuildAccel => {
-                        let accel_desc = graph.accel_desc(pass.accels[0]);
-                        self.build_accel(&mut rgraph, &accel_desc.desc, &accels[0], buffers.iter());
+                        let accel_desc = graph.accel_desc(pass.resources[0]);
+                        self.build_accel(&mut rgraph, &accel_desc, &accels[0], buffers.iter());
                     }
                 },
                 _ => todo!(),

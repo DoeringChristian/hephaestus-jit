@@ -5,13 +5,11 @@ expression: graph
 Graph {
     passes: [
         Pass {
-            buffers: [
-                BufferId(
+            resources: [
+                ResourceId(
                     0,
                 ),
             ],
-            textures: [],
-            accels: [],
             size_buffer: None,
             op: Kernel {
                 ir: IR {
@@ -79,16 +77,14 @@ Graph {
             },
         },
         Pass {
-            buffers: [
-                BufferId(
+            resources: [
+                ResourceId(
                     0,
                 ),
-                BufferId(
+                ResourceId(
                     1,
                 ),
             ],
-            textures: [],
-            accels: [],
             size_buffer: None,
             op: Kernel {
                 ir: IR {
@@ -192,41 +188,47 @@ Graph {
             },
         },
     ],
-    buffer_descs: [
-        BufferDesc {
-            size: 10,
-            ty: I32,
-            var_id: VarId(
+    resource_descs: [
+        (
+            VarId(
                 DefaultKey(
                     1v1,
                 ),
             ),
-        },
-        BufferDesc {
-            size: 10,
-            ty: Bool,
-            var_id: VarId(
+            BufferDesc(
+                BufferDesc {
+                    size: 10,
+                    ty: I32,
+                },
+            ),
+        ),
+        (
+            VarId(
                 DefaultKey(
                     2v1,
                 ),
             ),
-        },
+            BufferDesc(
+                BufferDesc {
+                    size: 10,
+                    ty: Bool,
+                },
+            ),
+        ),
     ],
-    texture_descs: [],
-    accel_descs: [],
     env: Env {
-        buffers: [
+        resources: [
             None,
             Some(
-                VulkanBuffer(
-                    VulkanBuffer {
-                        size: 10,
-                    },
+                Buffer(
+                    VulkanBuffer(
+                        VulkanBuffer {
+                            size: 10,
+                        },
+                    ),
                 ),
             ),
         ],
-        textures: [],
-        accels: [],
     },
     schedule: [
         VarRef {
