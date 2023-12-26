@@ -1,7 +1,7 @@
 use crate::backend::Buffer;
-use crate::resource::Resource;
 use crate::ir::{self, IR};
 use crate::op::{self, KernelOp, Op};
+use crate::resource::Resource;
 use crate::trace::{self, Trace};
 use crate::vartype::VarType;
 use std::collections::HashMap;

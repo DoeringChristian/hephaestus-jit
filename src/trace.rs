@@ -4,9 +4,9 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::thread::ThreadId;
 
-use crate::resource::Resource;
 use crate::extent::Extent;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
+use crate::resource::Resource;
 use crate::vartype::{AsVarType, Instance, Intersection, VarType};
 use crate::{backend, ir};
 use crate::{compiler, graph};
