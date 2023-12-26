@@ -333,6 +333,8 @@ impl SpirvBuilder {
 
         Ok(())
     }
+    /// Represents an if condition.
+    /// Returns the label of the true bloc
     fn if_block(&mut self, cond: u32, f: impl FnOnce(&mut Self)) -> u32 {
         let ty_bool = self.type_bool();
         let bool_true = self.constant_true(ty_bool);
@@ -369,10 +371,6 @@ impl SpirvBuilder {
         self.branch(false_label).unwrap();
 
         self.begin_block(Some(false_label)).unwrap();
-        // let dummy_block = self.id();
-        // self.branch(dummy_block).unwrap();
-        //
-        // self.begin_block(Some(dummy_block)).unwrap();
 
         true_label
     }
@@ -1404,7 +1402,6 @@ impl SpirvBuilder {
                             };
                             result_true = res;
                         });
-                        // self.load(spirv_ty, None, res_var, None, None).
                         self.phi(
                             spirv_ty,
                             None,

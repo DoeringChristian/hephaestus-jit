@@ -290,8 +290,7 @@ fn conditional_gather() {
     dbg!(&graph);
     graph.launch(&device);
 
-    dbg!(dst.to_vec::<i32>());
-    // assert_eq!(dst.to_vec::<i32>(), )
+    assert_eq!(dst.to_vec::<i32>(), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0]);
 }
 #[test]
 fn select() {
