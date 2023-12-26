@@ -192,7 +192,6 @@ impl Accel {
 
         {
             let n_instances = self.info.instances;
-            let desc = desc;
             let desc_instance_buffer = desc.instances.clone();
             let instance_buffer = self.instance_buffer.clone();
             rgraph

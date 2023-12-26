@@ -276,9 +276,6 @@ impl AccelerationStructure {
         }
         pass.write(self, AccessType::AccelerationStructureBuildWrite)
             .record(move |device, cb, _| unsafe {
-                let geometries = geometries;
-                let build_ranges = build_ranges;
-
                 // We need to construct geometry_info here, because vulkan uses pointers
                 let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
                     .ty(s.info.ty)
