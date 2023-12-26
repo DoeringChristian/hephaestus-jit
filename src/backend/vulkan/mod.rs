@@ -3,7 +3,6 @@ mod codegen;
 mod compress;
 mod glslext;
 mod pipeline;
-mod pool;
 mod prefix_sum;
 // pub mod presenter;
 mod reduce;
@@ -21,7 +20,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use crate::backend;
-use crate::backend::vulkan::pool::Pool;
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;

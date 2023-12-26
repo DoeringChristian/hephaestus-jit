@@ -12,7 +12,6 @@ use crate::backend::vulkan::vulkan_core::buffer::BufferInfo;
 use crate::op::ReduceOp;
 use crate::vartype::VarType;
 
-use super::pool::{Lease, Pool};
 use super::vkdevice::LaunchConfig;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::graph::RGraph;

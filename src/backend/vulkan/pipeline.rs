@@ -9,7 +9,6 @@ use crate::ir::IR;
 
 use super::accel::Accel;
 use super::codegen::CompileInfo;
-use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::device::Device;
 use super::vulkan_core::graph::RGraphPool;
@@ -19,10 +18,7 @@ use ash::vk;
 #[derive(Debug)]
 pub struct Pipeline {
     device: Device,
-    // desc_sets: Vec<vk::DescriptorSet>,
     desc_set_layouts: Vec<vk::DescriptorSetLayout>,
-    // desc_pool: vk::DescriptorPool,
-    // descriptor_pool: vk::DescriptorPool,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
 }

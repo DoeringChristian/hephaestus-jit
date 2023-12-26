@@ -10,7 +10,6 @@ use crate::backend::vulkan::shader_cache::ShaderKind;
 use crate::backend::vulkan::vkdevice::round_pow2;
 use crate::backend::vulkan::vulkan_core::buffer::BufferInfo;
 
-use super::pool::Pool;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::graph::RGraph;
 use super::VulkanDevice;

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use vk_sync::AccessType;
 
-use super::pool::Pool;
 use super::vulkan_core::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::vulkan_core::device::Device;
 use super::vulkan_core::graph::RGraph;

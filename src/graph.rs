@@ -34,12 +34,6 @@ pub enum ResourceDesc {
 
 #[derive(Debug, Default)]
 pub struct GraphBuilder {
-    // buffers: Vec<trace::VarId>,
-    // id2buffer: HashMap<trace::VarId, BufferId>,
-    // textures: Vec<trace::VarId>,
-    // id2texture: HashMap<trace::VarId, TextureId>,
-    // accels: Vec<trace::VarId>,
-    // id2accel: HashMap<trace::VarId, AccelId>,
     resources: IndexMap<trace::VarId, ResourceDesc>,
     passes: Vec<Pass>,
 }
@@ -70,29 +64,6 @@ impl GraphBuilder {
             Some(ResourceId(self.resources.insert_full(id, desc).0))
         }
     }
-    // pub fn push_buffer(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> BufferId {
-    //     // TODO: use better method to get VarRef
-    //     *self.id2buffer.entry(id).or_insert_with(|| {
-    //         let buffer_id = BufferId(self.buffers.len());
-    //         self.buffers.push(id);
-    //         buffer_id
-    //     })
-    // }
-    // pub fn push_texture(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> TextureId {
-    //     // TODO: use better method to get VarRef
-    //     *self.id2texture.entry(id).or_insert_with(|| {
-    //         let texture_id = TextureId(self.textures.len());
-    //         self.textures.push(id);
-    //         texture_id
-    //     })
-    // }
-    // pub fn push_accel(&mut self, trace: &mut trace::Trace, id: trace::VarId) -> AccelId {
-    //     *self.id2accel.entry(id).or_insert_with(|| {
-    //         let accel_id = AccelId(self.accels.len());
-    //         self.accels.push(id);
-    //         accel_id
-    //     })
-    // }
     pub fn push_pass(&mut self, pass: Pass) -> PassId {
         let id = PassId(self.passes.len());
         self.passes.push(pass);
@@ -128,9 +99,6 @@ impl Env {
 #[derive(Debug)]
 pub struct Graph {
     pub passes: Vec<Pass>,
-    // pub buffer_descs: Vec<BufferDesc>,
-    // pub texture_descs: Vec<TextureDesc>,
-    // pub accel_descs: Vec<AccelDesc>,
     pub resource_descs: Vec<(trace::VarId, ResourceDesc)>,
     pub env: Env,
     pub schedule: Vec<trace::VarRef>,
@@ -374,49 +342,6 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             var.op = var.op.resulting_op();
         }
     }
-
-    // let (buffer_descs, buffers): (Vec<_>, Vec<_>) = graph_builder
-    //     .buffers
-    //     .into_iter()
-    //     .map(|id| {
-    //         let var = trace.var_mut(id);
-    //         let size = var.extent.capacity();
-    //
-    //         (
-    //             BufferDesc {
-    //                 size,
-    //                 ty: var.ty.clone(),
-    //                 var_id: id,
-    //             },
-    //             var.data.buffer().cloned(),
-    //         )
-    //     })
-    //     .unzip();
-    // let (texture_descs, textures): (Vec<_>, Vec<_>) = graph_builder
-    //     .textures
-    //     .into_iter()
-    //     .map(|id| {
-    //         let var = trace.var_mut(id);
-    //         let (shape, channels) = var.extent.shape_and_channles();
-    //         (
-    //             TextureDesc {
-    //                 shape,
-    //                 channels,
-    //                 var_id: id,
-    //             },
-    //             var.data.texture().cloned(),
-    //         )
-    //     })
-    //     .unzip();
-    // let (accel_descs, accels): (Vec<_>, Vec<_>) = graph_builder
-    //     .accels
-    //     .into_iter()
-    //     .map(|id| {
-    //         let var = trace.var_mut(id);
-    //         let desc = var.extent.accel_desc().clone();
-    //         (AccelDesc { desc, var_id: id }, var.data.accel().cloned())
-    //     })
-    //     .unzip();
 
     // Collect descriptors and input resources
     let resource_descs = graph_builder.resources.into_iter().collect::<Vec<_>>();
