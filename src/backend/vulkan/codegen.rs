@@ -221,9 +221,9 @@ impl SpirvBuilder {
         // Early exit if index >= size
         self.if_block(cond, |s| {
             let inst = dr::Instruction::new(spirv::Op::Return, None, None, vec![]);
-            s.insert_into_block(rspirv::dr::InsertPoint::End, inst)?;
-            Ok(())
-        })?;
+            s.insert_into_block(rspirv::dr::InsertPoint::End, inst)
+                .unwrap();
+        });
 
         self.assemble_vars(ir, global_invocation_id)?;
 
@@ -333,18 +333,14 @@ impl SpirvBuilder {
 
         Ok(())
     }
-    fn if_block(
-        &mut self,
-        cond: u32,
-        f: impl FnOnce(&mut Self) -> Result<(), dr::Error>,
-    ) -> Result<(), dr::Error> {
+    fn if_block(&mut self, cond: u32, f: impl FnOnce(&mut Self)) -> u32 {
         let ty_bool = self.type_bool();
         let bool_true = self.constant_true(ty_bool);
 
-        let cond = self.logical_equal(ty_bool, None, cond, bool_true)?;
+        let cond = self.logical_equal(ty_bool, None, cond, bool_true).unwrap();
 
-        let start_label = self.id();
-        let end_label = self.id();
+        let true_label = self.id();
+        let false_label = self.id();
 
         // According to spirv OpSelectionMerge should be second to last
         // instruction in block. Rspirv however ends block with
@@ -357,23 +353,28 @@ impl SpirvBuilder {
                     None,
                     None,
                     vec![
-                        rspirv::dr::Operand::IdRef(end_label),
+                        rspirv::dr::Operand::IdRef(false_label),
                         rspirv::dr::Operand::SelectionControl(spirv::SelectionControl::NONE),
                     ],
                 ),
             )
             .unwrap();
-        self.branch_conditional(cond, start_label, end_label, [])
+        self.branch_conditional(cond, true_label, false_label, [])
             .unwrap();
 
-        self.begin_block(Some(start_label))?;
+        self.begin_block(Some(true_label)).unwrap();
 
-        f(self)?;
+        f(self);
 
-        self.branch(end_label).unwrap();
+        self.branch(false_label).unwrap();
 
-        self.begin_block(Some(end_label))?;
-        Ok(())
+        self.begin_block(Some(false_label)).unwrap();
+        // let dummy_block = self.id();
+        // self.branch(dummy_block).unwrap();
+        //
+        // self.begin_block(Some(dummy_block)).unwrap();
+
+        true_label
     }
     /// Store value at src in ptr, potentially atomically
     fn store_reduce(
@@ -1194,8 +1195,8 @@ impl SpirvBuilder {
                             )?;
                             let is_opaque = s.i_equal(bool_ty, None, intersection_ty, u32_0)?;
                             s.if_block(is_opaque, |s| {
-                                s.ray_query_confirm_intersection_khr(ray_query_var)
-                            })?;
+                                s.ray_query_confirm_intersection_khr(ray_query_var).unwrap();
+                            });
                             Ok(())
                         },
                     )?;
@@ -1329,14 +1330,15 @@ impl SpirvBuilder {
 
                         let cond = self.reg(*cond);
                         self.if_block(cond, |s| {
-                            let ptr =
-                                s.access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])?;
+                            let ptr = s
+                                .access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])
+                                .unwrap();
 
                             // TODO: suport returning atomic in if block
-                            s.store_reduce(src, ptr, ty, &reduce_op)?.unwrap_or(0);
-
-                            Ok(())
-                        })?;
+                            s.store_reduce(src, ptr, ty, &reduce_op)
+                                .unwrap()
+                                .unwrap_or(0);
+                        });
                         0
                     } else {
                         let ptr =
@@ -1375,45 +1377,39 @@ impl SpirvBuilder {
 
                         let res_var_ty =
                             self.type_pointer(None, spirv::StorageClass::Function, spirv_ty);
-                        let res_var = self.id();
-                        // Insert a variable at the beginning of the function (bit hacky)
-                        self.with_function(|s| {
-                            s.insert_into_block(
-                                dr::InsertPoint::Begin,
-                                dr::Instruction::new(
-                                    spirv::Op::Variable,
-                                    Some(res_var_ty),
-                                    Some(res_var),
-                                    vec![dr::Operand::StorageClass(spirv::StorageClass::Function)],
-                                ),
-                            )?;
-                            Ok(())
-                        })?;
 
-                        self.if_block(cond, |s| {
-                            let ptr = s.access_chain(
-                                ptr_ty,
-                                None,
-                                buffer_array,
-                                [buffer_idx, elem, idx],
-                            )?;
+                        let result_false = self.constant_null(spirv_ty);
+                        let mut result_true = 0;
+
+                        // TODO: find out how to get at label of current block
+                        let prev_label = self.id();
+                        self.branch(prev_label).unwrap();
+                        self.begin_block(Some(prev_label)).unwrap();
+
+                        let true_label = self.if_block(cond, |s| {
+                            let ptr = s
+                                .access_chain(ptr_ty, None, buffer_array, [buffer_idx, elem, idx])
+                                .unwrap();
 
                             let res = match var.ty {
                                 VarType::Bool => {
                                     let bool_ty = s.type_bool();
                                     let u8_ty = s.type_int(8, 0);
                                     let u8_0 = s.constant_bit32(u8_ty, 0);
-                                    let data = s.load(spirv_data_ty, None, ptr, None, None)?;
-                                    s.i_not_equal(bool_ty, None, data, u8_0)?
+                                    let data =
+                                        s.load(spirv_data_ty, None, ptr, None, None).unwrap();
+                                    s.i_not_equal(bool_ty, None, data, u8_0).unwrap()
                                 }
-                                _ => s.load(spirv_data_ty, None, ptr, None, None)?,
+                                _ => s.load(spirv_data_ty, None, ptr, None, None).unwrap(),
                             };
-
-                            s.store(res_var, res, None, None)?;
-
-                            Ok(())
-                        })?;
-                        self.load(spirv_ty, None, res_var, None, None)?
+                            result_true = res;
+                        });
+                        // self.load(spirv_ty, None, res_var, None, None).
+                        self.phi(
+                            spirv_ty,
+                            None,
+                            [(result_true, true_label), (result_false, prev_label)],
+                        )?
                     } else {
                         let ptr =
                             self.access_chain(ptr_ty, None, buffer_array, [buffer_idx, elem, idx])?;

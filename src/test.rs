@@ -271,6 +271,29 @@ fn conditional_scatter() {
     assert_eq!(dst.to_vec::<i32>(), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0])
 }
 #[test]
+fn conditional_gather() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let src = tr::sized_literal(1, 10);
+    let active = tr::array(
+        &[
+            true, true, false, false, true, false, true, false, true, false,
+        ],
+        &device,
+    );
+
+    let dst = src.gather_if(&tr::index(10), &active);
+    dst.schedule();
+
+    let mut graph = tr::compile();
+    dbg!(&graph);
+    graph.launch(&device);
+
+    dbg!(dst.to_vec::<i32>());
+    // assert_eq!(dst.to_vec::<i32>(), )
+}
+#[test]
 fn select() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
