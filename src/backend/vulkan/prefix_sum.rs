@@ -40,7 +40,6 @@ impl VulkanDevice {
         output: &Arc<Buffer>,
     ) {
         // let elem_size = std::mem::size_of::<u32>();
-        let num = num;
 
         let vector_size = 4; // M
         let loads_per_thread = 4; // N
