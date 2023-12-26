@@ -108,41 +108,35 @@ impl VarType {
         }
     }
     pub fn is_int(&self) -> bool {
-        match self {
+        matches!(
+            self,
             VarType::I8
-            | VarType::U8
-            | VarType::I16
-            | VarType::U16
-            | VarType::I32
-            | VarType::U32
-            | VarType::I64
-            | VarType::U64 => true,
-            _ => false,
-        }
+                | VarType::U8
+                | VarType::I16
+                | VarType::U16
+                | VarType::I32
+                | VarType::U32
+                | VarType::I64
+                | VarType::U64
+        )
     }
     pub fn is_sint(&self) -> bool {
-        match self {
-            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64
+        )
     }
     pub fn is_uint(&self) -> bool {
-        match self {
-            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64
+        )
     }
     pub fn is_float(&self) -> bool {
-        match self {
-            VarType::F16 | VarType::F32 | VarType::F64 => true,
-            _ => false,
-        }
+        matches!(self, VarType::F16 | VarType::F32 | VarType::F64)
     }
     pub fn is_bool(&self) -> bool {
-        match self {
-            VarType::Bool => true,
-            _ => false,
-        }
+        matches!(self, VarType::Bool)
     }
 }
 
