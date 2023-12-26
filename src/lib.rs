@@ -1,10 +1,10 @@
 pub mod backend;
 mod compiler;
-mod data;
 mod extent;
 mod graph;
 pub mod ir;
 mod op;
+mod resource;
 pub mod trace;
 pub mod vartype;
 

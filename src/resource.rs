@@ -1,10 +1,29 @@
-use crate::backend::{Accel, Buffer, Texture};
+use crate::backend::{Accel, AccelDesc, Buffer, Device, Texture};
+use crate::vartype::VarType;
+// TODO: maybe move to backend?
+
+#[derive(Debug, Clone)]
+pub struct BufferDesc {
+    pub size: usize,
+    pub ty: VarType,
+}
+#[derive(Debug, Clone)]
+pub struct TextureDesc {
+    pub shape: [usize; 3],
+    pub channels: usize,
+}
+#[derive(Debug)]
+pub enum ResourceDesc {
+    BufferDesc(BufferDesc),
+    TextureDesc(TextureDesc),
+    AccelDesc(AccelDesc),
+}
 
 ///
 /// A variable can hold data directly i.e. literals, buffers, textures or acceleration structures.
 ///
-#[derive(Debug, Default)]
-pub enum Data {
+#[derive(Debug, Default, Clone)]
+pub enum Resource {
     #[default]
     None,
     Literal(u64),
@@ -12,7 +31,18 @@ pub enum Data {
     Texture(Texture),
     Accel(Accel),
 }
-impl Data {
+impl Resource {
+    pub fn create(device: &Device, desc: &ResourceDesc) -> Self {
+        match desc {
+            ResourceDesc::BufferDesc(desc) => {
+                Resource::Buffer(device.create_buffer(desc.size * desc.ty.size()).unwrap())
+            }
+            ResourceDesc::TextureDesc(desc) => {
+                Resource::Texture(device.create_texture(desc.shape, desc.channels).unwrap())
+            }
+            ResourceDesc::AccelDesc(desc) => Resource::Accel(device.create_accel(desc).unwrap()),
+        }
+    }
     pub fn is_none(&self) -> bool {
         match self {
             Self::None => true,

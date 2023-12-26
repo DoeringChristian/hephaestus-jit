@@ -1,36 +1,8 @@
 use crate::backend;
-use crate::backend::Device;
-use crate::data::Data;
 use crate::extent::Extent;
-use crate::vartype::VarType;
+use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
-use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-
-#[derive(Debug, Clone)]
-pub enum Resource {
-    Buffer(backend::Buffer),
-    Texture(backend::Texture),
-    Accel(backend::Accel),
-}
-#[derive(Debug, Clone)]
-pub struct BufferDesc {
-    pub size: usize,
-    pub ty: VarType,
-}
-#[derive(Debug, Clone)]
-pub struct TextureDesc {
-    pub shape: [usize; 3],
-    pub channels: usize,
-}
-#[derive(Debug)]
-pub enum ResourceDesc {
-    BufferDesc(BufferDesc),
-    TextureDesc(TextureDesc),
-    AccelDesc(backend::AccelDesc),
-}
 
 #[derive(Debug, Default)]
 pub struct GraphBuilder {
@@ -158,17 +130,7 @@ impl Graph {
                         } else if let Some(resource) = &self.env.resources[i] {
                             resource.clone()
                         } else {
-                            match desc {
-                                ResourceDesc::BufferDesc(desc) => Resource::Buffer(
-                                    device.create_buffer(desc.size * desc.ty.size()).unwrap(),
-                                ),
-                                ResourceDesc::TextureDesc(desc) => Resource::Texture(
-                                    device.create_texture(desc.shape, desc.channels).unwrap(),
-                                ),
-                                ResourceDesc::AccelDesc(desc) => {
-                                    Resource::Accel(device.create_accel(desc).unwrap())
-                                }
-                            }
+                            Resource::create(device, desc)
                         },
                     )
                 })
@@ -183,9 +145,10 @@ impl Graph {
                 let (id, desc) = &self.resource_descs[i];
                 if let Some(var) = trace.get_var_mut(*id) {
                     var.data = match &resource {
-                        Resource::Buffer(buffer) => Data::Buffer(buffer.clone()),
-                        Resource::Texture(texture) => Data::Texture(texture.clone()),
-                        Resource::Accel(accel) => Data::Accel(accel.clone()),
+                        Resource::Buffer(buffer) => Resource::Buffer(buffer.clone()),
+                        Resource::Texture(texture) => Resource::Texture(texture.clone()),
+                        Resource::Accel(accel) => Resource::Accel(accel.clone()),
+                        _ => todo!(),
                     }
                 }
                 if let Some(input_resource) = &mut self.env.resources[i] {

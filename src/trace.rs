@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::thread::ThreadId;
 
-use crate::data::Data;
+use crate::resource::Resource;
 use crate::extent::Extent;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::vartype::{AsVarType, Instance, Intersection, VarType};
@@ -147,7 +147,7 @@ pub struct Var {
 
     pub dirty: bool,
 
-    pub data: Data,
+    pub data: Resource,
 }
 pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     TRACE.with(|t| {
@@ -230,7 +230,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
             op: Op::KernelOp(KernelOp::Literal),
             ty: ty.clone(),
             extent: Extent::Size(size),
-            data: Data::Literal(data),
+            data: Resource::Literal(data),
             ..Default::default()
         },
         [],
@@ -247,7 +247,7 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
             op: Op::Buffer,
             extent: Extent::Size(size),
             ty: ty.clone(),
-            data: Data::Buffer(data),
+            data: Resource::Buffer(data),
             ..Default::default()
         },
         [],

@@ -1,5 +1,5 @@
 use crate::backend::Buffer;
-use crate::data::Data;
+use crate::resource::Resource;
 use crate::ir::{self, IR};
 use crate::op::{self, KernelOp, Op};
 use crate::trace::{self, Trace};
