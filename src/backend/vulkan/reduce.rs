@@ -165,15 +165,15 @@ impl VulkanDevice {
 
         let ty = glsl_ty(ty);
 
-        let shader = self.get_static_glsl_templated(
+        let shader = self.get_shader_glsl(
             include_str!("kernels/reduce.glsl"),
-            &[
-                ("REDUCE", reduction),
-                ("INIT", init),
-                ("TYPE", ty),
-                ("WORK_GROUP_SIZE", "32"),
-            ],
             ShaderKind::Compute,
+            &[
+                ("REDUCE", Some(reduction)),
+                ("INIT", Some(init)),
+                ("TYPE", Some(ty)),
+                ("WORK_GROUP_SIZE", Some("32")),
+            ],
         );
         let pipeline = self.get_pipeline(&PipelineDesc {
             code: &shader,
