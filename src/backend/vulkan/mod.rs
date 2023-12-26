@@ -180,21 +180,31 @@ impl backend::BackendDevice for VulkanDevice {
                     };
                     let pipeline = self.compile_ir(ir, &compile_info);
                     // TODO: if we ever add dynamic sized kernels pass the buffer here
-                    let mut size_buffer = Buffer::create(
-                        self,
-                        BufferInfo {
-                            size: std::mem::size_of::<u32>(),
-                            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                                | vk::BufferUsageFlags::TRANSFER_DST
-                                | vk::BufferUsageFlags::STORAGE_BUFFER,
-                            memory_location: MemoryLocation::CpuToGpu,
-                            ..Default::default()
-                        },
-                    );
-                    size_buffer
-                        .mapped_slice_mut()
-                        .copy_from_slice(bytemuck::cast_slice(&[size as u32]));
-                    let size_buffer = Arc::new(size_buffer);
+
+                    // If the pass contains a size_buffer, then use it otherwise create one with
+                    // the static size.
+                    let size_buffer = pass
+                        .size_buffer
+                        .and_then(|id| env.buffer(id))
+                        .map(|buffer| buffer.vulkan().unwrap().buffer.clone())
+                        .unwrap_or_else(|| {
+                            let mut size_buffer = Buffer::create(
+                                self,
+                                BufferInfo {
+                                    size: std::mem::size_of::<u32>(),
+                                    usage: vk::BufferUsageFlags::TRANSFER_SRC
+                                        | vk::BufferUsageFlags::TRANSFER_DST
+                                        | vk::BufferUsageFlags::STORAGE_BUFFER,
+                                    memory_location: MemoryLocation::CpuToGpu,
+                                    ..Default::default()
+                                },
+                            );
+                            size_buffer
+                                .mapped_slice_mut()
+                                .copy_from_slice(bytemuck::cast_slice(&[size as u32]));
+                            Arc::new(size_buffer)
+                        });
+
                     let buffers = [size_buffer]
                         .into_iter()
                         .chain(buffers.into_iter())
