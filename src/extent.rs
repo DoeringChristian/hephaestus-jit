@@ -56,6 +56,14 @@ impl Extent {
     pub fn is_dynamic(&self) -> bool {
         matches!(self, Extent::DynSize { .. })
     }
+    pub fn is_unsized(&self) -> bool {
+        match self {
+            Extent::None => true,
+            Extent::Size(size) => *size == 0,
+            Extent::DynSize { capacity, .. } => *capacity == 0,
+            _ => false,
+        }
+    }
     pub fn get_dynamic(&self) -> Option<VarId> {
         match self {
             Extent::DynSize { size_dep, .. } => Some(*size_dep),

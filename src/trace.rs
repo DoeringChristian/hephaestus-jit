@@ -471,7 +471,9 @@ impl VarRef {
     }
     /// Schedule the variable for execution in the current group
     pub fn schedule(&self) {
-        if self.evaluated() {
+        // We should not be able to schedule already evaluated variables as well as ones who's
+        // extent is unsized
+        if self.is_evaluated() || self.is_unsized() {
             return;
         }
         SCHEDULE.with(|s| {
@@ -482,8 +484,11 @@ impl VarRef {
             }
         })
     }
-    pub fn evaluated(&self) -> bool {
+    pub fn is_evaluated(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).op.evaluated())
+    }
+    pub fn is_unsized(&self) -> bool {
+        with_trace(|trace| trace.var(self.id()).extent.is_unsized())
     }
     pub fn rc(&self) -> usize {
         with_trace(|trace| trace.vars[self.id().0].rc)
@@ -946,10 +951,11 @@ impl VarRef {
     /// TODO: add this to the SSA graph instead of scheduling it
     pub fn compress(&self) -> (Self, Self) {
         assert_eq!(self.ty(), VarType::Bool);
-        let size = self.size();
+        // let size = self.size();
+        let extent = self.extent();
         // TODO: find a way to generate uninitialized arrays in a deffered manner
         let count = sized_literal(0u32, 1);
-        let index = sized_literal(0u32, size);
+        let index = sized_literal(0u32, extent.capacity());
 
         count.schedule();
         index.schedule();
@@ -960,7 +966,7 @@ impl VarRef {
             Var {
                 op: Op::DeviceOp(DeviceOp::Compress),
                 ty: VarType::Void,
-                extent: Extent::Size(0),
+                extent,
                 ..Default::default()
             },
             [&index, &count, self],
