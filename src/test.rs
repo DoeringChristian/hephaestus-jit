@@ -886,6 +886,9 @@ fn dynamic_index() {
     use rand::Rng;
     pretty_env_logger::try_init().ok();
 
+    // TODO: figure out compression bug
+    // Also, add a view function, that allows for a view into a subset of a buffer without
+    // having to call [`tr::gather`].
     let n = 1024;
     let min = 3;
     let max = 7;
@@ -913,9 +916,9 @@ fn dynamic_index() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
+    assert_eq!(values.capacity(), n);
+
     let values = values.to_vec::<i32>();
-    // dbg!(values.len());
-    // dbg!(&values);
 
     let reference = src
         .into_iter()
