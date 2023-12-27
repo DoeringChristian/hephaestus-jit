@@ -955,6 +955,8 @@ impl VarRef {
 }
 impl VarRef {
     pub fn compress_dyn(&self) -> Self {
+        // TODO: this is somewhat inefficient, a better way would be to get a view into the buffer
+        // with the correct extent.
         let capacity = self.capacity();
         let (count, indices) = self.compress();
         let dyn_index = dynamic_index(capacity, &count);
