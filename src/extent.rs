@@ -7,11 +7,11 @@ use crate::tr::VarId;
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum Extent {
     #[default]
-    None, // TODO: actually use none...
-    Size(usize),
+    None,
+    Size(usize), // TODO: make this on-zero
     DynSize {
-        capacity: usize,
-        size_dep: VarId, // TODO: Need a better way to track size var
+        capacity: usize, // TODO: make this non-zero
+        size_dep: VarId,
     },
     Texture {
         shape: [usize; 3],

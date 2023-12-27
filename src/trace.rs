@@ -292,7 +292,19 @@ pub fn dynamic_index(capacity: usize, size: &VarRef) -> VarRef {
 /// In contrast to [sized_literal], it cannot be evaluated.
 ///
 pub fn literal<T: AsVarType>(val: T) -> VarRef {
-    sized_literal(val, 0)
+    let ty = T::var_ty();
+    let mut data = 0;
+    unsafe { *(&mut data as *mut _ as *mut T) = val };
+    push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::Literal),
+            ty: ty.clone(),
+            extent: Extent::None,
+            data: Resource::Literal(data),
+            ..Default::default()
+        },
+        [],
+    )
 }
 ///
 /// Returns a variable representing a literal within a kernel.
