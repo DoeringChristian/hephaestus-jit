@@ -828,6 +828,9 @@ impl VarRef {
             }
             _ => todo!(),
         };
+        if size == 0 {
+            return vec![];
+        }
 
         let bytesize = size * self.ty().size();
         assert!(bytesize % T::var_ty().size() == 0);

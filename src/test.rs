@@ -886,22 +886,41 @@ fn dynamic_index() {
     use rand::Rng;
     pretty_env_logger::try_init().ok();
 
-    let n = 100;
+    let n = 1024;
+    let min = 3;
+    let max = 7;
 
     let device = vulkan(0);
 
     // TODO: same bug as in prefix sum but with sizes not divisible by 16
-    let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
+    let src: Vec<i32> = (0..n)
+        .map(|_| rand::thread_rng().gen_range(0..10))
+        .collect();
 
     let src_var = tr::array(&src, &device);
 
-    let indices = src_var.compress_dyn();
-
+    // Compress
+    let cond = src_var.lt(&tr::literal(max));
+    let indices = cond.compress_dyn();
     let values = src_var.gather(&indices);
+
+    let cond = values.gt(&tr::literal(min));
+    let indices = cond.compress_dyn();
+    let values = values.gather(&indices);
+
     values.schedule();
 
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    dbg!(values.to_vec::<bool>());
+    let values = values.to_vec::<i32>();
+    // dbg!(values.len());
+    // dbg!(&values);
+
+    let reference = src
+        .into_iter()
+        .filter(|i| *i > min && *i < max)
+        .collect::<Vec<_>>();
+
+    assert_eq!(values, reference);
 }

@@ -718,9 +718,12 @@ impl SpirvBuilder {
                 KernelOp::Nop => 0,
                 KernelOp::Bop(bop) => {
                     let res = self.id();
+                    let src_ty = &ir.var(deps[0]).ty;
                     let lhs = self.reg(deps[0]);
                     let rhs = self.reg(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
+                    dbg!("bop724");
+                    dbg!(&var.ty);
                     match bop {
                         Bop::Add => {
                             if isint(&var.ty) {
@@ -875,7 +878,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Bop::Eq => match var.ty {
+                        Bop::Eq => match src_ty {
                             VarType::U8
                             | VarType::I8
                             | VarType::U16
@@ -894,7 +897,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Bop::Neq => match var.ty {
+                        Bop::Neq => match src_ty {
                             VarType::U8
                             | VarType::I8
                             | VarType::U16
@@ -913,7 +916,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Bop::Lt => match var.ty {
+                        Bop::Lt => match src_ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.b.s_less_than(ty, Some(res), lhs, rhs)?;
                             }
@@ -929,7 +932,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Bop::Le => match var.ty {
+                        Bop::Le => match src_ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.b.s_less_than_equal(ty, Some(res), lhs, rhs)?;
                             }
@@ -951,7 +954,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Bop::Gt => match var.ty {
+                        Bop::Gt => match src_ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.b.s_greater_than(ty, Some(res), lhs, rhs)?;
                             }
@@ -967,7 +970,7 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Bop::Ge => match var.ty {
+                        Bop::Ge => match src_ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.b.s_greater_than_equal(ty, Some(res), lhs, rhs)?;
                             }

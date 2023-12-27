@@ -192,7 +192,10 @@ pub enum PassOp {
 ///
 /// TODO: should we compile for a device?
 pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
-    dbg!(&schedule);
+    // dbg!(&schedule);
+    // for r in schedule.vars.iter() {
+    //     dbg!(trace.var(r.id()));
+    // }
     let trace::Schedule {
         mut vars,
         mut groups,
