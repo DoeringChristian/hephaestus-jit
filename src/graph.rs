@@ -113,8 +113,6 @@ impl Graph {
                         // 1. The trace of this thread (if the variable is still alive)
                         // 2. The resources maintained by this graph
                         // 3. Creating new resources
-                        // TODO: simplify data->resource and resource->data conversions (maybe add
-                        // resource as subelement in data)
                         if let Some(resource) = trace.get_var(*id).and_then(|var| match desc {
                             ResourceDesc::BufferDesc(_) => {
                                 Some(Resource::Buffer(var.data.buffer().cloned()?))
@@ -139,7 +137,8 @@ impl Graph {
 
         device.execute_graph(self, &env).unwrap();
 
-        // Update data of output variables and graph input variables.
+        // Update resources of variables in the trace and graph.
+        // NOTE: We might not want the second one
         trace::with_trace(|trace| {
             for (i, resource) in env.resources.into_iter().map(|r| r.unwrap()).enumerate() {
                 let (id, desc) = &self.resource_descs[i];
@@ -200,7 +199,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         ..
     } = schedule;
 
-    // Split groups into groups by extent
+    // Subdivide groups by extent
     let groups = groups
         .iter_mut()
         .flat_map(|group| {
@@ -239,7 +238,16 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();
     for group in groups.iter() {
-        if trace.var(vars[group.start].id()).op.is_device_op() {
+        let first_id = vars[group.start].id();
+        let first_var = trace.var(first_id);
+        // Note: we know, that all variables in a group have the same size
+        // TODO: validate, that the the size_buffer is a buffer
+        let size_buffer = match first_var.extent {
+            Extent::DynSize { size_dep, .. } => graph_builder.try_push_resource(trace, size_dep),
+            _ => None,
+        };
+
+        let pass = if first_var.op.is_device_op() {
             // Handle Device Ops (precompiled)
             assert_eq!(group.len(), 1);
             let id = vars[group.start].id();
@@ -257,14 +265,14 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                         .flat_map(|id| graph_builder.try_push_resource(trace, *id))
                         .collect::<Vec<_>>();
 
-                    graph_builder.push_pass(Pass {
+                    Pass {
                         resources,
-                        size_buffer: None,
+                        size_buffer,
                         op: PassOp::DeviceOp(op),
-                    })
+                    }
                 }
                 _ => todo!(),
-            };
+            }
         } else {
             // Handle Kernel Ops (compile)
             let mut compiler = compiler::Compiler::default();
@@ -278,17 +286,18 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 .chain(compiler.accels.into_iter())
                 .flat_map(|id| graph_builder.try_push_resource(trace, id))
                 .collect::<Vec<_>>();
-            let size = trace.var(vars[group.start].id()).extent.size();
-            let pass = Pass {
+            let size = trace.var(vars[group.start].id()).extent.capacity();
+            Pass {
                 resources,
-                size_buffer: None,
+                size_buffer,
                 op: PassOp::Kernel {
                     ir: compiler.ir,
                     size,
                 },
-            };
-            graph_builder.push_pass(pass);
-        }
+            }
+        };
+
+        graph_builder.push_pass(pass);
         // Change op to resulting op
         // This should prevent the ir compiler from colecting stuff twice
         for i in group.clone() {

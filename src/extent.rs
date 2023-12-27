@@ -1,3 +1,5 @@
+use slotmap::DefaultKey;
+
 use crate::backend;
 use crate::tr::VarId;
 
@@ -9,7 +11,7 @@ pub enum Extent {
     Size(usize),
     DynSize {
         capacity: usize,
-        size_dep: usize, // TODO: Need a better way to track size var
+        size_dep: VarId, // TODO: Need a better way to track size var
     },
     Texture {
         shape: [usize; 3],
@@ -23,7 +25,16 @@ impl PartialOrd for Extent {
             (Extent::Size(a), Extent::Size(b)) => Some(a.cmp(b)),
             (Extent::DynSize { .. }, Extent::Size(_)) => Some(std::cmp::Ordering::Less),
             (Extent::Size(_), Extent::DynSize { .. }) => Some(std::cmp::Ordering::Greater),
-            (Extent::DynSize { .. }, Extent::DynSize { .. }) => None,
+            (
+                Extent::DynSize {
+                    capacity: self_cap,
+                    size_dep: self_size,
+                },
+                Extent::DynSize {
+                    capacity: other_cap,
+                    size_dep: other_size,
+                },
+            ) => Some(self_cap.cmp(other_cap).then(self_size.cmp(other_size))),
             _ => None,
         }
     }
@@ -43,10 +54,7 @@ impl Extent {
         }
     }
     pub fn is_dynamic(&self) -> bool {
-        match self {
-            Extent::DynSize { .. } => true,
-            _ => false,
-        }
+        matches!(self, Extent::DynSize { .. })
     }
     pub fn accel_desc(&self) -> &backend::AccelDesc {
         match self {

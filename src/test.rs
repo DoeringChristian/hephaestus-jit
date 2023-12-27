@@ -881,3 +881,31 @@ fn prefix_sum() {
 
     assert_eq!(prediction.to_vec::<u64>(), reference);
 }
+#[test]
+fn dynamic_index() {
+    use rand::Rng;
+    pretty_env_logger::try_init().ok();
+
+    let n = 100;
+
+    let device = vulkan(0);
+
+    // TODO: same bug as in prefix sum but with sizes not divisible by 16
+    let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
+
+    let src_var = tr::array(&src, &device);
+
+    let (count, indices) = src_var.compress();
+
+    let dyn_index = tr::dynamic_index(n, &count);
+
+    let indices = indices.gather(&dyn_index);
+
+    let values = src_var.gather(&indices);
+    values.schedule();
+
+    let mut graph = tr::compile();
+    graph.launch(&device);
+
+    dbg!(values.to_vec::<bool>());
+}

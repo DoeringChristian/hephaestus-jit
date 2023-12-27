@@ -118,7 +118,7 @@ impl Drop for Trace {
 /// It allows for internal references within the trace, without causing reference counters to
 /// change when copying.
 ///
-#[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VarId(DefaultKey);
 
 ///
@@ -266,6 +266,28 @@ pub fn index(size: usize) -> VarRef {
             op: Op::KernelOp(KernelOp::Index),
             ty: VarType::U32,
             extent: Extent::Size(size),
+            ..Default::default()
+        },
+        [],
+    )
+}
+pub fn dynamic_index(capacity: usize, size: &VarRef) -> VarRef {
+    // Have to schedule size variable
+    // NOTE: the reason we do not need to track rcs for the size variable, is that it has to be
+    // scheduled.
+    // Therefore the schedule should own it and not drop it.
+    size.schedule();
+    schedule_eval();
+    let id = size.id();
+
+    push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::Index),
+            ty: VarType::U32,
+            extent: Extent::DynSize {
+                capacity,
+                size_dep: id,
+            },
             ..Default::default()
         },
         [],
@@ -765,12 +787,21 @@ impl VarRef {
             _ => todo!(),
         }
     }
+    pub fn capacity(&self) -> usize {
+        match self.extent() {
+            Extent::Size(size) => size,
+            Extent::DynSize { capacity, .. } => capacity,
+            _ => todo!(),
+        }
+    }
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
     }
     pub fn to_vec<T: AsVarType>(&self) -> Vec<T> {
         assert_eq!(self._thread_id, std::thread::current().id());
-        let bytesize = self.size() * self.ty().size();
+        // TODO: download dynamic size
+        // (requires rc tracking for size)
+        let bytesize = self.capacity() * self.ty().size();
         assert!(bytesize % T::var_ty().size() == 0);
         let size = bytesize / T::var_ty().size();
         with_trace(|t| {
