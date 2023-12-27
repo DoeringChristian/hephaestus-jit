@@ -56,6 +56,12 @@ impl Extent {
     pub fn is_dynamic(&self) -> bool {
         matches!(self, Extent::DynSize { .. })
     }
+    pub fn get_dynamic(&self) -> Option<VarId> {
+        match self {
+            Extent::DynSize { size_dep, .. } => Some(*size_dep),
+            _ => None,
+        }
+    }
     pub fn accel_desc(&self) -> &backend::AccelDesc {
         match self {
             Extent::Accel(desc) => desc,

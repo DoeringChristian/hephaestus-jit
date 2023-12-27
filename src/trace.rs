@@ -72,7 +72,7 @@ impl Trace {
         self.vars.get_mut(id.0)
     }
     pub fn push_var(&mut self, mut var: Var) -> VarId {
-        for id in var.deps.iter() {
+        for id in var.deps.iter().chain(var.extent.get_dynamic().as_ref()) {
             self.inc_rc(*id);
         }
         var.rc = 1;
@@ -91,14 +91,9 @@ impl Trace {
         let var = &mut self.vars[id.0];
         var.rc -= 1;
         if var.rc == 0 {
-            let mut deps = var.deps.clone();
-            // track extent as well (don't quite like this exception)
-            match var.extent {
-                Extent::DynSize { size_dep, .. } => deps.push(size_dep),
-                _ => {}
-            };
+            let deps = var.deps.clone().into_iter().chain(var.extent.get_dynamic());
 
-            for dep in var.deps.clone() {
+            for dep in deps {
                 self.dec_rc(dep);
             }
 
