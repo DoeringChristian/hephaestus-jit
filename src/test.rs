@@ -895,11 +895,7 @@ fn dynamic_index() {
 
     let src_var = tr::array(&src, &device);
 
-    let (count, indices) = src_var.compress();
-
-    let dyn_index = tr::dynamic_index(n, &count);
-
-    let indices = indices.gather(&dyn_index);
+    let indices = src_var.compress_dyn();
 
     let values = src_var.gather(&indices);
     values.schedule();

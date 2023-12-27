@@ -93,9 +93,17 @@ impl Trace {
         let entry = &mut self.entries[id.0];
         entry.rc -= 1;
         if entry.rc == 0 {
+            let mut deps = entry.deps.clone();
+            // track extent as well (don't quite like this exception)
+            match entry.var.extent {
+                Extent::DynSize { size_dep, .. } => deps.push(size_dep),
+                _ => {}
+            };
+
             for dep in entry.deps.clone() {
                 self.dec_rc(dep);
             }
+
             self.entries.remove(id.0);
         }
     }
@@ -450,6 +458,15 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
 }
 
 impl VarRef {
+    pub fn borrow(id: VarId) -> Self {
+        with_trace(|trace| {
+            trace.inc_rc(id);
+        });
+        Self {
+            id,
+            _thread_id: std::thread::current().id(),
+        }
+    }
     pub fn mark_dirty(&self) {
         with_trace(|trace| {
             trace.var_mut(self.id()).dirty = true;
@@ -801,7 +818,15 @@ impl VarRef {
         assert_eq!(self._thread_id, std::thread::current().id());
         // TODO: download dynamic size
         // (requires rc tracking for size)
-        let bytesize = self.capacity() * self.ty().size();
+        let size = match self.extent() {
+            Extent::Size(size) => size,
+            Extent::DynSize { size_dep, .. } => {
+                VarRef::borrow(size_dep).to_vec::<i32>()[0] as usize
+            }
+            _ => todo!(),
+        };
+
+        let bytesize = size * self.ty().size();
         assert!(bytesize % T::var_ty().size() == 0);
         let size = bytesize / T::var_ty().size();
         with_trace(|t| {
@@ -923,6 +948,13 @@ impl VarRef {
     }
 }
 impl VarRef {
+    pub fn compress_dyn(&self) -> Self {
+        let capacity = self.capacity();
+        let (count, indices) = self.compress();
+        let dyn_index = dynamic_index(capacity, &count);
+        let indices = indices.gather(&dyn_index);
+        indices
+    }
     /// Get's the argument to true values of a boolean array
     /// Returns a tuple (count: u32, indices: [u32])
     /// TODO: add this to the SSA graph instead of scheduling it
