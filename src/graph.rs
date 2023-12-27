@@ -340,7 +340,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             }
 
             // Clear dependencies:
-            let deps = std::mem::take(&mut trace.entry_mut(id).deps);
+            let deps = std::mem::take(&mut trace.var_mut(id).deps);
 
             for dep in deps {
                 trace.dec_rc(dep);

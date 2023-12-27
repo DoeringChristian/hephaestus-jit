@@ -53,36 +53,34 @@ thread_local! {
 ///
 #[derive(Default, Debug)]
 pub struct Trace {
-    entries: SlotMap<DefaultKey, Entry>,
+    vars: SlotMap<DefaultKey, Var>,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
-        &self.entries[id.0].var
+        &self.vars[id.0]
     }
     pub fn var_mut(&mut self, id: VarId) -> &mut Var {
-        &mut self.entries[id.0].var
-    }
-    pub fn entry_mut(&mut self, id: VarId) -> &mut Entry {
-        &mut self.entries[id.0]
+        &mut self.vars[id.0]
     }
     pub fn deps(&self, id: VarId) -> &[VarId] {
-        &self.entries[id.0].deps
+        &self.vars[id.0].deps
     }
     pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
-        self.entries.get(id.0).map(|entry| &entry.var)
+        self.vars.get(id.0)
     }
     pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
-        self.entries.get_mut(id.0).map(|entry| &mut entry.var)
+        self.vars.get_mut(id.0)
     }
-    pub fn push_var(&mut self, var: Var, deps: Vec<VarId>) -> VarId {
-        for id in deps.iter() {
+    pub fn push_var(&mut self, mut var: Var) -> VarId {
+        for id in var.deps.iter() {
             self.inc_rc(*id);
         }
-        let id = VarId(self.entries.insert(Entry { deps, var, rc: 1 }));
+        var.rc = 1;
+        let id = VarId(self.vars.insert(var));
         id
     }
     pub fn inc_rc(&mut self, id: VarId) {
-        self.entries[id.0].rc += 1;
+        self.vars[id.0].rc += 1;
     }
     ///
     /// Decrement the reference count of an entry in the trace.
@@ -90,21 +88,21 @@ impl Trace {
     /// it's dependencies.
     ///
     pub fn dec_rc(&mut self, id: VarId) {
-        let entry = &mut self.entries[id.0];
-        entry.rc -= 1;
-        if entry.rc == 0 {
-            let mut deps = entry.deps.clone();
+        let var = &mut self.vars[id.0];
+        var.rc -= 1;
+        if var.rc == 0 {
+            let mut deps = var.deps.clone();
             // track extent as well (don't quite like this exception)
-            match entry.var.extent {
+            match var.extent {
                 Extent::DynSize { size_dep, .. } => deps.push(size_dep),
                 _ => {}
             };
 
-            for dep in entry.deps.clone() {
+            for dep in var.deps.clone() {
                 self.dec_rc(dep);
             }
 
-            self.entries.remove(id.0);
+            self.vars.remove(id.0);
         }
     }
     pub fn ref_borrow(&mut self, id: VarId) -> VarRef {
@@ -117,7 +115,7 @@ impl Trace {
 }
 impl Drop for Trace {
     fn drop(&mut self) {
-        assert_eq!(self.entries.len(), 0, "{self:#?}");
+        assert_eq!(self.vars.len(), 0, "{self:#?}");
     }
 }
 
@@ -165,17 +163,6 @@ impl Drop for VarRef {
 }
 
 ///
-/// A entry in the trace, wrapping a [Var] struct.
-/// It is responsible for holding dependencies and reference counting.
-///
-#[derive(Debug, Default)]
-pub struct Entry {
-    pub(crate) deps: Vec<VarId>,
-    pub(crate) var: Var,
-    pub(crate) rc: usize,
-}
-
-///
 /// The [Var] struct represents a variable in the trace.
 /// Every variable is the result of some operation [Op] and might hold some [Resource].
 ///
@@ -188,6 +175,9 @@ pub struct Var {
     pub dirty: bool,
 
     pub data: Resource,
+
+    pub(crate) deps: Vec<VarId>,
+    pub(crate) rc: usize,
 }
 pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     TRACE.with(|t| {
@@ -203,7 +193,7 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
 /// - scheduling evaluation of the previous group if the variable depends on 'dirty' variables
 /// - scheduling evaluation of the current group if the variable represents a device wide operation
 ///
-fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
+fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
     let deps = deps
@@ -226,8 +216,9 @@ fn push_var<'a>(v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     }
 
     // Push actual variable
+    v.deps = deps;
     let res = with_trace(|t| VarRef {
-        id: t.push_var(v, deps),
+        id: t.push_var(v),
         _thread_id: std::thread::current().id(),
     });
     // Auto schedule and schedule evaluation if device op
@@ -500,7 +491,7 @@ impl VarRef {
         with_trace(|trace| trace.var(self.id()).op.evaluated())
     }
     pub fn rc(&self) -> usize {
-        with_trace(|trace| trace.entries[self.id().0].rc)
+        with_trace(|trace| trace.vars[self.id().0].rc)
     }
 }
 macro_rules! bop {
