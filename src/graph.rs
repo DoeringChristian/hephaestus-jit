@@ -99,7 +99,7 @@ impl Graph {
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
-    pub fn launch(&mut self, device: &backend::Device) {
+    pub fn launch(&mut self, device: &backend::Device) -> backend::Report {
         // Capture Environment
         let mut env = Env::default();
         trace::with_trace(|trace| {
@@ -156,9 +156,9 @@ impl Graph {
                     *input_resource = resource
                 }
             }
-        })
+        });
 
-        // Update output variables in trace
+        report
     }
 }
 
@@ -194,10 +194,6 @@ pub enum PassOp {
 ///
 /// TODO: should we compile for a device?
 pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
-    // dbg!(&schedule);
-    // for r in schedule.vars.iter() {
-    //     dbg!(trace.var(r.id()));
-    // }
     let trace::Schedule {
         mut vars,
         mut groups,
@@ -237,8 +233,6 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             groups
         })
         .collect::<Vec<_>>();
-    // dbg!(&groups);
-    // dbg!(&vars);
 
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();

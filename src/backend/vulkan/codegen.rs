@@ -36,7 +36,7 @@ pub fn assemble_trace(
     b.assemble(trace, info, entry_point)?;
 
     let module = b.module();
-    print!("{}", module.disassemble());
+    log::trace!("Shader: \n {}", module.disassemble());
     Ok(module.assemble())
 }
 fn isfloat(ty: &VarType) -> bool {
@@ -722,8 +722,6 @@ impl SpirvBuilder {
                     let lhs = self.reg(deps[0]);
                     let rhs = self.reg(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
-                    dbg!("bop724");
-                    dbg!(&var.ty);
                     match bop {
                         Bop::Add => {
                             if isint(&var.ty) {

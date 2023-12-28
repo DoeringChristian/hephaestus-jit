@@ -287,7 +287,6 @@ impl AccelerationStructure {
                         device_address: scratch_buffer_address,
                     })
                     .build();
-                dbg!(&geometry_info);
 
                 device
                     .acceleration_structure_ext

@@ -42,9 +42,13 @@ unsafe extern "system" fn vulkan_debug_callback(
         CStr::from_ptr(callback_data.p_message).to_string_lossy()
     };
 
-    println!(
-        "{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n",
-    );
+    match message_severity {
+        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => log::trace!("{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n"),
+        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => log::info!("{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n"),
+        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => log::warn!("{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n"),
+        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => log::error!("{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n"),
+        _ => {}
+    };
 
     vk::FALSE
 }

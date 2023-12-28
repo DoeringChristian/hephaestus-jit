@@ -25,7 +25,6 @@ impl VulkanDevice {
     ) {
         const ITEMS_PER_THREAD: u32 = 4;
         let thread_count = round_pow2((num + ITEMS_PER_THREAD - 1) / ITEMS_PER_THREAD);
-        dbg!(thread_count);
 
         let shader = self.get_shader_glsl(
             include_str!("kernels/compress_small.glsl"),
@@ -140,8 +139,6 @@ impl VulkanDevice {
             .subgroup_size as usize;
 
         let scratch_items = 1 + warp_size + block_count;
-        let trailer = items_per_block * block_count - num;
-        dbg!(block_count);
 
         let compress_large = self.get_shader_glsl(
             include_str!("kernels/compress_large.glsl"),
