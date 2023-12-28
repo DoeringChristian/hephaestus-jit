@@ -366,6 +366,8 @@ impl RGraph {
         device.submit_global(|device, cb| {
             profiler.begin_frame(cb);
             for pass in self.passes {
+                let scope = profiler.begin_scope(cb);
+
                 // Transition resources
                 log::trace!("Recording {pass:?} to command buffer");
 
@@ -383,8 +385,6 @@ impl RGraph {
                     }
                 }
                 barriers.record(device, cb);
-
-                let scope = profiler.begin_scope(cb);
 
                 // Record content of pass
                 let render_fn = pass.render_fn.unwrap();
