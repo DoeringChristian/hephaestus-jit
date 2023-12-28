@@ -107,6 +107,12 @@ impl Trace {
             _thread_id: std::thread::current().id(),
         }
     }
+    pub fn is_empty(&self) -> bool {
+        self.vars.is_empty()
+    }
+}
+pub fn is_empty() -> bool {
+    with_trace(|trace| trace.is_empty())
 }
 impl Drop for Trace {
     fn drop(&mut self) {
