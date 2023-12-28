@@ -49,7 +49,7 @@ raw-window-handle = "0.5"
 ash-window = "0.12.0"
 gpu-profiler = { git = "https://github.com/h3r2tic/gpu-profiler.git", version = "0.1.0", features = ["ash", "use-ash"] }
 
-[dev-dependecies]
+[dev-dependencies]
 rusty-hook = "^0.11.2"
 criterion = { version = "0.4", features = ["html_reports"] }
 
