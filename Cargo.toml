@@ -44,6 +44,7 @@ indexmap = "2.1.0"
 winit = "0.27.1"
 raw-window-handle = "0.5"
 ash-window = "0.12.0"
+gpu-profiler = { git = "https://github.com/h3r2tic/gpu-profiler.git", version = "0.1.0", features = ["ash", "use-ash"] }
 
 [dev-dependecies]
 rusty-hook = "^0.11.2"

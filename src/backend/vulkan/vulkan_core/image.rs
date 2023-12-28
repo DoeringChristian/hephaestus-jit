@@ -104,7 +104,7 @@ impl Image {
             let s = self.clone();
             let src = src.clone();
             rgraph
-                .pass()
+                .pass("Copy Buffer -> Image")
                 .read(&src, AccessType::TransferRead)
                 .write(&s, AccessType::TransferWrite)
                 .record(move |device, cb, _| unsafe {

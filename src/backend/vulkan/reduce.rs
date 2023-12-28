@@ -200,7 +200,7 @@ impl VulkanDevice {
             let src = src.clone();
             let in_buffer = in_buffer.clone();
             rgraph
-                .pass()
+                .pass("Reduce copy to input buffer")
                 .read(&src, AccessType::ComputeShaderReadOther)
                 .write(&in_buffer, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, _| {
@@ -230,7 +230,7 @@ impl VulkanDevice {
                 let size_buffer = size_buffer.clone();
                 let pipeline = pipeline.clone();
                 rgraph
-                    .pass()
+                    .pass("Reduce: reduction")
                     .read(&in_buffer, AccessType::ComputeShaderReadOther)
                     .read(&size_buffer, AccessType::ComputeShaderReadOther)
                     .write(&out_buffer, AccessType::ComputeShaderWrite)
@@ -273,7 +273,7 @@ impl VulkanDevice {
             let in_buffer = in_buffer.clone();
             let dst = dst.clone();
             rgraph
-                .pass()
+                .pass("Reduce: copy to output")
                 .read(&in_buffer, AccessType::TransferRead)
                 .write(&dst, AccessType::TransferWrite)
                 .record(move |device, cb, _| {

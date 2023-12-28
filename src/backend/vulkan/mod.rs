@@ -21,11 +21,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::backend;
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
+use crate::backend::vulkan::vulkan_core::profiler::ProfilerBackend;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use gpu_profiler::backend::ash::VulkanProfilerFrame;
 use vk_sync::AccessType;
 use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
@@ -136,11 +138,11 @@ impl backend::BackendDevice for VulkanDevice {
         graph: &crate::graph::Graph,
         env: &crate::graph::Env,
     ) -> backend::Result<()> {
+        let profiler =
+            VulkanProfilerFrame::new(&self.device.device, ProfilerBackend::new(&self.device));
+
         use crate::graph::PassOp;
-        // WARN: Potential Use after Free (GPU) when references are droped before cbuffer has ben
-        // submitted
-        // FIX: Add a struct that can collect Arcs to those resources
-        let mut rgraph = RGraph::default();
+        let mut rgraph = RGraph::new();
 
         for pass in graph.passes.iter() {
             let buffers = pass
@@ -200,7 +202,7 @@ impl backend::BackendDevice for VulkanDevice {
                         .collect::<Vec<_>>();
 
                     // Create a render pass on the graph, pushing all it's resource accesses
-                    let mut rpass = rgraph.pass();
+                    let mut rpass = rgraph.pass("JIT Kernel");
                     for buffer in &buffers {
                         rpass = rpass.read(&buffer, AccessType::ComputeShaderReadOther);
                         rpass = rpass.write(&buffer, AccessType::ComputeShaderWrite);

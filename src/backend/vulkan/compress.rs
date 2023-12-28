@@ -82,7 +82,7 @@ impl VulkanDevice {
             let dst = dst.clone();
             let out_count = out_count.clone();
             rgraph
-                .pass()
+                .pass("Compress Small")
                 .read(&src, AccessType::ComputeShaderReadOther)
                 .read(&size_buffer, AccessType::ComputeShaderReadOther)
                 .write(&dst, AccessType::ComputeShaderWrite)
@@ -189,7 +189,7 @@ impl VulkanDevice {
             let dst = dst.clone();
             let out_count = out_count.clone();
             rgraph
-                .pass()
+                .pass("Compress Large")
                 .read(&size_buffer, AccessType::ComputeShaderReadOther)
                 .read(&src, AccessType::ComputeShaderReadOther)
                 .read(&scratch_buffer, AccessType::ComputeShaderReadOther)

@@ -163,7 +163,6 @@ impl From<Arc<AccelerationStructure>> for Resource {
 /// * `resources`: A hashmap mapping from the pointer addresses of resources to their owned types
 /// usize -> (Arc<dyn Resouce>)
 /// This let's us deduplicate resources (a better mechanism wouls be use indices)
-#[derive(Default, Debug)]
 pub struct RGraph {
     passes: Vec<Pass>,
     // We deduplicate resources by the pointers to their Arcs
@@ -171,7 +170,22 @@ pub struct RGraph {
     // resources: IndexMap<usize, Arc<dyn Resource>>,
     resources: IndexMap<usize, Resource>,
 }
+impl Debug for RGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RGraph")
+            .field("passes", &self.passes)
+            .field("resources", &self.resources)
+            .finish()
+    }
+}
 impl RGraph {
+    pub fn new() -> Self {
+        Self {
+            // profiler: ProfilerData::new(&device.device, ProfilerBackend::new(&device)),
+            passes: Default::default(),
+            resources: Default::default(),
+        }
+    }
     pub fn resource<R>(&mut self, resource: &Arc<R>) -> ResourceId
     where
         Arc<R>: Into<Resource>,
@@ -193,6 +207,7 @@ pub struct PassId(usize);
 /// Represents a recorded Pass
 ///
 pub struct Pass {
+    name: String,
     read: Vec<(ResourceId, AccessType)>,
     write: Vec<(ResourceId, AccessType)>,
     render_fn: Option<Box<dyn FnOnce(&Device, vk::CommandBuffer, &mut RGraphPool)>>,
@@ -212,6 +227,7 @@ impl Debug for Pass {
 /// * `read`: Read accesses
 /// * `write`: Write accesses
 pub struct PassBuilder<'a> {
+    name: &'a str,
     graph: &'a mut RGraph,
     read: Vec<(ResourceId, AccessType)>,
     write: Vec<(ResourceId, AccessType)>,
@@ -242,6 +258,7 @@ impl<'a> PassBuilder<'a> {
     ) -> PassId {
         let id = PassId(self.graph.passes.len());
         self.graph.passes.push(Pass {
+            name: self.name.into(),
             read: self.read,
             write: self.write,
             render_fn: Some(Box::new(f)),
@@ -317,8 +334,9 @@ impl Drop for RGraphPool {
 }
 
 impl RGraph {
-    pub fn pass(&mut self) -> PassBuilder {
+    pub fn pass<'a>(&'a mut self, name: &'a str) -> PassBuilder<'a> {
         PassBuilder {
+            name,
             graph: self,
             read: vec![],
             write: vec![],

@@ -109,7 +109,7 @@ impl VulkanDevice {
             let output = output.clone();
             let input = input.clone();
             rgraph
-                .pass()
+                .pass("Prefix Sum Large")
                 .read(&size_buffer, AccessType::ComputeShaderReadOther)
                 .read(&input, AccessType::ComputeShaderReadOther)
                 .read(&scratch_buffer, AccessType::ComputeShaderReadOther)
@@ -215,7 +215,7 @@ impl VulkanDevice {
         {
             let scratch_buffer = scratch_buffer.clone();
             rgraph
-                .pass()
+                .pass("Initialize prefix sum scratch buffer")
                 .read(&size_buffer, AccessType::ComputeShaderReadOther)
                 .write(&scratch_buffer, AccessType::ComputeShaderWrite)
                 .record(move |device, cb, pool| {

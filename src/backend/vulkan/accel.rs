@@ -195,7 +195,7 @@ impl Accel {
             let desc_instance_buffer = desc.instances.clone();
             let instance_buffer = self.instance_buffer.clone();
             rgraph
-                .pass()
+                .pass("Create VkAccelerationStructureInstanceKHR")
                 .read(&references_buffer, AccessType::ComputeShaderReadOther)
                 .read(&desc_instance_buffer, AccessType::ComputeShaderReadOther)
                 .write(&instance_buffer, AccessType::ComputeShaderWrite)

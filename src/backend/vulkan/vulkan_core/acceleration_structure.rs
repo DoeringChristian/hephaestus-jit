@@ -268,7 +268,7 @@ impl AccelerationStructure {
 
         let s = self.clone();
         let mut pass = rgraph
-            .pass()
+            .pass("Build AccelerationStructure")
             .read(&scratch_buffer, AccessType::AccelerationStructureBuildRead)
             .write(&scratch_buffer, AccessType::AccelerationStructureBuildWrite);
         for dep in dependencies {
