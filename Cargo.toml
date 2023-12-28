@@ -3,6 +3,9 @@ name = "hephaestus-jit"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "hephaestus_jit"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -48,9 +51,11 @@ gpu-profiler = { git = "https://github.com/h3r2tic/gpu-profiler.git", version = 
 
 [dev-dependecies]
 rusty-hook = "^0.11.2"
+criterion = { version = "0.4", features = ["html_reports"] }
 
 [hooks]
 pre-commit = "cargo test"
 
-[profile.release]
-debug = true
+[[bench]]
+name = "vulkan"
+harness = false
