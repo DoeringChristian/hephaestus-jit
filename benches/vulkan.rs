@@ -5,14 +5,13 @@ use hephaestus_jit::backend::Report;
 use hephaestus_jit::tr;
 
 pub fn compress_large(n: usize) -> std::time::Duration {
-    use rand::Rng;
-
     let device = vulkan(0);
 
     // TODO: same bug as in prefix sum but with sizes not divisible by 16
-    let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
+    // let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
 
-    let src_tr = tr::array(&src, &device);
+    // let src_tr = tr::array(&src, &device);
+    let src_tr = tr::sized_literal(true, n);
 
     let (count, index) = src_tr.compress();
 
@@ -31,7 +30,7 @@ pub fn compress_large(n: usize) -> std::time::Duration {
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("compress_large");
 
-    for i in 0..12 {
+    for i in 10..30 {
         let n = usize::pow(2, i);
 
         group.throughput(Throughput::Elements(n as _));
