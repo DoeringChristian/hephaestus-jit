@@ -21,7 +21,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::backend;
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
-use crate::backend::vulkan::vulkan_core::profiler::ProfilerBackend;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
@@ -129,18 +128,11 @@ impl backend::BackendDevice for VulkanDevice {
         })
     }
 
-    fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> backend::Result<()> {
-        todo!()
-    }
-
     fn execute_graph(
         &self,
         graph: &crate::graph::Graph,
         env: &crate::graph::Env,
-    ) -> backend::Result<()> {
-        let profiler =
-            VulkanProfilerFrame::new(&self.device.device, ProfilerBackend::new(&self.device));
-
+    ) -> backend::Result<backend::Report> {
         use crate::graph::PassOp;
         let mut rgraph = RGraph::new();
 
@@ -269,9 +261,11 @@ impl backend::BackendDevice for VulkanDevice {
                 _ => todo!(),
             }
         }
-        rgraph.submit(self);
-        // self.submit_global(|device, cb| {});
-        Ok(())
+        let pass_report = rgraph.submit(self);
+
+        Ok(backend::Report {
+            passes: pass_report,
+        })
     }
 
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {

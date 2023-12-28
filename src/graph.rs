@@ -135,7 +135,9 @@ impl Graph {
                 .collect::<Vec<_>>();
         });
 
-        device.execute_graph(self, &env).unwrap();
+        log::trace!("Launching Graph");
+        let report = device.execute_graph(self, &env).unwrap();
+        log::trace!("Report:\n {report}");
 
         // Update resources of variables in the trace and graph.
         // NOTE: We might not want the second one

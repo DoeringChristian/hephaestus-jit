@@ -35,15 +35,6 @@ impl BackendDevice for CudaDevice {
         todo!()
     }
 
-    fn execute_ir(
-        &self,
-        ir: &crate::ir::IR,
-        num: usize,
-        buffers: &[&Self::Buffer],
-    ) -> backend::Result<()> {
-        todo!()
-    }
-
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {
         todo!()
     }

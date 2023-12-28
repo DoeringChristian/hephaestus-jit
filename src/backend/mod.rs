@@ -70,34 +70,10 @@ impl Device {
             Device::VulkanDevice(device) => Ok(Accel::VulkanAccel(device.create_accel(desc)?)),
         }
     }
-    pub fn execute_graph(&self, graph: &Graph, env: &Env) -> Result<()> {
+    pub fn execute_graph(&self, graph: &Graph, env: &Env) -> Result<Report> {
         match self {
             Device::CudaDevice(_) => todo!(),
             Device::VulkanDevice(device) => device.execute_graph(graph, env),
-        }
-    }
-    pub fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Buffer]) -> Result<()> {
-        match self {
-            Device::CudaDevice(device) => {
-                let buffers = buffers
-                    .iter()
-                    .map(|b| match b {
-                        Buffer::CudaBuffer(buffer) => buffer,
-                        _ => todo!(),
-                    })
-                    .collect::<Vec<_>>();
-                device.execute_ir(ir, num, &buffers)
-            }
-            Device::VulkanDevice(device) => {
-                let buffers = buffers
-                    .iter()
-                    .map(|b| match b {
-                        Buffer::VulkanBuffer(buffer) => buffer,
-                        _ => todo!(),
-                    })
-                    .collect::<Vec<_>>();
-                device.execute_ir(ir, num, &buffers)
-            }
         }
     }
 }
@@ -176,8 +152,7 @@ pub trait BackendDevice: Clone {
     fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Self::Buffer>;
     fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
     fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
-    fn execute_ir(&self, ir: &IR, num: usize, buffers: &[&Self::Buffer]) -> Result<()>;
-    fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<()> {
+    fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<Report> {
         todo!()
     }
 }
@@ -226,4 +201,27 @@ pub enum GeometryDesc {
 pub struct AccelDesc {
     pub geometries: Vec<GeometryDesc>,
     pub instances: usize,
+}
+
+pub struct PassReport {
+    pub name: String,
+    pub duration: std::time::Duration,
+}
+
+pub struct Report {
+    pub passes: Vec<PassReport>,
+}
+impl std::fmt::Display for Report {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Passes:")?;
+        for pass in self.passes.iter() {
+            writeln!(
+                f,
+                "\t{name: <50} {duration:?}",
+                name = pass.name,
+                duration = pass.duration
+            )?;
+        }
+        Ok(())
+    }
 }

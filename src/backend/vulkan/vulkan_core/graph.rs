@@ -1,10 +1,13 @@
 use ash::vk;
 use indexmap::IndexMap;
 
+use crate::backend::PassReport;
+
 use super::acceleration_structure::AccelerationStructure;
 use super::buffer::Buffer;
 use super::device::Device;
 use super::image::Image;
+use super::profiler::Profiler;
 use std::fmt::Debug;
 use std::sync::Arc;
 use vk_sync::cmd::pipeline_barrier;
@@ -342,7 +345,7 @@ impl RGraph {
             write: vec![],
         }
     }
-    pub fn submit(self, device: &Device) {
+    pub fn submit(self, device: &Device) -> Vec<PassReport> {
         let mut resource_accesses = self
             .resources
             .iter()
@@ -357,7 +360,11 @@ impl RGraph {
 
         let mut tmp_resource_pool = RGraphPool::new(device);
 
+        let mut profiler = Profiler::new(device, self.passes.len());
+        let mut pass_names = vec![];
+
         device.submit_global(|device, cb| {
+            profiler.begin_frame(cb);
             for pass in self.passes {
                 // Transition resources
                 log::trace!("Recording {pass:?} to command buffer");
@@ -377,17 +384,33 @@ impl RGraph {
                 }
                 barriers.record(device, cb);
 
+                let scope = profiler.begin_scope(cb);
+
                 // Record content of pass
                 let render_fn = pass.render_fn.unwrap();
                 render_fn(device, cb, &mut tmp_resource_pool);
+
+                profiler.end_scope(cb, scope);
 
                 // Modify resource_accesses when writing
                 for (id, access) in pass.write.iter() {
                     resource_accesses[id.0] = *access;
                 }
+
+                pass_names.push(pass.name);
             }
+            profiler.end_frame(cb);
         });
 
+        let report = profiler
+            .report()
+            .into_iter()
+            .zip(pass_names)
+            .map(|(duration, name)| PassReport { name, duration })
+            .collect::<Vec<_>>();
+
         drop(tmp_resource_pool);
+
+        report
     }
 }
