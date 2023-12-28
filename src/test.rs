@@ -827,8 +827,10 @@ fn compress_large() {
 
     let device = vulkan(0);
 
+    let n = usize::pow(2, 12);
+
     // TODO: same bug as in prefix sum but with sizes not divisible by 16
-    let src: Vec<bool> = (0..4096).map(|_| rand::thread_rng().gen()).collect();
+    let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
 
     let reference = src
         .iter()
