@@ -1,14 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{BenchmarkId, Throughput};
 use hephaestus_jit::backend::vulkan;
 use hephaestus_jit::backend::Report;
 use hephaestus_jit::tr;
 
-pub fn compress_large() -> std::time::Duration {
+pub fn compress_large(n: usize) -> std::time::Duration {
     use rand::Rng;
 
     let device = vulkan(0);
-
-    let n = usize::pow(2, 12);
 
     // TODO: same bug as in prefix sum but with sizes not divisible by 16
     let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
@@ -30,16 +29,25 @@ pub fn compress_large() -> std::time::Duration {
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("compress_large", move |b| {
-        b.iter_custom(|iters| {
-            let duration = (0..iters)
-                .map(|_| compress_large())
-                .reduce(|a, b| a + b)
-                .unwrap()
-                .div_f64(iters as f64);
-            duration
-        })
-    });
+    let mut group = c.benchmark_group("compress_large");
+
+    for i in 0..12 {
+        let n = usize::pow(2, i);
+
+        group.throughput(Throughput::Elements(n as _));
+
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, n| {
+            b.iter_custom(|iters| {
+                let duration = (0..iters)
+                    .map(|_| compress_large(*n))
+                    .reduce(|a, b| a + b)
+                    .unwrap()
+                    .div_f64(iters as f64);
+                duration
+            })
+        });
+    }
+    group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);
