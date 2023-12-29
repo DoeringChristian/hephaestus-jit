@@ -1,0 +1,4 @@
+drjit==0.4.4
+matplotlib==3.8.2
+mitsuba==3.5.0
+numpy==1.26.2
