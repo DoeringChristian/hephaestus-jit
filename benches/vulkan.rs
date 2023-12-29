@@ -88,7 +88,7 @@ pub fn compress_large(c: &mut Criterion) {
 pub fn prefix_sum_large(c: &mut Criterion) {
     let device = vulkan(0);
 
-    measure_custom(c, 10..31, "prefix_sum_large_u32", |n| {
+    measure_custom(c, 10..30, "prefix_sum_large_u32", |n| {
         benches::prefix_sum_large(&device, n, 1u32, n as u32)
     });
 }
