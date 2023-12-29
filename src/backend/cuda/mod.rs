@@ -55,9 +55,9 @@ impl BackendBuffer for CudaBuffer {
         todo!()
     }
 
-    fn size(&self) -> usize {
-        todo!()
-    }
+    // fn size(&self) -> usize {
+    //     todo!()
+    // }
 
     fn device(&self) -> &Self::Device {
         todo!()

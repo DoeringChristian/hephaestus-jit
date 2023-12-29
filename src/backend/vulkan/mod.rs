@@ -35,6 +35,7 @@ use vulkan_core::image::{Image, ImageInfo};
 use self::codegen::CompileInfo;
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
+use self::vkdevice::round_pow2;
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
@@ -111,8 +112,9 @@ impl backend::BackendDevice for VulkanDevice {
     type Accel = VulkanAccel;
 
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
+        let buffer_size = round_pow2(size as u32);
         let info = BufferInfo {
-            size,
+            size: buffer_size as usize,
             alignment: 0,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -376,7 +378,7 @@ impl backend::BackendBuffer for VulkanBuffer {
         let ty_size = T::var_ty().size();
         let size = len * ty_size;
 
-        assert!(self.size() >= size);
+        assert!(self.buffer.size() >= size);
 
         let info = BufferInfo {
             size,
@@ -400,9 +402,9 @@ impl backend::BackendBuffer for VulkanBuffer {
         // Ok(bytemuck::cast_slice(staging.mapped_slice()).to_vec())
     }
 
-    fn size(&self) -> usize {
-        self.buffer.info().size
-    }
+    // fn size(&self) -> usize {
+    //     self.buffer.info().size
+    // }
     fn device(&self) -> &Self::Device {
         &self.device
     }

@@ -223,7 +223,7 @@ Graph {
                 Buffer(
                     VulkanBuffer(
                         VulkanBuffer {
-                            size: 10,
+                            size: 16,
                         },
                     ),
                 ),

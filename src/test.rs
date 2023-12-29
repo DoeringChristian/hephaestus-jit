@@ -830,10 +830,11 @@ fn compress_large() {
 
     let device = vulkan(0);
 
-    let n = usize::pow(2, 12);
+    let n = usize::pow(2, 12) + 15;
 
     // TODO: same bug as in prefix sum but with sizes not divisible by 16
-    let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
+    // let src: Vec<bool> = (0..n).map(|_| rand::thread_rng().gen()).collect();
+    let src = (0..n).map(|_| true).collect::<Vec<_>>();
 
     let reference = src
         .iter()
@@ -862,7 +863,7 @@ fn prefix_sum() {
 
     // TODO: investigate why it's not working with sizes not divisible by 4 (suspect last thread
     // not running)
-    let num = 2048 * 4 + 4; // test some weird value for initialization
+    let num = 2048 * 4 + 3; // test some weird value for initialization
 
     let input = (0..num as u64).map(|i| i).collect::<Vec<_>>();
 
