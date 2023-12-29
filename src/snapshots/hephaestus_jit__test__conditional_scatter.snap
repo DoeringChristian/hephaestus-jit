@@ -230,20 +230,4 @@ Graph {
             ),
         ],
     },
-    schedule: [
-        VarRef {
-            id: VarId(
-                DefaultKey(
-                    1v1,
-                ),
-            ),
-        },
-        VarRef {
-            id: VarId(
-                DefaultKey(
-                    6v1,
-                ),
-            ),
-        },
-    ],
 }

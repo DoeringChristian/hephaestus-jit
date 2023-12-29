@@ -73,7 +73,6 @@ pub struct Graph {
     pub passes: Vec<Pass>,
     pub resource_descs: Vec<(trace::VarId, ResourceDesc)>,
     pub env: Env,
-    pub schedule: Vec<trace::VarRef>,
 }
 
 impl Graph {
@@ -193,22 +192,19 @@ pub enum PassOp {
 /// * `refs`: Variable references
 ///
 /// TODO: should we compile for a device?
-pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
-    let trace::Schedule {
-        mut vars,
-        mut groups,
-        ..
-    } = schedule;
+pub fn compile(trace: &mut trace::Trace, schedule: &trace::Schedule) -> Graph {
+    let mut vars = schedule.vars.iter().map(|r| r.id()).collect::<Vec<_>>();
+    let groups = schedule.groups.clone();
 
     // Subdivide groups by extent
     let groups = groups
-        .iter_mut()
+        .iter()
         .flat_map(|group| {
             vars[group.clone()].sort_by(|id0, id1| {
                 trace
-                    .var(id0.id())
+                    .var(*id0)
                     .extent
-                    .partial_cmp(&trace.var(id1.id()).extent)
+                    .partial_cmp(&trace.var(*id1).extent)
                     .unwrap()
             });
 
@@ -217,12 +213,12 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             let mut start = group.start;
 
             for i in group.clone() {
-                if trace.var(vars[i].id()).extent != size {
+                if trace.var(vars[i]).extent != size {
                     let end = i + 1;
                     if start != end {
                         groups.push(start..end);
                     }
-                    size = trace.var(vars[i].id()).extent.clone();
+                    size = trace.var(vars[i]).extent.clone();
                     start = end;
                 }
             }
@@ -237,7 +233,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
     // We can now insert the variables as well as the
     let mut graph_builder = GraphBuilder::default();
     for group in groups.iter() {
-        let first_id = vars[group.start].id();
+        let first_id = vars[group.start];
         let first_var = trace.var(first_id);
         // Note: we know, that all variables in a group have the same size
         // TODO: validate, that the the size_buffer is a buffer
@@ -249,7 +245,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         let pass = if first_var.op.is_device_op() {
             // Handle Device Ops (precompiled)
             assert_eq!(group.len(), 1);
-            let id = vars[group.start].id();
+            let id = vars[group.start];
 
             let var = trace.var(id);
             match var.op {
@@ -276,7 +272,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
             // Handle Kernel Ops (compile)
             let mut compiler = compiler::Compiler::default();
 
-            compiler.collect_vars(trace, group.clone().map(|i| vars[i].id()));
+            compiler.collect_vars(trace, group.clone().map(|i| vars[i]));
 
             let resources = compiler
                 .buffers
@@ -285,7 +281,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
                 .chain(compiler.accels.into_iter())
                 .flat_map(|id| graph_builder.try_push_resource(trace, id))
                 .collect::<Vec<_>>();
-            let size = trace.var(vars[group.start].id()).extent.capacity();
+            let size = trace.var(vars[group.start]).extent.capacity();
             Pass {
                 resources,
                 size_buffer,
@@ -300,7 +296,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         // Change op to resulting op
         // This should prevent the ir compiler from colecting stuff twice
         for i in group.clone() {
-            let id = vars[i].id();
+            let id = vars[i];
             let var = trace.var_mut(id);
             if var.data.is_buffer() {
                 continue;
@@ -331,7 +327,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
     for group in groups {
         // Clear Dependecies for schedule variables
         for i in group {
-            let id = vars[i].id();
+            let id = vars[i];
             let var = trace.var_mut(id);
 
             if var.data.is_buffer() {
@@ -351,7 +347,6 @@ pub fn compile(trace: &mut trace::Trace, schedule: trace::Schedule) -> Graph {
         passes: graph_builder.passes,
         resource_descs,
         env: Env { resources },
-        schedule: vars,
     };
     graph
 }

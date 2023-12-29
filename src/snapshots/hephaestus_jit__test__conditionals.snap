@@ -97,13 +97,4 @@ Graph {
             None,
         ],
     },
-    schedule: [
-        VarRef {
-            id: VarId(
-                DefaultKey(
-                    1v1,
-                ),
-            ),
-        },
-    ],
 }
