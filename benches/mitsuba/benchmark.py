@@ -40,7 +40,7 @@ def test(f) -> tuple[np.ndarray, np.ndarray]:
     m = 100
     x = []
     y = []
-    for i in range(10, 31):
+    for i in range(10, 30):
         n = 2**i
         print(f"{n=}")
         x.append(n)

@@ -81,7 +81,7 @@ pub fn measure_custom(
 pub fn compress_large(c: &mut Criterion) {
     let device = vulkan(0);
 
-    measure_custom(c, 10..31, "compress_large", |n| {
+    measure_custom(c, 10..30, "compress_large", |n| {
         benches::compress_large(&device, n)
     });
 }
