@@ -881,6 +881,10 @@ impl VarRef {
             [self],
         )
     }
+    pub fn extract_all(self) -> Vec<Self> {
+        let n_elements = self.ty().num_elements().unwrap();
+        (0..n_elements).map(|i| self.extract(i)).collect()
+    }
     pub fn select(&self, true_val: &Self, false_val: &Self) -> Self {
         assert_eq!(self.ty(), VarType::Bool);
         assert_eq!(true_val.ty(), false_val.ty());

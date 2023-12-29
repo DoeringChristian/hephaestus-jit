@@ -107,6 +107,15 @@ impl VarType {
             VarType::Array { ty, num } => ty.alignment(),
         }
     }
+    pub fn num_elements(&self) -> Option<usize> {
+        match self {
+            VarType::Vec { ty, num } => Some(*num),
+            VarType::Array { ty, num } => Some(*num),
+            VarType::Mat { ty, rows, cols } => Some(rows * cols),
+            VarType::Struct { tys } => Some(tys.len()),
+            _ => None,
+        }
+    }
     pub fn is_int(&self) -> bool {
         matches!(
             self,

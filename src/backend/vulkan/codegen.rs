@@ -91,6 +91,7 @@ struct SpirvBuilder {
     b: dr::Builder,
     spriv_regs: HashMap<VarId, u32>,
 
+    // Maps spirv type to a arry of buffers with that type
     buffer_arrays: HashMap<u32, u32>,
     accel_var: Option<u32>,
     samplers: HashMap<SamplerDesc, u32>,
