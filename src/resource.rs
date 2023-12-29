@@ -5,7 +5,7 @@ use crate::vartype::VarType;
 #[derive(Debug, Clone)]
 pub struct BufferDesc {
     pub size: usize,
-    pub ty: VarType,
+    pub ty: &'static VarType,
 }
 #[derive(Debug, Clone)]
 pub struct TextureDesc {

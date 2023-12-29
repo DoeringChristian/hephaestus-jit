@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use approx::assert_abs_diff_eq;
 
-use crate::vartype::{Instance, Intersection};
+use crate::vartype::{AsVarType, Instance, Intersection};
 use crate::{backend, tr, vulkan};
 
 #[test]
@@ -66,7 +66,7 @@ fn simple_f16() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    let c = tr::index(10).cast(crate::vartype::VarType::F16);
+    let c = tr::index(10).cast(f16::var_ty());
 
     c.schedule();
 

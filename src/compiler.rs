@@ -3,7 +3,7 @@ use crate::ir::{self, IR};
 use crate::op::{self, KernelOp, Op};
 use crate::resource::Resource;
 use crate::trace::{self, Trace};
-use crate::vartype::VarType;
+use crate::vartype::{self, AsVarType, VarType};
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -51,7 +51,7 @@ impl Compiler {
             let dst = self.ir.push_var(
                 ir::Var {
                     op: KernelOp::BufferRef,
-                    ty: var.ty.clone(),
+                    ty: var.ty,
                     data: buffer_id as _,
                     ..Default::default()
                 },
@@ -60,7 +60,7 @@ impl Compiler {
             let idx = self.ir.push_var(
                 ir::Var {
                     op: KernelOp::Index,
-                    ty: VarType::U32,
+                    ty: u32::var_ty(),
                     ..Default::default()
                 },
                 [],
@@ -68,7 +68,7 @@ impl Compiler {
             self.ir.push_var(
                 ir::Var {
                     op: KernelOp::Scatter(None),
-                    ty: VarType::Void,
+                    ty: vartype::void(),
                     ..Default::default()
                 },
                 [dst, src, idx],
@@ -96,7 +96,7 @@ impl Compiler {
                 let idx = self.ir.push_var(
                     ir::Var {
                         op: KernelOp::Index,
-                        ty: VarType::U32,
+                        ty: u32::var_ty(),
                         ..Default::default()
                     },
                     [],

@@ -23,7 +23,7 @@ impl GraphBuilder {
             let desc = match var.op.resulting_op() {
                 op::Op::Buffer => ResourceDesc::BufferDesc(BufferDesc {
                     size: var.extent.capacity(),
-                    ty: var.ty.clone(),
+                    ty: var.ty,
                 }),
                 op::Op::Texture => {
                     let (shape, channels) = var.extent.shape_and_channles();

@@ -7,7 +7,7 @@ use std::thread::ThreadId;
 use crate::extent::Extent;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::Resource;
-use crate::vartype::{AsVarType, Instance, Intersection, VarType};
+use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, ir, utils};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
@@ -167,10 +167,11 @@ impl Drop for VarRef {
 /// The [Var] struct represents a variable in the trace.
 /// Every variable is the result of some operation [Op] and might hold some [Resource].
 ///
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Var {
-    pub op: Op,         // Operation used to construct the variable
-    pub ty: VarType,    // Type of the variable
+    pub op: Op, // Operation used to construct the variable
+    // pub ty: VarType,    // Type of the variable
+    pub ty: &'static VarType,
     pub extent: Extent, // Extent of the variable
 
     pub dirty: bool,
@@ -179,6 +180,19 @@ pub struct Var {
 
     pub(crate) deps: Vec<VarId>,
     pub(crate) rc: usize,
+}
+impl Default for Var {
+    fn default() -> Self {
+        Self {
+            op: Default::default(),
+            ty: vartype::from_ty::<std::ffi::c_void>(|| VarType::Void),
+            extent: Default::default(),
+            dirty: Default::default(),
+            data: Default::default(),
+            deps: Default::default(),
+            rc: Default::default(),
+        }
+    }
 }
 pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     TRACE.with(|t| {
@@ -264,7 +278,7 @@ pub fn index(size: usize) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),
-            ty: VarType::U32,
+            ty: u32::var_ty(),
             extent: Extent::Size(size),
             ..Default::default()
         },
@@ -283,7 +297,7 @@ pub fn dynamic_index(capacity: usize, size: &VarRef) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),
-            ty: VarType::U32,
+            ty: u32::var_ty(),
             extent: Extent::DynSize {
                 capacity,
                 size_dep: id,
@@ -304,7 +318,7 @@ pub fn literal<T: AsVarType>(val: T) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Literal),
-            ty: ty.clone(),
+            ty,
             extent: Extent::None,
             data: Resource::Literal(data),
             ..Default::default()
@@ -324,7 +338,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Literal),
-            ty: ty.clone(),
+            ty,
             extent: Extent::Size(size),
             data: Resource::Literal(data),
             ..Default::default()
@@ -347,7 +361,7 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
         Var {
             op: Op::Buffer,
             extent: Extent::Size(size),
-            ty: ty.clone(),
+            ty,
             data: Resource::Buffer(data),
             ..Default::default()
         },
@@ -366,8 +380,8 @@ fn resulting_extent<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> Extent {
 /// Creates a composite struct, over a number of variables.
 ///
 pub fn composite(refs: &[&VarRef]) -> VarRef {
-    let tys = refs.iter().map(|r| r.ty()).collect();
-    let ty = VarType::Struct { tys };
+    let tys = refs.iter().map(|r| r.ty()).collect::<Vec<_>>();
+    let ty = vartype::composite(&tys);
 
     log::trace!("Constructing composite struct {ty:?}.");
 
@@ -393,10 +407,8 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
 
     let extent = resulting_extent(refs.iter().map(|r| *r));
 
-    let ty = VarType::Vec {
-        ty: Box::new(ty),
-        num: refs.len(),
-    };
+    let ty = vartype::vector(ty, refs.len());
+
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Construct),
@@ -419,7 +431,7 @@ pub struct AccelDesc {
 }
 
 pub fn accel(desc: &AccelDesc) -> VarRef {
-    assert_eq!(&desc.instances.ty(), Instance::var_ty());
+    assert_eq!(desc.instances.ty(), Instance::var_ty());
     let mut deps = vec![];
     deps.push(&desc.instances);
     let geometries = desc
@@ -452,7 +464,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
     push_var(
         Var {
             op: Op::DeviceOp(DeviceOp::BuildAccel),
-            ty: VarType::Void,
+            ty: vartype::void(),
             extent: Extent::Accel(create_desc.clone()),
             // accel_desc: Some(create_desc),
             ..Default::default()
@@ -584,12 +596,12 @@ impl VarRef {
     bop!(shr);
 
     // Comparisons
-    bop!(eq -> VarType::Bool);
-    bop!(neq -> VarType::Bool);
-    bop!(lt -> VarType::Bool);
-    bop!(le -> VarType::Bool);
-    bop!(gt -> VarType::Bool);
-    bop!(ge -> VarType::Bool);
+    bop!(eq -> bool::var_ty());
+    bop!(neq -> bool::var_ty());
+    bop!(lt -> bool::var_ty());
+    bop!(le -> bool::var_ty());
+    bop!(gt -> bool::var_ty());
+    bop!(ge -> bool::var_ty());
 
     uop!(neg);
     uop!(sqrt);
@@ -599,7 +611,7 @@ impl VarRef {
     uop!(exp2);
     uop!(log2);
 
-    pub fn cast(&self, ty: VarType) -> Self {
+    pub fn cast(&self, ty: &'static VarType) -> Self {
         assert_eq!(self._thread_id, std::thread::current().id());
 
         let extent = resulting_extent([self]);
@@ -624,7 +636,7 @@ impl VarRef {
     //     // assert!(self.size() * self.ty().size() % ty.size())
     // }
 
-    pub fn bitcast(&self, ty: VarType) -> Self {
+    pub fn bitcast(&self, ty: &'static VarType) -> Self {
         assert_eq!(self._thread_id, std::thread::current().id());
 
         let extent = resulting_extent([self]);
@@ -682,7 +694,7 @@ impl VarRef {
         let res = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter(None)),
-                ty: VarType::Void,
+                ty: vartype::void(),
                 extent,
                 ..Default::default()
             },
@@ -700,7 +712,7 @@ impl VarRef {
         let res = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter(None)),
-                ty: VarType::Void,
+                ty: vartype::void(),
                 extent,
                 ..Default::default()
             },
@@ -718,7 +730,7 @@ impl VarRef {
         let res = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter(Some(op))),
-                ty: VarType::Void,
+                ty: vartype::void(),
                 extent,
                 ..Default::default()
             },
@@ -736,7 +748,7 @@ impl VarRef {
         let res = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter(Some(op))),
-                ty: VarType::Void,
+                ty: vartype::void(),
                 extent,
                 ..Default::default()
             },
@@ -804,8 +816,8 @@ impl VarRef {
             [self],
         )
     }
-    pub fn ty(&self) -> VarType {
-        with_trace(|t| t.var(self.id()).ty.clone())
+    pub fn ty(&self) -> &'static VarType {
+        with_trace(|t| t.var(self.id()).ty)
     }
     pub fn size(&self) -> usize {
         match self.extent() {
@@ -867,8 +879,8 @@ impl VarRef {
         let extent = self.extent();
         let ty = self.ty();
         let ty = match ty {
-            VarType::Vec { ty, .. } => ty.as_ref().clone(),
-            VarType::Struct { tys } => tys[elem].clone(),
+            VarType::Vec { ty, .. } => ty,
+            VarType::Struct { tys } => tys[elem],
             _ => todo!(),
         };
         push_var(
@@ -886,7 +898,7 @@ impl VarRef {
         (0..n_elements).map(|i| self.extract(i)).collect()
     }
     pub fn select(&self, true_val: &Self, false_val: &Self) -> Self {
-        assert_eq!(self.ty(), VarType::Bool);
+        assert_eq!(self.ty(), bool::var_ty());
         assert_eq!(true_val.ty(), false_val.ty());
 
         let ty = true_val.ty();
@@ -913,10 +925,7 @@ impl VarRef {
         let (_, channels) = self.extent().shape_and_channles();
         assert!(channels <= 4);
         let ty = self.ty();
-        let ty = VarType::Vec {
-            ty: Box::new(ty),
-            num: channels,
-        };
+        let ty = vartype::vector(ty, channels);
         let src_ref = self.get_ref();
 
         let composite = push_var(
@@ -939,7 +948,7 @@ impl VarRef {
 
         let size = self.size();
         assert_eq!(shape.iter().fold(1, |a, b| a * b) * channels, size);
-        assert_eq!(self.ty(), VarType::F32);
+        assert_eq!(self.ty(), f32::var_ty());
 
         let shape = [
             *shape.get(0).unwrap_or(&0),
@@ -951,7 +960,7 @@ impl VarRef {
         push_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::Buffer2Texture),
-                ty: VarType::F32,
+                ty: f32::var_ty(),
                 extent: Extent::Texture { shape, channels },
                 ..Default::default()
             },
@@ -990,7 +999,7 @@ impl VarRef {
     /// Returns a tuple (count: u32, indices: [u32])
     /// TODO: add this to the SSA graph instead of scheduling it
     pub fn compress(&self) -> (Self, Self) {
-        assert_eq!(self.ty(), VarType::Bool);
+        assert_eq!(self.ty(), bool::var_ty());
         // let size = self.size();
         let extent = self.extent();
         // TODO: find a way to generate uninitialized arrays in a deffered manner
@@ -1005,7 +1014,7 @@ impl VarRef {
         let res = push_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::Compress),
-                ty: VarType::Void,
+                ty: vartype::void(),
                 extent,
                 ..Default::default()
             },

@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use crate::backend::vulkan::glslext::GLSL450Instruction;
 use crate::ir::{VarId, IR};
 use crate::op::{Bop, KernelOp, ReduceOp, Uop};
-use crate::vartype::{AsVarType, Intersection, VarType};
+use crate::vartype::{self, AsVarType, Intersection, VarType};
 use lazy_static::lazy_static;
 use rspirv::binary::{Assemble, Disassemble};
 use rspirv::{dr, spirv};
@@ -61,7 +61,7 @@ fn isint(ty: &VarType) -> bool {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct SamplerDesc {
-    ty: VarType,
+    ty: &'static VarType,
     dim: spirv::Dim,
 }
 
@@ -100,7 +100,7 @@ struct SpirvBuilder {
     function_block: usize,
     interface_vars: Vec<u32>,
 
-    types: HashMap<VarType, u32>,
+    types: HashMap<&'static VarType, u32>,
 
     n_buffers: usize,
     n_textures: usize,
@@ -380,7 +380,7 @@ impl SpirvBuilder {
         &mut self,
         src: spirv::Word,
         ptr: spirv::Word,
-        ty: &VarType,
+        ty: &'static VarType,
         op: &Option<ReduceOp>,
     ) -> Result<Option<u32>, dr::Error> {
         let spirv_ty = self.spirv_ty(ty);
@@ -476,7 +476,7 @@ impl SpirvBuilder {
             },
         }
     }
-    fn spirv_ty(&mut self, ty: &VarType) -> u32 {
+    fn spirv_ty(&mut self, ty: &'static VarType) -> u32 {
         // Deduplicate types
         if let Some(ty) = self.types.get(ty) {
             *ty
@@ -523,10 +523,7 @@ impl SpirvBuilder {
                     struct_ty
                 }
                 VarType::Mat { ty, cols, rows } => {
-                    let vec_ty = self.spirv_ty(&VarType::Vec {
-                        ty: ty.clone(),
-                        num: *rows,
-                    });
+                    let vec_ty = self.spirv_ty(vartype::vector(ty, *rows));
                     self.type_matrix(vec_ty, *cols as _)
                 }
                 VarType::Array { ty, num } => {
@@ -536,7 +533,7 @@ impl SpirvBuilder {
                     self.type_array(ty, num)
                 }
             };
-            self.types.insert(ty.clone(), spirv_ty);
+            self.types.insert(ty, spirv_ty);
             spirv_ty
         }
     }
@@ -620,9 +617,9 @@ impl SpirvBuilder {
     ///
     /// * `ty`: Type for which to generate the buffer array
     /// TODO: rename
-    fn get_buffer_array(&mut self, ty: &VarType) -> u32 {
+    fn get_buffer_array(&mut self, ty: &'static VarType) -> u32 {
         let ty = match ty {
-            VarType::Bool => &VarType::U8,
+            VarType::Bool => u8::var_ty(),
             _ => ty,
         };
         let spirv_ty = self.spirv_ty(&ty);
@@ -677,7 +674,7 @@ impl SpirvBuilder {
     }
     fn composite_construct(
         &mut self,
-        ty: &VarType,
+        ty: &'static VarType,
         elems: impl IntoIterator<Item = u32>,
     ) -> Result<u32, dr::Error> {
         // let elems = elems.into_iter();
@@ -1201,10 +1198,7 @@ impl SpirvBuilder {
                         },
                     )?;
 
-                    let vec2_ty = self.spirv_ty(&VarType::Vec {
-                        ty: Box::new(VarType::F32),
-                        num: 2,
-                    });
+                    let vec2_ty = self.spirv_ty(vartype::vector(f32::var_ty(), 2));
 
                     let i32_1 = self.constant_bit32(i32_ty, 1);
 
@@ -1326,7 +1320,7 @@ impl SpirvBuilder {
                     // Don't need to condition the scatter if that's not neccesarry
                     // TODO: unify conditioned and uncoditioned part
                     if let Some(cond) = cond {
-                        assert_eq!(ir.var(*cond).ty, VarType::Bool);
+                        assert_eq!(ir.var(*cond).ty, bool::var_ty());
 
                         let cond = self.reg(*cond);
                         self.if_block(cond, |s| {

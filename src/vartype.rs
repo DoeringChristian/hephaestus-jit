@@ -1,19 +1,62 @@
 use half::f16;
 use once_cell::sync::Lazy;
 use std::any::TypeId;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
-use lazy_static::lazy_static;
+use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 
 const fn align_up(v: usize, base: usize) -> usize {
     ((v + base - 1) / base) * base
 }
 
-static TYPE_CACHE: Lazy<Mutex<HashMap<TypeId, &'static VarType>>> =
+static TYPE_CACHE: Lazy<Mutex<HashMap<u64, &'static VarType>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+pub fn from_ty<T: 'static>(f: impl Fn() -> VarType) -> &'static VarType {
+    let ty_id = TypeId::of::<T>();
+
+    let mut hasher = DefaultHasher::new();
+    ty_id.hash(&mut hasher);
+    0u32.hash(&mut hasher);
+    let id = hasher.finish();
+
+    TYPE_CACHE
+        .lock()
+        .unwrap()
+        .entry(id)
+        .or_insert_with(|| Box::leak(Box::new(f())))
+}
+pub fn composite(tys: &[&'static VarType]) -> &'static VarType {
+    let mut hasher = DefaultHasher::new();
+    tys.hash(&mut hasher);
+    1u32.hash(&mut hasher);
+    let id = hasher.finish();
+
+    TYPE_CACHE
+        .lock()
+        .unwrap()
+        .entry(id)
+        .or_insert_with(|| Box::leak(Box::new(VarType::Struct { tys: tys.to_vec() })))
+}
+pub fn vector(ty: &'static VarType, num: usize) -> &'static VarType {
+    let mut hasher = DefaultHasher::new();
+    ty.hash(&mut hasher);
+    num.hash(&mut hasher);
+    2u32.hash(&mut hasher);
+    let id = hasher.finish();
+
+    TYPE_CACHE
+        .lock()
+        .unwrap()
+        .entry(id)
+        .or_insert_with(|| Box::leak(Box::new(VarType::Vec { ty, num })))
+}
+pub fn void() -> &'static VarType {
+    from_ty::<std::ffi::c_void>(|| VarType::Void)
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Default)]
 pub enum VarType {
     // Primitive Types (might move out)
     #[default]
@@ -31,20 +74,20 @@ pub enum VarType {
     F32,
     F64,
     Vec {
-        ty: Box<VarType>,
+        ty: &'static VarType,
         num: usize,
     },
     Array {
-        ty: Box<VarType>,
+        ty: &'static VarType,
         num: usize,
     },
     Mat {
-        ty: Box<VarType>,
+        ty: &'static VarType,
         rows: usize,
         cols: usize,
     },
     Struct {
-        tys: Vec<VarType>,
+        tys: Vec<&'static VarType>,
     },
 }
 impl VarType {
@@ -196,18 +239,11 @@ pub struct Instance {
 
 impl AsVarType for Instance {
     fn var_ty() -> &'static VarType {
-        lazy_static! {
-            static ref TY: VarType = VarType::Struct {
-                tys: vec![
-                    VarType::Array {
-                        ty: Box::new(VarType::F32),
-                        num: 12,
-                    },
-                    VarType::U32,
-                ],
-            };
-        };
-        &TY
+        let transform_ty = <[f32; 12]>::var_ty();
+        let geometry_ty = u32::var_ty();
+        from_ty::<Self>(|| VarType::Struct {
+            tys: vec![transform_ty, geometry_ty],
+        })
     }
 }
 
@@ -222,32 +258,18 @@ pub struct Intersection {
 
 impl AsVarType for Intersection {
     fn var_ty() -> &'static VarType {
-        lazy_static! {
-            static ref TY: VarType = VarType::Struct {
-                tys: vec![
-                    VarType::Vec {
-                        ty: Box::new(VarType::F32),
-                        num: 2
-                    },
-                    VarType::U32,
-                    VarType::U32,
-                    VarType::U32,
-                ],
-            };
-        };
-        &TY
+        let f32x2_ty = <[f32; 2]>::var_ty();
+        let u32_ty = u32::var_ty();
+        from_ty::<Self>(|| VarType::Struct {
+            tys: vec![f32x2_ty, u32_ty, u32_ty, u32_ty],
+        })
     }
 }
 
 impl<const N: usize, T: AsVarType + 'static> AsVarType for [T; N] {
     fn var_ty() -> &'static VarType {
-        let id = std::any::TypeId::of::<Self>();
-        TYPE_CACHE.lock().unwrap().entry(id).or_insert_with(|| {
-            Box::leak(Box::new(VarType::Array {
-                ty: Box::new(T::var_ty().clone()),
-                num: N,
-            }))
-        })
+        let ty = T::var_ty();
+        from_ty::<Self>(|| VarType::Array { ty, num: N })
     }
 }
 
@@ -263,9 +285,11 @@ mod test {
             b: u32,
         }
 
-        let ty = VarType::Struct {
-            tys: vec![VarType::U8, VarType::U32],
-        };
+        let u8_ty = u8::var_ty();
+        let u32_ty = u32::var_ty();
+        let ty = from_ty::<Reference>(|| VarType::Struct {
+            tys: vec![u8_ty, u32_ty],
+        });
 
         assert_eq!(ty.offset(0), bytemuck::offset_of!(Reference, a));
         assert_eq!(ty.offset(1), bytemuck::offset_of!(Reference, b));
@@ -280,9 +304,11 @@ mod test {
             b: u8,
         }
 
-        let ty = VarType::Struct {
-            tys: vec![VarType::U32, VarType::U8],
-        };
+        let u8_ty = u8::var_ty();
+        let u32_ty = u32::var_ty();
+        let ty = from_ty::<Reference>(|| VarType::Struct {
+            tys: vec![u32_ty, u8_ty],
+        });
 
         assert_eq!(ty.offset(0), bytemuck::offset_of!(Reference, a));
         assert_eq!(ty.offset(1), bytemuck::offset_of!(Reference, b));
@@ -299,9 +325,13 @@ mod test {
             d: u64,
         }
 
-        let ty = VarType::Struct {
-            tys: vec![VarType::U8, VarType::U16, VarType::U32, VarType::U64],
-        };
+        let u8_ty = u8::var_ty();
+        let u16_ty = u16::var_ty();
+        let u32_ty = u32::var_ty();
+        let u64_ty = u64::var_ty();
+        let ty = from_ty::<Reference>(|| VarType::Struct {
+            tys: vec![u8_ty, u16_ty, u32_ty, u64_ty],
+        });
 
         assert_eq!(ty.offset(0), bytemuck::offset_of!(Reference, a));
         assert_eq!(ty.offset(1), bytemuck::offset_of!(Reference, b));

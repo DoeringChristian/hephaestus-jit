@@ -3,18 +3,28 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
-use crate::op;
 use crate::vartype::VarType;
+use crate::{op, vartype};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(pub(crate) usize);
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Var {
-    pub(crate) ty: VarType,
+    pub(crate) ty: &'static VarType,
     pub(crate) op: KernelOp,
     pub(crate) deps: (usize, usize),
     pub(crate) data: u64,
+}
+impl Default for Var {
+    fn default() -> Self {
+        Self {
+            ty: vartype::void(),
+            op: Default::default(),
+            deps: Default::default(),
+            data: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -47,8 +57,8 @@ impl IR {
     pub fn var(&self, id: VarId) -> &Var {
         &self.vars[id.0]
     }
-    pub fn var_ty(&self, id: VarId) -> &VarType {
-        &self.var(id).ty
+    pub fn var_ty(&self, id: VarId) -> &'static VarType {
+        self.var(id).ty
     }
     pub fn var_ids(&self) -> impl Iterator<Item = VarId> {
         (0..self.vars.len()).map(|i| VarId(i))
