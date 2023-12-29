@@ -258,7 +258,8 @@ pub struct Intersection {
 
 impl AsVarType for Intersection {
     fn var_ty() -> &'static VarType {
-        let f32x2_ty = <[f32; 2]>::var_ty();
+        let f32_ty = f32::var_ty();
+        let f32x2_ty = vector(f32_ty, 2);
         let u32_ty = u32::var_ty();
         from_ty::<Self>(|| VarType::Struct {
             tys: vec![f32x2_ty, u32_ty, u32_ty, u32_ty],
