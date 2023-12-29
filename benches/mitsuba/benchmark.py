@@ -68,18 +68,18 @@ def test_and_plot(name: str, f):
     plt.plot(x, y)
     plt.xlabel("n")
     plt.ylabel("s")
-    plt.savefig(f"{dir}/timing.png")
+    plt.savefig(f"{dir}/timing.svg")
     plt.clf()
     plt.cla()
 
     plt.plot(x, throughput)
     plt.xlabel("n")
     plt.ylabel("throughput in n/s")
-    plt.savefig(f"{dir}/throughput.png")
+    plt.savefig(f"{dir}/throughput.svg")
     plt.clf()
     plt.cla()
 
 
 if __name__ == "__main__":
     test_and_plot("compress", compress)
-    test_and_plot("prefix_sum", prefix_sum)
+    test_and_plot("prefix_sum_u32", prefix_sum)
