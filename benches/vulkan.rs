@@ -6,44 +6,47 @@ use hephaestus_jit::backend::vulkan;
 use hephaestus_jit::backend::Device;
 use hephaestus_jit::tr;
 
-pub fn compress_large(device: &Device, n: usize) -> std::time::Duration {
-    let src_tr = tr::sized_literal(true, n);
+mod benches {
+    use super::*;
+    pub fn compress_large(device: &Device, n: usize) -> std::time::Duration {
+        let src_tr = tr::sized_literal(true, n);
 
-    let (count, index) = src_tr.compress();
+        let (count, index) = src_tr.compress();
 
-    let mut graph = tr::compile();
-    let report = graph.launch(&device);
+        let mut graph = tr::compile();
+        let report = graph.launch(&device);
 
-    assert_eq!(count.item::<u32>(), n as u32);
+        assert_eq!(count.item::<u32>(), n as u32);
 
-    let pass = report
-        .passes
-        .into_iter()
-        .find(|pass| pass.name == "Compress Large")
-        .unwrap();
+        let pass = report
+            .passes
+            .into_iter()
+            .find(|pass| pass.name == "Compress Large")
+            .unwrap();
 
-    pass.duration
-}
-pub fn prefix_sum_large<T>(device: &Device, n: usize, init: T, sum: T) -> std::time::Duration
-where
-    T: hephaestus_jit::vartype::AsVarType + Eq + Debug,
-{
-    let src = tr::sized_literal(init, n);
+        pass.duration
+    }
+    pub fn prefix_sum_large<T>(device: &Device, n: usize, init: T, sum: T) -> std::time::Duration
+    where
+        T: hephaestus_jit::vartype::AsVarType + Eq + Debug,
+    {
+        let src = tr::sized_literal(init, n);
 
-    let pfs = src.prefix_sum(false);
+        let pfs = src.prefix_sum(false);
 
-    let mut graph = tr::compile();
-    let report = graph.launch(&device);
+        let mut graph = tr::compile();
+        let report = graph.launch(&device);
 
-    assert_eq!(pfs.to_vec::<T>(n - 1..n)[0], sum);
+        assert_eq!(pfs.to_vec::<T>(n - 1..n)[0], sum);
 
-    let pass = report
-        .passes
-        .into_iter()
-        .find(|pass| pass.name == "Prefix Sum Large")
-        .unwrap();
+        let pass = report
+            .passes
+            .into_iter()
+            .find(|pass| pass.name == "Prefix Sum Large")
+            .unwrap();
 
-    pass.duration
+        pass.duration
+    }
 }
 
 pub fn measure_custom(
@@ -75,21 +78,20 @@ pub fn measure_custom(
     group.finish();
 }
 
-pub fn compress_large_bench(c: &mut Criterion) {
+pub fn compress_large(c: &mut Criterion) {
     let device = vulkan(0);
 
-    measure_custom(c, 10..30, "compress_large", |n| compress_large(&device, n));
+    measure_custom(c, 10..30, "compress_large", |n| {
+        benches::compress_large(&device, n)
+    });
 }
-pub fn prefix_sum_large_bench(c: &mut Criterion) {
+pub fn prefix_sum_large(c: &mut Criterion) {
     let device = vulkan(0);
 
     measure_custom(c, 10..30, "prefix_sum_large_u32", |n| {
-        prefix_sum_large(&device, n, 1u32, n as u32)
-    });
-    measure_custom(c, 10..30, "prefix_sum_large_u64", |n| {
-        prefix_sum_large(&device, n, 1u64, n as u64)
+        benches::prefix_sum_large(&device, n, 1u32, n as u32)
     });
 }
 
-criterion_group!(benches, compress_large_bench, prefix_sum_large_bench);
+criterion_group!(benches, compress_large, prefix_sum_large);
 criterion_main!(benches);
