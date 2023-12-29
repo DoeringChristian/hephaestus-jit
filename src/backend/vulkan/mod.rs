@@ -243,7 +243,6 @@ impl backend::BackendDevice for VulkanDevice {
                         let src = buffers[2].clone();
 
                         let num = graph.buffer_desc(pass.resources[2]).size;
-                        dbg!(num);
 
                         // if num <= 1024 {
                         //     self.compress_small(
