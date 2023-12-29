@@ -6,6 +6,7 @@ pub mod ir;
 mod op;
 mod resource;
 pub mod trace;
+mod utils;
 pub mod vartype;
 
 #[cfg(test)]

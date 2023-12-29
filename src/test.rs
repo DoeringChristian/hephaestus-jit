@@ -34,10 +34,10 @@ fn simple1() {
 
     dbg!(graph.n_passes());
 
-    dbg!(i.to_vec::<u32>());
-    dbg!(j.to_vec::<u32>());
-    assert_eq!(i.to_vec::<u32>(), vec![1, 2, 3, 4, 5, 5, 6, 7, 8, 9]);
-    assert_eq!(j.to_vec::<u32>(), vec![0, 1, 2, 3, 4]);
+    dbg!(i.to_vec::<u32>(..));
+    dbg!(j.to_vec::<u32>(..));
+    assert_eq!(i.to_vec::<u32>(..), vec![1, 2, 3, 4, 5, 5, 6, 7, 8, 9]);
+    assert_eq!(j.to_vec::<u32>(..), vec![0, 1, 2, 3, 4]);
 }
 
 #[test]
@@ -58,8 +58,8 @@ fn simple_u16() {
     dbg!(&graph);
     graph.launch(&device);
 
-    dbg!(c.to_vec::<u16>());
-    assert_eq!(c.to_vec::<u16>(), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
+    dbg!(c.to_vec::<u16>(..));
+    assert_eq!(c.to_vec::<u16>(..), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
 }
 #[test]
 fn simple_f16() {
@@ -74,7 +74,7 @@ fn simple_f16() {
     graph.launch(&device);
 
     let reference = (0..10).map(|i| f16::from_f32(i as _)).collect::<Vec<_>>();
-    assert_eq!(reference, c.to_vec::<f16>());
+    assert_eq!(reference, c.to_vec::<f16>(..));
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn scatter_chain1() {
     graph.launch(&device);
 
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
-    assert_eq!(b1.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
+    assert_eq!(b1.to_vec::<i32>(..), vec![2, 2, 2, 2, 2]);
 }
 #[test]
 fn scatter_chain2() {
@@ -116,10 +116,10 @@ fn scatter_chain2() {
     dbg!(&graph);
     graph.launch(&device);
 
-    dbg!(b.to_vec::<i32>());
-    dbg!(a.to_vec::<i32>());
-    assert_eq!(b.to_vec::<i32>(), vec![2, 2, 2, 2, 2]);
-    assert_eq!(a.to_vec::<i32>(), vec![1, 1, 1, 1, 1]);
+    dbg!(b.to_vec::<i32>(..));
+    dbg!(a.to_vec::<i32>(..));
+    assert_eq!(b.to_vec::<i32>(..), vec![2, 2, 2, 2, 2]);
+    assert_eq!(a.to_vec::<i32>(..), vec![1, 1, 1, 1, 1]);
 }
 #[test]
 fn extract() {
@@ -139,9 +139,9 @@ fn extract() {
 
     tr::compile().launch(&device);
 
-    dbg!(v.to_vec::<f32>());
-    dbg!(a.to_vec::<f32>());
-    dbg!(b.to_vec::<f32>());
+    dbg!(v.to_vec::<f32>(..));
+    dbg!(a.to_vec::<f32>(..));
+    dbg!(b.to_vec::<f32>(..));
 }
 #[test]
 fn extract2() {
@@ -157,7 +157,7 @@ fn extract2() {
 
     tr::compile().launch(&device);
 
-    dbg!(&s.to_vec::<u8>());
+    dbg!(&s.to_vec::<u8>(..));
 }
 #[test]
 fn test_struct() {
@@ -177,9 +177,9 @@ fn test_struct() {
 
     tr::compile().launch(&device);
 
-    dbg!(s.to_vec::<u8>());
-    dbg!(a.to_vec::<u8>());
-    dbg!(b.to_vec::<u32>());
+    dbg!(s.to_vec::<u8>(..));
+    dbg!(a.to_vec::<u8>(..));
+    dbg!(b.to_vec::<u32>(..));
 }
 
 #[test]
@@ -203,8 +203,8 @@ fn texture2d() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    dbg!(v.to_vec::<f32>());
-    assert_eq!(v.to_vec::<f32>(), vec![1.0; 8]);
+    dbg!(v.to_vec::<f32>(..));
+    assert_eq!(v.to_vec::<f32>(..), vec![1.0; 8]);
 }
 #[test]
 fn texture3d() {
@@ -228,8 +228,8 @@ fn texture3d() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    dbg!(v.to_vec::<f32>());
-    assert_eq!(v.to_vec::<f32>(), vec![1.0; 8]);
+    dbg!(v.to_vec::<f32>(..));
+    assert_eq!(v.to_vec::<f32>(..), vec![1.0; 8]);
 }
 #[test]
 fn conditionals() {
@@ -244,7 +244,7 @@ fn conditionals() {
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
-    dbg!(&dst.to_vec::<u8>());
+    dbg!(&dst.to_vec::<u8>(..));
 }
 #[test]
 fn conditional_scatter() {
@@ -258,7 +258,7 @@ fn conditional_scatter() {
         ],
         &device,
     );
-    dbg!(&active.to_vec::<u8>());
+    dbg!(&active.to_vec::<u8>(..));
 
     tr::literal(1).scatter_if(&dst, &tr::index(10), &active);
 
@@ -268,7 +268,7 @@ fn conditional_scatter() {
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
-    assert_eq!(dst.to_vec::<i32>(), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0])
+    assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0])
 }
 #[test]
 fn conditional_gather() {
@@ -290,7 +290,7 @@ fn conditional_gather() {
     dbg!(&graph);
     graph.launch(&device);
 
-    assert_eq!(dst.to_vec::<i32>(), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0]);
+    assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0]);
 }
 #[test]
 fn select() {
@@ -309,7 +309,7 @@ fn select() {
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
-    assert_eq!(res.to_vec::<i32>(), vec![10, 5]);
+    assert_eq!(res.to_vec::<i32>(..), vec![10, 5]);
 }
 #[test]
 fn accel() {
@@ -349,7 +349,7 @@ fn accel() {
         &device,
     );
 
-    dbg!(instances.to_vec::<u32>());
+    dbg!(instances.to_vec::<u32>(..));
 
     let desc = tr::AccelDesc {
         geometries: vec![tr::GeometryDesc::Triangles {
@@ -398,8 +398,8 @@ fn accel() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    dbg!(intersection.to_vec::<i32>());
-    let intersections = intersection.to_vec::<Intersection>();
+    dbg!(intersection.to_vec::<i32>(..));
+    let intersections = intersection.to_vec::<Intersection>(..);
 
     assert_abs_diff_eq!(intersections[0].barycentrics[0], 0.4, epsilon = 0.001);
     assert_abs_diff_eq!(intersections[0].barycentrics[1], 0.2, epsilon = 0.001);
@@ -426,7 +426,7 @@ fn reduce_max() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(max.to_vec::<$ty>()[0], reduced)
+            assert_eq!(max.to_vec::<$ty>(..)[0], reduced)
         };
     }
 
@@ -451,7 +451,7 @@ fn reduce_min() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(min.to_vec::<$ty>()[0], reduced)
+            assert_eq!(min.to_vec::<$ty>(..)[0], reduced)
         };
     }
 
@@ -485,7 +485,7 @@ fn reduce_sum() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+            assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
         };
     }
 
@@ -519,7 +519,7 @@ fn reduce_prod() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+            assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
         };
     }
     macro_rules! rng_test_float {
@@ -540,7 +540,7 @@ fn reduce_prod() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            let res = sum.to_vec::<$ty>()[0];
+            let res = sum.to_vec::<$ty>(..)[0];
             dbg!(&res);
             dbg!(&reduced);
             assert!(
@@ -587,7 +587,7 @@ fn reduce_and() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+            assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
         };
     }
 
@@ -606,7 +606,7 @@ fn reduce_and() {
         let mut graph = tr::compile();
         graph.launch(&device);
 
-        assert_eq!(res.to_vec::<bool>()[0], reduced)
+        assert_eq!(res.to_vec::<bool>(..)[0], reduced)
     };
 
     test_bool(&[true, false, false, false]);
@@ -637,7 +637,7 @@ fn reduce_or() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+            assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
         };
     }
 
@@ -656,7 +656,7 @@ fn reduce_or() {
         let mut graph = tr::compile();
         graph.launch(&device);
 
-        assert_eq!(res.to_vec::<bool>()[0], reduced)
+        assert_eq!(res.to_vec::<bool>(..)[0], reduced)
     };
 
     test_bool(&[true, false, false, false]);
@@ -686,7 +686,7 @@ fn reduce_xor() {
             let mut graph = tr::compile();
             graph.launch(&device);
 
-            assert_eq!(sum.to_vec::<$ty>()[0], reduced)
+            assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
         };
     }
 
@@ -705,7 +705,7 @@ fn reduce_xor() {
         let mut graph = tr::compile();
         graph.launch(&device);
 
-        assert_eq!(res.to_vec::<bool>()[0], reduced)
+        assert_eq!(res.to_vec::<bool>(..)[0], reduced)
     };
 
     test_bool(&[true, false, false, false]);
@@ -730,7 +730,10 @@ fn uop_cos() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    for (reference, pred) in reference.into_iter().zip(pred.to_vec::<f32>().into_iter()) {
+    for (reference, pred) in reference
+        .into_iter()
+        .zip(pred.to_vec::<f32>(..).into_iter())
+    {
         approx::assert_abs_diff_eq!(reference, pred, epsilon = 0.001);
     }
 }
@@ -756,11 +759,11 @@ fn scatter_atomic() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    assert_eq!(dst.to_vec::<u32>()[0], n as u32);
+    assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
 
     let mut uniq = HashSet::new();
     assert!(
-        prev.to_vec::<u32>()
+        prev.to_vec::<u32>(..)
             .into_iter()
             .all(move |x| uniq.insert(x)),
         "Atomic Operations should return the previous index which is unique!"
@@ -785,7 +788,7 @@ fn scatter_reduce() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    assert_eq!(dst.to_vec::<u32>()[0], n as u32);
+    assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
 }
 
 #[test]
@@ -812,8 +815,8 @@ fn compress_small() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    let count = count.to_vec::<u32>()[0] as usize;
-    let mut prediction = index.to_vec::<u32>();
+    let count = count.to_vec::<u32>(..)[0] as usize;
+    let mut prediction = index.to_vec::<u32>(..);
     prediction.truncate(count);
 
     assert_eq!(reference, prediction);
@@ -846,8 +849,8 @@ fn compress_large() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    let count = count.to_vec::<u32>()[0] as usize;
-    let mut prediction = index.to_vec::<u32>();
+    let count = count.to_vec::<u32>(..)[0] as usize;
+    let mut prediction = index.to_vec::<u32>(..);
     prediction.truncate(count);
 
     assert_eq!(reference, prediction);
@@ -881,7 +884,7 @@ fn prefix_sum() {
         })
         .collect::<Vec<_>>();
 
-    assert_eq!(prediction.to_vec::<u64>(), reference);
+    assert_eq!(prediction.to_vec::<u64>(..), reference);
 }
 #[test]
 fn dynamic_index() {
@@ -920,7 +923,7 @@ fn dynamic_index() {
 
     assert_eq!(values.capacity(), n);
 
-    let values = values.to_vec::<i32>();
+    let values = values.to_vec::<i32>(..);
 
     let reference = src
         .into_iter()

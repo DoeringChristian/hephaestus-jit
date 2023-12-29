@@ -8,7 +8,7 @@ use crate::extent::Extent;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::Resource;
 use crate::vartype::{AsVarType, Instance, Intersection, VarType};
-use crate::{backend, ir};
+use crate::{backend, ir, utils};
 use crate::{compiler, graph};
 use slotmap::{DefaultKey, SlotMap};
 
@@ -823,30 +823,43 @@ impl VarRef {
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
     }
-    pub fn to_vec<T: AsVarType>(&self) -> Vec<T> {
+    pub fn item<T: AsVarType>(&self) -> T {
+        assert_eq!(self.size(), 1);
+        self.to_vec(0..1)[0]
+    }
+    pub fn to_vec<T: AsVarType>(&self, range: impl std::ops::RangeBounds<usize>) -> Vec<T> {
         assert_eq!(self._thread_id, std::thread::current().id());
-        // TODO: download dynamic size
-        // (requires rc tracking for size)
         let size = match self.extent() {
             Extent::Size(size) => size,
             Extent::DynSize { size_dep, .. } => {
-                VarRef::borrow(size_dep).to_vec::<i32>()[0] as usize
+                VarRef::borrow(size_dep).to_vec::<i32>(0..1)[0] as usize
             }
             _ => todo!(),
         };
-        if size == 0 {
+        // Limit range bounds to range of buffer
+        let range = utils::usize::limit_range_bounds(range, 0..size);
+        if range.len() == 0 {
             return vec![];
         }
+        assert!(range.start <= range.end);
 
-        let bytesize = size * self.ty().size();
-        assert!(bytesize % T::var_ty().size() == 0);
-        let size = bytesize / T::var_ty().size();
+        let ty = self.ty();
+        let start_bytes = range.start * ty.size();
+        let end_bytes = range.end * ty.size();
+
+        let dst_ty_size = T::var_ty().size();
+
+        assert!(start_bytes % dst_ty_size == 0);
+        assert!(end_bytes % dst_ty_size == 0);
+        let start = start_bytes / dst_ty_size;
+        let end = end_bytes / dst_ty_size;
+
         with_trace(|t| {
             t.var(self.id())
                 .data
                 .buffer()
                 .unwrap()
-                .to_host(0..size)
+                .to_host(start..end)
                 .unwrap()
         })
     }
