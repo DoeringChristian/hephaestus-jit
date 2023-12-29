@@ -13,6 +13,8 @@ pub fn compress_large(device: &Device, n: usize) -> std::time::Duration {
     let mut graph = tr::compile();
     let report = graph.launch(&device);
 
+    assert_eq!(count.to_vec::<u32>()[0], n as u32);
+
     let pass = report
         .passes
         .into_iter()
