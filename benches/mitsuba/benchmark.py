@@ -70,11 +70,14 @@ def test_and_plot(name: str, f):
     plt.ylabel("s")
     plt.savefig(f"{dir}/timing.png")
     plt.clf()
+    plt.cla()
 
     plt.plot(x, throughput)
     plt.xlabel("n")
     plt.ylabel("throughput in n/s")
     plt.savefig(f"{dir}/throughput.png")
+    plt.clf()
+    plt.cla()
 
 
 if __name__ == "__main__":
