@@ -19,3 +19,16 @@ pub mod usize {
         start..end
     }
 }
+pub mod u64 {
+
+    pub fn round_pow2(x: u64) -> u64 {
+        let x = x - 1;
+        let x = x | x.overflowing_shr(1).0;
+        let x = x | x.overflowing_shr(2).0;
+        let x = x | x.overflowing_shr(4).0;
+        let x = x | x.overflowing_shr(8).0;
+        let x = x | x.overflowing_shr(16).0;
+        let x = x | x.overflowing_shr(32).0;
+        x + 1
+    }
+}

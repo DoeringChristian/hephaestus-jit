@@ -2,6 +2,8 @@ use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
+use crate::utils;
+
 use super::device::Device;
 
 #[derive(Debug)]

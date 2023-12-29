@@ -9,7 +9,6 @@ mod reduce;
 mod shader_cache;
 #[cfg(test)]
 mod test;
-mod util;
 mod vkdevice;
 mod vulkan_core;
 
@@ -19,11 +18,11 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use crate::backend;
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
+use crate::{backend, utils};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use gpu_profiler::backend::ash::VulkanProfilerFrame;
@@ -112,9 +111,11 @@ impl backend::BackendDevice for VulkanDevice {
     type Accel = VulkanAccel;
 
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
-        let buffer_size = round_pow2(size as u32);
+        // WARN: compress and prefix_sum rely on the buffer being divisible by 16
+        // Therefore we allocate with powers of 2
+        let size = utils::u64::round_pow2(size as _);
         let info = BufferInfo {
-            size: buffer_size as usize,
+            size: size as usize,
             alignment: 0,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -242,6 +243,7 @@ impl backend::BackendDevice for VulkanDevice {
                         let src = buffers[2].clone();
 
                         let num = graph.buffer_desc(pass.resources[2]).size;
+                        dbg!(num);
 
                         // if num <= 1024 {
                         //     self.compress_small(

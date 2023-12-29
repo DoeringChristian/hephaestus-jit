@@ -233,7 +233,8 @@ impl Pipeline {
                     .map(|info| vk::DescriptorBufferInfo {
                         buffer: info.buffer.vk(),
                         offset: 0,
-                        range: info.buffer.info().size as _,
+                        range: vk::WHOLE_SIZE,
+                        // range: info.buffer.info().size as _,
                     })
                     .collect::<Vec<_>>()
             })
@@ -315,7 +316,8 @@ impl Pipeline {
             .map(|buffer| vk::DescriptorBufferInfo {
                 buffer: buffer.vk(),
                 offset: 0,
-                range: buffer.info().size as _,
+                // range: buffer.info().size as _,
+                range: vk::WHOLE_SIZE,
             })
             .collect::<Vec<_>>();
 
