@@ -1,5 +1,6 @@
 use half::f16;
 use once_cell::sync::Lazy;
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -8,6 +9,9 @@ use lazy_static::lazy_static;
 const fn align_up(v: usize, base: usize) -> usize {
     ((v + base - 1) / base) * base
 }
+
+static TYPE_CACHE: Lazy<Mutex<HashMap<TypeId, &'static VarType>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum VarType {
@@ -235,25 +239,15 @@ impl AsVarType for Intersection {
     }
 }
 
-impl<const N: usize, T: AsVarType> AsVarType for [T; N] {
+impl<const N: usize, T: AsVarType + 'static> AsVarType for [T; N] {
     fn var_ty() -> &'static VarType {
-        // TODO: this is potentially very inefficient
-        static ty_map: Lazy<Mutex<HashMap<(usize, VarType), &'static VarType>>> =
-            Lazy::new(|| Mutex::new(HashMap::new()));
-
-        ty_map
-            .lock()
-            .unwrap()
-            .entry((N, T::var_ty().clone()))
-            .or_insert_with_key(|(n, ty)| {
-                Box::leak(Box::new(VarType::Array {
-                    ty: Box::new(ty.clone()),
-                    num: *n,
-                }))
-            });
-
-        let ty = ty_map.lock().unwrap()[&(N, T::var_ty().clone())];
-        ty
+        let id = std::any::TypeId::of::<Self>();
+        TYPE_CACHE.lock().unwrap().entry(id).or_insert_with(|| {
+            Box::leak(Box::new(VarType::Array {
+                ty: Box::new(T::var_ty().clone()),
+                num: N,
+            }))
+        })
     }
 }
 
