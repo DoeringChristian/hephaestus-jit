@@ -10,6 +10,8 @@ const fn align_up(v: usize, base: usize) -> usize {
     ((v + base - 1) / base) * base
 }
 
+// TODO: create a Type struct, wrapping &'static VarType
+
 static TYPE_CACHE: Lazy<Mutex<HashMap<u64, &'static VarType>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
