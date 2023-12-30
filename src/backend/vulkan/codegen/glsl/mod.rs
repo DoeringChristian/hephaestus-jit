@@ -180,7 +180,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     src = Reg(deps[0])
                 )?;
             }
-            crate::op::KernelOp::Scatter(_) => {
+            crate::op::KernelOp::Scatter(op) => {
                 let dst = deps[0];
                 let src = deps[1];
                 let idx = deps[2];
@@ -197,13 +197,25 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
             crate::op::KernelOp::Gather => {
                 let src = deps[0];
                 let idx = deps[1];
-                writeln!(
-                    s,
-                    "\t{glsl_ty} {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}];",
-                    dst = Reg(id),
-                    buffer_idx = ir.var(src).data + 1,
-                    idx = Reg(deps[1]),
-                )?;
+                let cond = deps.get(2);
+                let buffer_idx = ir.var(src).data + 1;
+                if let Some(cond) = cond {
+                    writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
+                    writeln!(
+                        s,
+                        "\tif ({cond}) {{ {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}]; }}",
+                        dst = Reg(id),
+                        cond = Reg(*cond),
+                        idx = Reg(idx),
+                    )?;
+                } else {
+                    writeln!(
+                        s,
+                        "\t{glsl_ty} {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}];",
+                        dst = Reg(id),
+                        idx = Reg(deps[1]),
+                    )?;
+                }
             }
             crate::op::KernelOp::Index => {
                 // writeln!(
