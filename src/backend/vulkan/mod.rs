@@ -1,10 +1,7 @@
 mod accel;
+mod builtin;
 mod codegen;
-mod compress;
 mod pipeline;
-mod prefix_sum;
-// pub mod presenter;
-mod reduce;
 mod shader_cache;
 #[cfg(test)]
 mod test;
@@ -225,28 +222,38 @@ impl backend::BackendDevice for VulkanDevice {
                         let src = buffers[1].clone();
                         let ty = &graph.buffer_desc(pass.resources[0]).ty;
                         let num = graph.buffer_desc(pass.resources[1]).size;
-                        self.reduce(&mut rgraph, *op, &ty, num, &src, &dst);
+                        builtin::reduce::reduce(&self, &mut rgraph, *op, ty, num, &src, &dst);
                     }
                     DeviceOp::PrefixSum { inclusive } => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
                         let ty = &graph.buffer_desc(pass.resources[0]).ty;
                         let num = graph.buffer_desc(pass.resources[1]).size;
-                        self.prefix_sum(&mut rgraph, &ty, num, *inclusive, &src, &dst);
+                        builtin::prefix_sum::prefix_sum(
+                            &self,
+                            &mut rgraph,
+                            ty,
+                            num,
+                            *inclusive,
+                            &src,
+                            &dst,
+                        );
                     }
                     DeviceOp::Compress => {
                         let index_out = buffers[0].clone();
-                        let count_out = buffers[1].clone();
+                        let out_count = buffers[1].clone();
                         let src = buffers[2].clone();
 
                         let num = graph.buffer_desc(pass.resources[2]).size;
 
-                        // if num <= 1024 {
-                        //     self.compress_small(
-                        //         cb, &mut pool, num as _, count_out, src, index_out,
-                        //     );
-                        // } else {
-                        self.compress_large(&mut rgraph, num as _, &count_out, &src, &index_out);
+                        builtin::compress::compress(
+                            &self,
+                            &mut rgraph,
+                            num,
+                            &out_count,
+                            &src,
+                            &index_out,
+                        );
                     }
                     DeviceOp::Buffer2Texture => {
                         let src = buffers[0].clone();

@@ -169,7 +169,7 @@ impl Accel {
 
         let copy2instances = self.device.get_pipeline(&PipelineDesc {
             code: inline_spirv::include_spirv!(
-                "src/backend/vulkan/kernels/copy2instances.glsl",
+                "src/backend/vulkan/builtin/kernels/copy2instances.glsl",
                 comp
             ),
             desc_set_layouts: &[DescSetLayout {

@@ -20,7 +20,6 @@ pub mod usize {
     }
 }
 pub mod u64 {
-
     pub fn round_pow2(x: u64) -> u64 {
         let x = x - 1;
         let x = x | x.overflowing_shr(1).0;
@@ -30,5 +29,18 @@ pub mod u64 {
         let x = x | x.overflowing_shr(16).0;
         let x = x | x.overflowing_shr(32).0;
         x + 1
+    }
+}
+pub mod u32 {
+    pub fn round_pow2(x: u32) -> u32 {
+        let mut x = x;
+        x -= 1;
+        x |= x.overflowing_shr(1).0;
+        x |= x.overflowing_shr(2).0;
+        x |= x.overflowing_shr(4).0;
+        x |= x.overflowing_shr(8).0;
+        x |= x.overflowing_shr(16).0;
+        x |= x.overflowing_shr(32).0;
+        return x + 1;
     }
 }
