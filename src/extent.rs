@@ -1,5 +1,3 @@
-use slotmap::DefaultKey;
-
 use crate::backend;
 use crate::tr::VarId;
 

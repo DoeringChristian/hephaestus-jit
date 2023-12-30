@@ -1,29 +1,9 @@
-use crate::backend::Buffer;
 use crate::ir::{self, IR};
-use crate::op::{self, KernelOp, Op};
-use crate::resource::Resource;
+use crate::op::{KernelOp, Op};
 use crate::trace::{self, Trace};
-use crate::vartype::{self, AsVarType, VarType};
+use crate::vartype::{self, AsVarType};
 use std::collections::HashMap;
 use std::ops::Range;
-
-#[derive(Debug)]
-struct ScheduleGroup {
-    size: usize,
-    range: Range<usize>,
-}
-
-// #[derive(Debug, Default)]
-// pub struct Env {
-//     pub buffers: Vec<trace::VarId>,
-// }
-// impl Env {
-//     pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
-//         let i = self.buffers.len();
-//         self.buffers.push(id);
-//         i
-//     }
-// }
 
 #[derive(Debug, Default)]
 pub struct Compiler {
@@ -153,7 +133,7 @@ impl Compiler {
                 self.ir.push_var(
                     ir::Var {
                         op: KernelOp::BufferRef,
-                        ty: var.ty.clone(),
+                        ty: var.ty,
                         data: buffer_id as _,
                         ..Default::default()
                     },
@@ -166,7 +146,7 @@ impl Compiler {
                 self.ir.push_var(
                     ir::Var {
                         op: KernelOp::TextureRef { dim },
-                        ty: var.ty.clone(),
+                        ty: var.ty,
                         data: texture_id as _,
                         ..Default::default()
                     },
@@ -178,7 +158,7 @@ impl Compiler {
                 self.ir.push_var(
                     ir::Var {
                         op: KernelOp::AccelRef,
-                        ty: var.ty.clone(),
+                        ty: var.ty,
                         data: accel_id as _,
                         ..Default::default()
                     },
@@ -209,11 +189,4 @@ impl Compiler {
             accel_id
         })
     }
-}
-
-pub struct Graph {}
-
-pub struct Pass {
-    ir: IR,
-    buffers: Vec<trace::VarId>,
 }

@@ -122,18 +122,10 @@ pub enum Op {
 }
 impl Op {
     pub fn is_device_op(self) -> bool {
-        match self {
-            Op::DeviceOp(_) => true,
-            _ => false,
-        }
+        matches!(self, Op::DeviceOp(_))
     }
     pub fn evaluated(self) -> bool {
-        match self {
-            // Op::Nop => todo!(),
-            // Op::Ref { mutable } => todo!(),
-            Op::Buffer | Op::Texture { .. } | Op::Accel => true,
-            _ => false,
-        }
+        matches!(self, Op::Buffer | Op::Texture { .. } | Op::Accel)
     }
     /// Gives the Operation/Variable Type, this operation should evaluate to
     pub fn resulting_op(self) -> Self {
