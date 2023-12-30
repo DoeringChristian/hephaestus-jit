@@ -1,5 +1,6 @@
 use crate::ir::IR;
 
+mod glsl;
 mod rspirv;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
