@@ -1,7 +1,6 @@
 mod accel;
 mod codegen;
 mod compress;
-mod glslext;
 mod pipeline;
 mod prefix_sum;
 // pub mod presenter;
@@ -25,7 +24,6 @@ use crate::vartype::AsVarType;
 use crate::{backend, utils};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
-use gpu_profiler::backend::ash::VulkanProfilerFrame;
 use vk_sync::AccessType;
 use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
@@ -34,7 +32,6 @@ use vulkan_core::image::{Image, ImageInfo};
 use self::codegen::CompileInfo;
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
-use self::vkdevice::round_pow2;
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]

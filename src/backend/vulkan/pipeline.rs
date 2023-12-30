@@ -127,7 +127,7 @@ impl Pipeline {
         }
     }
     pub fn from_ir(device: &Device, ir: &IR, info: &CompileInfo) -> Self {
-        let spirv = codegen::assemble_trace(ir, info, "main").unwrap();
+        let spirv = codegen::assemble_trace(ir, info, "main");
 
         let num_buffers = 1 + ir.n_buffers; // Add one for size buffer
         let num_textures = ir.n_textures;
@@ -171,12 +171,6 @@ impl Pipeline {
                 .unwrap()];
 
             // Allocate Descriptor Sets
-            // let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
-            //     .descriptor_pool(desc_pool)
-            //     .set_layouts(&desc_set_layouts);
-            // let desc_sets = device
-            //     .allocate_descriptor_sets(&desc_sets_allocation_info)
-            //     .unwrap();
 
             // Create Pipeline
             let pipeline_layout_info =
