@@ -61,14 +61,7 @@ pub fn assemble_entry_point(
     let mut buffer_types = HashSet::new();
     bindings(s, ir, &mut buffer_types)?;
     let ty = u32::var_ty();
-    if !buffer_types.contains(ty) {
-        let n_buffers = ir.n_buffers + 1;
-        writeln!(
-            s,
-            "layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",
-            name = GlslTypeName(ty)
-        )?;
-    }
+    buffer_binding(s, u32::var_ty(), ir.n_buffers + 1, &mut buffer_types)?;
 
     writeln!(s, "")?;
     writeln!(
@@ -90,6 +83,19 @@ pub fn assemble_entry_point(
     Ok(())
 }
 
+fn buffer_binding(
+    s: &mut String,
+    ty: &'static VarType,
+    n_buffers: usize,
+    buffer_types: &mut HashSet<&'static VarType>,
+) -> std::fmt::Result {
+    if !buffer_types.contains(ty) {
+        writeln!(s,"layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
+        buffer_types.insert(ty);
+    }
+    Ok(())
+}
+
 fn bindings(
     s: &mut String,
     ir: &IR,
@@ -100,14 +106,11 @@ fn bindings(
         let var = ir.var(id);
         match var.op {
             crate::op::KernelOp::BufferRef => {
-                if !buffer_types.contains(var.ty) {
-                    writeln!(
-                        s,
-                        "layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",
-                        name = GlslTypeName(var.ty)
-                    )?;
-                    buffer_types.insert(var.ty);
-                }
+                let ty = match var.ty {
+                    VarType::Bool => u8::var_ty(),
+                    _ => var.ty,
+                };
+                buffer_binding(s, ty, n_buffers, buffer_types)?;
             }
             crate::op::KernelOp::TextureRef { dim } => todo!(),
             crate::op::KernelOp::AccelRef => todo!(),
@@ -164,7 +167,6 @@ impl std::fmt::Display for Reg {
 fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
     for id in ir.var_ids() {
         let var = ir.var(id);
-        let reg = id.0;
         let deps = ir.deps(id);
 
         let ty = var.ty;
@@ -184,12 +186,21 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let dst = deps[0];
                 let src = deps[1];
                 let idx = deps[2];
-                let glsl_ty = GlslTypeName(ir.var(src).ty);
+                let cond = deps.get(3);
+
+                let ty = ir.var(src).ty;
+                let glsl_ty = GlslTypeName(ty);
+
                 let buffer_idx = ir.var(dst).data + 1;
+                let data_ty = match ty {
+                    VarType::Bool => u8::var_ty(),
+                    _ => ty,
+                };
+                let glsl_data_ty = GlslTypeName(data_ty);
 
                 writeln!(
                     s,
-                    "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",
+                    "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",
                     idx = Reg(idx),
                     src = Reg(src)
                 )?;
@@ -199,11 +210,16 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let idx = deps[1];
                 let cond = deps.get(2);
                 let buffer_idx = ir.var(src).data + 1;
+                let data_ty = match ty {
+                    VarType::Bool => u8::var_ty(),
+                    _ => var.ty,
+                };
+                let glsl_data_ty = GlslTypeName(data_ty);
                 if let Some(cond) = cond {
                     writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
                     writeln!(
                         s,
-                        "\tif ({cond}) {{ {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}]; }}",
+                        "\tif ({cond}) {{ {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] ); }}",
                         dst = Reg(id),
                         cond = Reg(*cond),
                         idx = Reg(idx),
@@ -211,18 +227,13 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 } else {
                     writeln!(
                         s,
-                        "\t{glsl_ty} {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}];",
+                        "\t{glsl_ty} {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] );",
                         dst = Reg(id),
                         idx = Reg(deps[1]),
                     )?;
                 }
             }
             crate::op::KernelOp::Index => {
-                // writeln!(
-                //     s,
-                //     "\tuint32_t {dst} = uint32_t(gl_GlobalInvocationID.x);",
-                //     dst = Reg(id)
-                // )?;
                 writeln!(s, "\tuint32_t {dst} = index;", dst = Reg(id))?;
             }
             crate::op::KernelOp::Literal => {
@@ -259,15 +270,65 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                         writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}({data});",)?;
                     }
                     _ => todo!(),
-                    // VarType::Vec { ty, num } => todo!(),
-                    // VarType::Array { ty, num } => todo!(),
-                    // VarType::Mat { ty, rows, cols } => todo!(),
-                    // VarType::Struct { tys } => todo!(),
                 }
             }
-            crate::op::KernelOp::Extract(_) => todo!(),
-            crate::op::KernelOp::Construct => todo!(),
-            crate::op::KernelOp::Select => todo!(),
+            crate::op::KernelOp::Extract(elem) => {
+                let src = Reg(deps[0]);
+                let dst = Reg(id);
+                let src_ty = ir.var(deps[0]).ty;
+                match src_ty {
+                    VarType::Vec { ty, num } => {
+                        let swizzle = match elem {
+                            0 => "x",
+                            1 => "y",
+                            2 => "z",
+                            3 => "w",
+                            _ => todo!(),
+                        };
+                        writeln!(s, "\t{glsl_ty} {dst} = {src}.{swizzle};")
+                    }
+                    VarType::Array { ty, num } => writeln!(s, "\t{glsl_ty} {dst} = {src}[{elem}];"),
+                    VarType::Struct { tys } => writeln!(s, "\t{glsl_ty} {dst} = {src}.e{elem};"),
+                    _ => todo!(),
+                }?;
+            }
+            crate::op::KernelOp::Construct => {
+                let dst = Reg(id);
+                match ty {
+                    VarType::Vec { ty, num } => {
+                        write!(s, "\t{glsl_ty} {dst} = {glsl_ty}(")?;
+                        for (i, id) in deps.iter().enumerate() {
+                            let src = Reg(*id);
+                            if i == deps.len() - 1 {
+                                write!(s, "{src}")?;
+                            } else {
+                                write!(s, "{src},")?;
+                            }
+                        }
+                        write!(s, "\t);\n")?;
+                    }
+                    VarType::Struct { .. } | VarType::Array { .. } => {
+                        write!(s, "\t{glsl_ty} {dst} = {{")?;
+                        for (i, id) in deps.iter().enumerate() {
+                            let src = Reg(*id);
+                            if i == deps.len() - 1 {
+                                write!(s, "{src}")?;
+                            } else {
+                                write!(s, "{src},")?;
+                            }
+                        }
+                        write!(s, "\t}};\n")?;
+                    }
+                    _ => todo!(),
+                };
+            }
+            crate::op::KernelOp::Select => {
+                let dst = Reg(id);
+                let cond = Reg(deps[0]);
+                let true_val = Reg(deps[1]);
+                let false_val = Reg(deps[2]);
+                writeln!(s, "\t{glsl_ty} {dst} = {cond} ? {true_val} : {false_val};")?;
+            }
             crate::op::KernelOp::TexLookup => todo!(),
             crate::op::KernelOp::TraceRay => todo!(),
             crate::op::KernelOp::Bop(op) => {
@@ -275,29 +336,112 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let lhs = Reg(deps[0]);
                 let rhs = Reg(deps[1]);
                 match op {
-                    crate::op::Bop::Add => {
-                        writeln!(s, "\t{glsl_ty} {dst} = {lhs} + {rhs};")?;
-                    }
-                    crate::op::Bop::Sub => todo!(),
-                    crate::op::Bop::Mul => todo!(),
-                    crate::op::Bop::Div => todo!(),
-                    crate::op::Bop::Modulus => todo!(),
-                    crate::op::Bop::Min => todo!(),
-                    crate::op::Bop::Max => todo!(),
-                    crate::op::Bop::And => todo!(),
-                    crate::op::Bop::Or => todo!(),
-                    crate::op::Bop::Xor => todo!(),
-                    crate::op::Bop::Shl => todo!(),
-                    crate::op::Bop::Shr => todo!(),
-                    crate::op::Bop::Eq => todo!(),
-                    crate::op::Bop::Neq => todo!(),
-                    crate::op::Bop::Lt => todo!(),
-                    crate::op::Bop::Le => todo!(),
-                    crate::op::Bop::Gt => todo!(),
-                    crate::op::Bop::Ge => todo!(),
-                }
+                    crate::op::Bop::Add => writeln!(s, "\t{glsl_ty} {dst} = {lhs} + {rhs};")?,
+                    crate::op::Bop::Sub => writeln!(s, "\t{glsl_ty} {dst} = {lhs} - {rhs};")?,
+                    crate::op::Bop::Mul => writeln!(s, "\t{glsl_ty} {dst} = {lhs} * {rhs};")?,
+                    crate::op::Bop::Div => writeln!(s, "\t{glsl_ty} {dst} = {lhs} / {rhs};")?,
+                    crate::op::Bop::Modulus => writeln!(s, "\t{glsl_ty} {dst} = {lhs} % {rhs};")?,
+                    crate::op::Bop::Min => writeln!(s, "\t{glsl_ty} {dst} = min({lhs}, {rhs});")?,
+                    crate::op::Bop::Max => writeln!(s, "\t{glsl_ty} {dst} = max({lhs}, {rhs});")?,
+                    crate::op::Bop::And => match ty {
+                        VarType::Bool => writeln!(s, "\t{glsl_ty} {dst} = {lhs} && {rhs};")?,
+                        _ => writeln!(s, "\t{glsl_ty} {dst} = {lhs} & {rhs};")?,
+                    },
+                    crate::op::Bop::Or => match ty {
+                        VarType::Bool => writeln!(s, "\t{glsl_ty} {dst} = {lhs} || {rhs};")?,
+                        _ => writeln!(s, "\t{glsl_ty} {dst} = {lhs} | {rhs};")?,
+                    },
+                    crate::op::Bop::Xor => match ty {
+                        VarType::Bool => writeln!(s, "\t{glsl_ty} {dst} = {lhs} != {rhs};")?,
+                        _ => writeln!(s, "\t{glsl_ty} {dst} = {lhs} ^ {rhs};")?,
+                    },
+                    crate::op::Bop::Shl => writeln!(s, "\t{glsl_ty} {dst} = {lhs} << {rhs};")?,
+                    crate::op::Bop::Shr => writeln!(s, "\t{glsl_ty} {dst} = {lhs} >> {rhs};")?,
+                    crate::op::Bop::Eq => writeln!(s, "\t{glsl_ty} {dst} = {lhs} == {rhs};")?,
+                    crate::op::Bop::Neq => writeln!(s, "\t{glsl_ty} {dst} = {lhs} != {rhs};")?,
+                    crate::op::Bop::Lt => writeln!(s, "\t{glsl_ty} {dst} = {lhs} < {rhs};")?,
+                    crate::op::Bop::Le => writeln!(s, "\t{glsl_ty} {dst} = {lhs} <= {rhs};")?,
+                    crate::op::Bop::Gt => writeln!(s, "\t{glsl_ty} {dst} = {lhs} > {rhs};")?,
+                    crate::op::Bop::Ge => writeln!(s, "\t{glsl_ty} {dst} = {lhs} >= {rhs};")?,
+                };
             }
-            crate::op::KernelOp::Uop(_) => todo!(),
+            crate::op::KernelOp::Uop(op) => {
+                let dst = Reg(id);
+                let src = Reg(deps[0]);
+                let src_ty = ir.var(deps[0]).ty;
+                match op {
+                    crate::op::Uop::Cast => {
+                        writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}({src});")
+                    }
+                    crate::op::Uop::BitCast => match (ty, src_ty) {
+                        (VarType::F16, VarType::I16) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = int16BitsToHalf({src});")
+                        }
+                        (VarType::F16, VarType::U16) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = uint16BitsToHalf({src});")
+                        }
+                        (VarType::F32, VarType::I32) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = int32BitsToFloat({src});")
+                        }
+                        (VarType::F32, VarType::U32) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = uint32BitsToFloat({src});")
+                        }
+                        (VarType::F64, VarType::I64) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = int64BitsToDouble({src});")
+                        }
+                        (VarType::F64, VarType::U64) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = uint64BitsToDouble({src});")
+                        }
+                        (VarType::I16, VarType::F16) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = halfBitsToInt16({src});")
+                        }
+                        (VarType::U16, VarType::F16) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = floatBitsToUint16({src});")
+                        }
+                        (VarType::I32, VarType::F32) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = floatBitsToInt32({src});")
+                        }
+                        (VarType::U32, VarType::F32) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = floatBitsToUint32({src});")
+                        }
+                        (VarType::I64, VarType::F64) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = doubleBitsToInt64({src});")
+                        }
+                        (VarType::U64, VarType::F64) => {
+                            writeln!(s, "\t{glsl_ty} {dst} = doubleBitsToUint64({src});")
+                        }
+                        (
+                            VarType::I8
+                            | VarType::U8
+                            | VarType::I16
+                            | VarType::U16
+                            | VarType::I32
+                            | VarType::U32
+                            | VarType::I64
+                            | VarType::U64,
+                            VarType::I8
+                            | VarType::U8
+                            | VarType::I16
+                            | VarType::U16
+                            | VarType::I32
+                            | VarType::U32
+                            | VarType::I64
+                            | VarType::U64,
+                        ) => writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}({src});"),
+                        _ => todo!(),
+                    },
+                    crate::op::Uop::Neg => match ty {
+                        VarType::Bool => writeln!(s, "\t{glsl_ty} {dst} = !{src};"),
+                        _ => writeln!(s, "\t{glsl_ty} {dst} = -{src};"),
+                    },
+                    crate::op::Uop::Sqrt => writeln!(s, "\t{glsl_ty} {dst} = sqrt({src});"),
+                    crate::op::Uop::Abs => writeln!(s, "\t{glsl_ty} {dst} = abs({src});"),
+                    crate::op::Uop::Sin => writeln!(s, "\t{glsl_ty} {dst} = sin({src});"),
+                    crate::op::Uop::Cos => writeln!(s, "\t{glsl_ty} {dst} = cos({src});"),
+                    crate::op::Uop::Exp2 => writeln!(s, "\t{glsl_ty} {dst} = exp2({src});"),
+                    crate::op::Uop::Log2 => writeln!(s, "\t{glsl_ty} {dst} = log2({src});"),
+                }?;
+            }
             _ => {}
         }
     }
