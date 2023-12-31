@@ -116,6 +116,8 @@ pub fn assemble_entry_point(
     "#
     )?;
 
+    assemble_vars(s, ir)?;
+
     writeln!(
         s,
         r#"
@@ -136,16 +138,40 @@ pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
 
         match var.op {
             crate::op::KernelOp::Nop => todo!(),
-            crate::op::KernelOp::Scatter(_) => todo!(),
+            crate::op::KernelOp::Scatter(_) => {
+                let dst = deps[0];
+                let src = deps[1];
+                let idx = deps[2];
+
+                let buffer_idx = ir.var(src).data;
+
+                let dst = Reg(dst);
+
+                writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
+                writeln!(s, "{dst}_ptr_ty = OpTypePointer StorageBuffer %{spv_ty}")?;
+                writeln!(
+                    s,
+                    "{dst}_ptr = OpAccessChain {dst}_ptr_ty %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
+                )?;
+            }
             crate::op::KernelOp::Gather => {
                 let src = deps[0];
                 let idx = deps[1];
                 let buffer_idx = ir.var(src).data;
 
+                writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
+                writeln!(s, "{dst}_ptr_ty = OpTypePointer StorageBuffer %{spv_ty}")?;
+                writeln!(
+                    s,
+                    "{dst}_ptr = OpAccessChain {dst}_ptr_ty %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
+                )?;
+            }
+            crate::op::KernelOp::Index => {
                 writeln!(s, "")?;
             }
-            crate::op::KernelOp::Index => todo!(),
-            crate::op::KernelOp::Literal => todo!(),
+            crate::op::KernelOp::Literal => {
+                writeln!(s, "")?;
+            }
             crate::op::KernelOp::Extract(_) => todo!(),
             crate::op::KernelOp::Construct => todo!(),
             crate::op::KernelOp::Select => todo!(),
@@ -155,7 +181,7 @@ pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let lhs = Reg(deps[0]);
                 let rhs = Reg(deps[1]);
                 match op {
-                    crate::op::Bop::Add => todo!(),
+                    crate::op::Bop::Add => writeln!(s, "")?,
                     crate::op::Bop::Sub => todo!(),
                     crate::op::Bop::Mul => todo!(),
                     crate::op::Bop::Div => todo!(),
@@ -173,12 +199,10 @@ pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::Bop::Le => todo!(),
                     crate::op::Bop::Gt => todo!(),
                     crate::op::Bop::Ge => todo!(),
-                }
+                };
             }
             crate::op::KernelOp::Uop(_) => todo!(),
-            crate::op::KernelOp::BufferRef => todo!(),
-            crate::op::KernelOp::TextureRef { dim } => todo!(),
-            crate::op::KernelOp::AccelRef => todo!(),
+            _ => {}
         }
     }
     Ok(())
