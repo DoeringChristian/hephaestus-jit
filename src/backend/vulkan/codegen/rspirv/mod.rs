@@ -726,10 +726,28 @@ impl SpirvBuilder {
                             | VarType::U8
                             | VarType::U16
                             | VarType::U32
-                            | VarType::U64 => {
+                            | VarType::U64
+                            | VarType::Vec {
+                                ty:
+                                    VarType::I8
+                                    | VarType::I16
+                                    | VarType::I32
+                                    | VarType::I64
+                                    | VarType::U8
+                                    | VarType::U16
+                                    | VarType::U32
+                                    | VarType::U64,
+                                ..
+                            } => {
                                 self.i_add(ty, Some(res), lhs, rhs)?;
                             }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                            VarType::F16
+                            | VarType::F32
+                            | VarType::F64
+                            | VarType::Vec {
+                                ty: VarType::F16 | VarType::F32 | VarType::F64,
+                                ..
+                            } => {
                                 self.f_add(ty, Some(res), lhs, rhs)?;
                             }
                             VarType::Vec { ty, num } => {}
