@@ -36,6 +36,7 @@ pub fn assemble_entry_point(
     info: &CompileInfo,
     entry_point: &str,
 ) -> std::fmt::Result {
+    let mut b = GlslBuilder::new(ir);
     write!(
         s,
         r#"
@@ -54,14 +55,20 @@ pub fn assemble_entry_point(
 // Atomics and Memory
 #extension GL_KHR_memory_scope_semantics: require
 #extension GL_EXT_shader_atomic_int64: require
+#extension GL_EXT_shader_atomic_float: require
         
 "#
     )?;
 
-    let mut buffer_types = HashSet::new();
-    bindings(s, ir, &mut buffer_types)?;
+    // Generate Composite types
+    for var in ir.vars.iter() {
+        b.composite_type(s, ir, var.ty)?;
+    }
+
+    // Generate Bindigns
+    b.bindings(s, ir)?;
     let ty = u32::var_ty();
-    buffer_binding(s, u32::var_ty(), ir.n_buffers + 1, &mut buffer_types)?;
+    b.buffer_binding(s, ir, u32::var_ty())?;
 
     writeln!(s, "")?;
     writeln!(
@@ -83,42 +90,91 @@ pub fn assemble_entry_point(
     Ok(())
 }
 
-fn buffer_binding(
-    s: &mut String,
-    ty: &'static VarType,
+#[derive(Debug, Default)]
+pub struct GlslBuilder {
     n_buffers: usize,
-    buffer_types: &mut HashSet<&'static VarType>,
-) -> std::fmt::Result {
-    if !buffer_types.contains(ty) {
-        writeln!(s,"layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
-        buffer_types.insert(ty);
-    }
-    Ok(())
+    buffer_types: HashSet<&'static VarType>,
+    samplers: HashSet<usize>,
+    composite_types: HashSet<&'static VarType>,
 }
-
-fn bindings(
-    s: &mut String,
-    ir: &IR,
-    buffer_types: &mut HashSet<&'static VarType>,
-) -> std::fmt::Result {
-    let n_buffers = ir.n_buffers + 1;
-    for id in ir.var_ids() {
-        let var = ir.var(id);
-        match var.op {
-            crate::op::KernelOp::BufferRef => {
-                let ty = match var.ty {
-                    VarType::Bool => u8::var_ty(),
-                    _ => var.ty,
-                };
-                buffer_binding(s, ty, n_buffers, buffer_types)?;
-            }
-            crate::op::KernelOp::TextureRef { dim } => todo!(),
-            crate::op::KernelOp::AccelRef => todo!(),
-            _ => {}
+impl GlslBuilder {
+    pub fn new(ir: &IR) -> Self {
+        Self {
+            n_buffers: ir.n_buffers + 1,
+            ..Default::default()
         }
     }
-    Ok(())
+    pub fn composite_type(
+        &mut self,
+        s: &mut String,
+        ir: &IR,
+        ty: &'static VarType,
+    ) -> std::fmt::Result {
+        if !self.composite_types.contains(&ty) {
+            match ty {
+                VarType::Struct { tys } => {
+                    for ty in tys {
+                        self.composite_type(s, ir, ty)?;
+                    }
+                    let ty_name = GlslTypeName(ty);
+                    writeln!(s, "struct {ty_name}{{")?;
+                    for (i, ty) in tys.iter().enumerate() {
+                        writeln!(s, "\t{ty} e{i};", ty = GlslTypeName(ty))?;
+                    }
+                    writeln!(s, "}};")?;
+                }
+                _ => {}
+            }
+            self.composite_types.insert(ty);
+        }
+        Ok(())
+    }
+    pub fn buffer_binding(
+        &mut self,
+        s: &mut String,
+        ir: &IR,
+        ty: &'static VarType,
+    ) -> std::fmt::Result {
+        let n_buffers = self.n_buffers;
+        if !self.buffer_types.contains(ty) {
+            writeln!(s,"layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
+            self.buffer_types.insert(ty);
+        }
+        Ok(())
+    }
+    pub fn sampler_binding(&mut self, s: &mut String, ir: &IR, dim: usize) -> std::fmt::Result {
+        let n_samplers = ir.n_textures;
+        if !self.samplers.contains(&dim) {
+            writeln!(
+                s,
+                "layout(set = 0, binding = 1) uniform sampler{dim}D samplers[{n_samplers}];"
+            )?;
+            self.samplers.insert(dim);
+        }
+        Ok(())
+    }
+    pub fn bindings(&mut self, s: &mut String, ir: &IR) -> std::fmt::Result {
+        for id in ir.var_ids() {
+            let var = ir.var(id);
+            match var.op {
+                crate::op::KernelOp::BufferRef => {
+                    let ty = match var.ty {
+                        VarType::Bool => u8::var_ty(),
+                        _ => var.ty,
+                    };
+                    self.buffer_binding(s, ir, ty)?;
+                }
+                crate::op::KernelOp::TextureRef { dim } => {
+                    self.sampler_binding(s, ir, dim)?;
+                }
+                crate::op::KernelOp::AccelRef => todo!(),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
+
 pub struct GlslTypeName(&'static VarType);
 impl std::fmt::Display for GlslTypeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -152,7 +208,15 @@ impl std::fmt::Display for GlslTypeName {
             },
             VarType::Array { ty, num } => todo!(),
             VarType::Mat { ty, rows, cols } => todo!(),
-            VarType::Struct { tys } => todo!(),
+            VarType::Struct { tys } => {
+                write!(f, "struct_")?;
+                for ty in tys {
+                    write!(f, "{}_", GlslTypeName(ty))?;
+                }
+                // Struct end marker is "__"
+                write!(f, "end")?;
+                Ok(())
+            }
         }
     }
 }
@@ -192,45 +256,86 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let glsl_ty = GlslTypeName(ty);
 
                 let buffer_idx = ir.var(dst).data + 1;
-                let data_ty = match ty {
-                    VarType::Bool => u8::var_ty(),
-                    _ => ty,
-                };
-                let glsl_data_ty = GlslTypeName(data_ty);
 
-                writeln!(
-                    s,
-                    "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",
-                    idx = Reg(idx),
-                    src = Reg(src)
-                )?;
+                let src = Reg(src);
+                let idx = Reg(idx);
+                let dst = Reg(id);
+
+                // Forward declare `dst`
+                writeln!(s, "\t{glsl_ty} {dst};")?;
+                if let Some(cond) = cond {
+                    writeln!(s, "\tif ({cond}){{", cond = Reg(*cond))?;
+                }
+                if let Some(op) = op {
+                    let atomic_fn = match op {
+                        crate::op::ReduceOp::Max => "atomicMax",
+                        crate::op::ReduceOp::Min => "atomicMin",
+                        crate::op::ReduceOp::Sum => "atomicAdd",
+                        crate::op::ReduceOp::Prod => todo!(),
+                        crate::op::ReduceOp::Or => "atomicOr",
+                        crate::op::ReduceOp::And => "atomicAnd",
+                        crate::op::ReduceOp::Xor => "atomicXor",
+                    };
+                    match ty {
+                        VarType::Bool => {
+                            let glsl_data_ty = GlslTypeName(u8::var_ty());
+                    writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
+                        },
+                        _ =>
+                    writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});")?,
+                    }
+                } else {
+                    match ty {
+                        VarType::Bool => {
+                            let glsl_data_ty = GlslTypeName(u8::var_ty());
+
+                            writeln!(s,"\tbuffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",)?;
+                        }
+                        _ => {
+                            writeln!(s, "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",)?;
+                        }
+                    }
+                }
+
+                if let Some(_) = cond {
+                    writeln!(s, "\t}}")?;
+                }
             }
             crate::op::KernelOp::Gather => {
                 let src = deps[0];
                 let idx = deps[1];
                 let cond = deps.get(2);
                 let buffer_idx = ir.var(src).data + 1;
-                let data_ty = match ty {
-                    VarType::Bool => u8::var_ty(),
-                    _ => var.ty,
-                };
-                let glsl_data_ty = GlslTypeName(data_ty);
+
+                let dst = Reg(id);
+                let idx = Reg(deps[1]);
+
                 if let Some(cond) = cond {
+                    let cond = Reg(*cond);
                     writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
-                    writeln!(
-                        s,
-                        "\tif ({cond}) {{ {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] ); }}",
-                        dst = Reg(id),
-                        cond = Reg(*cond),
-                        idx = Reg(idx),
-                    )?;
+                    match ty {
+                        VarType::Bool => {
+                            let glsl_data_ty = GlslTypeName(u8::var_ty());
+
+                            writeln!(s, "\tif ({cond}) {{ {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] ); }}")?;
+                        }
+                        _ => {
+                            writeln!(s, "\tif ({cond}) {{ {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}]; }}")?;
+                        }
+                    }
                 } else {
-                    writeln!(
-                        s,
-                        "\t{glsl_ty} {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] );",
-                        dst = Reg(id),
-                        idx = Reg(deps[1]),
-                    )?;
+                    match ty {
+                        VarType::Bool => {
+                            let glsl_data_ty = GlslTypeName(u8::var_ty());
+                            writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] );")?;
+                        }
+                        _ => {
+                            writeln!(
+                                s,
+                                "\t{glsl_ty} {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}];",
+                            )?;
+                        }
+                    }
                 }
             }
             crate::op::KernelOp::Index => {
@@ -317,7 +422,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                                 write!(s, "{src},")?;
                             }
                         }
-                        write!(s, "\t}};\n")?;
+                        write!(s, "}};\n")?;
                     }
                     _ => todo!(),
                 };
@@ -329,7 +434,17 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let false_val = Reg(deps[2]);
                 writeln!(s, "\t{glsl_ty} {dst} = {cond} ? {true_val} : {false_val};")?;
             }
-            crate::op::KernelOp::TexLookup => todo!(),
+            crate::op::KernelOp::TexLookup => {
+                let sampler_idx = ir.var(deps[0]).data;
+                let coord = Reg(deps[1]);
+
+                let dst = Reg(id);
+
+                writeln!(
+                    s,
+                    "\t{glsl_ty} {dst} = texture(samplers[{sampler_idx}], {coord});"
+                )?;
+            }
             crate::op::KernelOp::TraceRay => todo!(),
             crate::op::KernelOp::Bop(op) => {
                 let dst = Reg(id);
