@@ -320,22 +320,18 @@ fn accel() {
     let y = tr::array(&[0f32, 1f32, 1f32], &device);
     let z = tr::array(&[0f32, 0f32, 0f32], &device);
 
-    let vertices = tr::vec(&[&x, &y, &z]);
-    let triangles = tr::vec(&[
+    // let vertices = tr::vec(&[&x, &y, &z]);
+    let vertices = tr::composite(&[&x, &y, &z]);
+    // let triangles = tr::vec(&[
+    //     &tr::sized_literal(0u32, 1),
+    //     &tr::literal(1u32),
+    //     &tr::literal(2u32),
+    // ]);
+    let triangles = tr::composite(&[
         &tr::sized_literal(0u32, 1),
         &tr::literal(1u32),
         &tr::literal(2u32),
     ]);
-
-    let instances = tr::array(
-        &[
-            1f32, 0f32, 0f32, 0f32, //
-            0f32, 1f32, 0f32, 0f32, //
-            0f32, 0f32, 1f32, 0f32, //
-            0f32, // WARN: This is 0x00000000 in bytes
-        ],
-        &device,
-    );
 
     let instances = tr::array(
         &[Instance {
@@ -356,7 +352,7 @@ fn accel() {
             triangles,
             vertices,
         }],
-        instances,
+        instances: instances.clone(),
     };
 
     let accel = tr::accel(&desc);
@@ -398,9 +394,11 @@ fn accel() {
     let mut graph = tr::compile();
     graph.launch(&device);
 
-    dbg!(intersection.to_vec::<i32>(..));
     let intersections = intersection.to_vec::<Intersection>(..);
+    dbg!(&intersections);
 
+    // assert_abs_diff_eq!(intersections[0].bx, 0.4, epsilon = 0.001);
+    // assert_abs_diff_eq!(intersections[0].by, 0.2, epsilon = 0.001);
     assert_abs_diff_eq!(intersections[0].barycentrics[0], 0.4, epsilon = 0.001);
     assert_abs_diff_eq!(intersections[0].barycentrics[1], 0.2, epsilon = 0.001);
     assert!(intersections[0].valid > 0);

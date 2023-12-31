@@ -15,7 +15,13 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
 
     let mut options = shaderc::CompileOptions::new().unwrap();
     options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-    let mut compiler = shaderc::Compiler::new().unwrap();
+    options.set_hlsl_offsets(true);
+    options.set_target_env(
+        shaderc::TargetEnv::Vulkan,
+        shaderc::EnvVersion::Vulkan1_2 as _,
+    );
+    options.set_target_spirv(shaderc::SpirvVersion::V1_5);
+    let compiler = shaderc::Compiler::new().unwrap();
 
     let artefact = compiler
         .compile_into_spirv(
@@ -40,7 +46,7 @@ pub fn assemble_entry_point(
     write!(
         s,
         r#"
-#version 450
+#version 460
 
 // Explicit arythmetic types
 #extension GL_EXT_shader_explicit_arithmetic_types: require
@@ -56,6 +62,13 @@ pub fn assemble_entry_point(
 #extension GL_KHR_memory_scope_semantics: require
 #extension GL_EXT_shader_atomic_int64: require
 #extension GL_EXT_shader_atomic_float: require
+
+// Ray Tracing
+#extension GL_EXT_ray_tracing: enable
+#extension GL_EXT_ray_query: require
+
+// Scalar Block layout 
+#extension GL_EXT_scalar_block_layout: require
         
 "#
     )?;
@@ -68,7 +81,7 @@ pub fn assemble_entry_point(
     // Generate Bindigns
     b.bindings(s, ir)?;
     let ty = u32::var_ty();
-    b.buffer_binding(s, ir, u32::var_ty())?;
+    b.buffer_binding(s, u32::var_ty())?;
 
     writeln!(s, "")?;
     writeln!(
@@ -78,9 +91,14 @@ pub fn assemble_entry_point(
     )?;
     writeln!(s, "void {entry_point}(){{")?;
 
+    if b.ray_query {
+        writeln!(s, "\trayQueryEXT ray_query;")?;
+    }
+
+    writeln!(s, "\tuint index = uint(gl_GlobalInvocationID.x);")?;
+
     // Early return
     writeln!(s, "\tuint size = buffer_uint32_t[0].b[0];")?;
-    writeln!(s, "\tuint index = uint(gl_GlobalInvocationID.x);")?;
     writeln!(s, "\tif (index >= size) {{return;}}")?;
 
     assemble_vars(s, ir)?;
@@ -96,6 +114,7 @@ pub struct GlslBuilder {
     buffer_types: HashSet<&'static VarType>,
     samplers: HashSet<usize>,
     composite_types: HashSet<&'static VarType>,
+    ray_query: bool,
 }
 impl GlslBuilder {
     pub fn new(ir: &IR) -> Self {
@@ -123,18 +142,21 @@ impl GlslBuilder {
                     }
                     writeln!(s, "}};")?;
                 }
+                VarType::Array {
+                    ty: array_type,
+                    num,
+                } => {
+                    let array_name = GlslTypeName(ty);
+                    let internal_name = GlslTypeName(array_type);
+                    writeln!(s, "#define {array_name} {internal_name}[{num}]")?;
+                }
                 _ => {}
             }
             self.composite_types.insert(ty);
         }
         Ok(())
     }
-    pub fn buffer_binding(
-        &mut self,
-        s: &mut String,
-        ir: &IR,
-        ty: &'static VarType,
-    ) -> std::fmt::Result {
+    pub fn buffer_binding(&mut self, s: &mut String, ty: &'static VarType) -> std::fmt::Result {
         let n_buffers = self.n_buffers;
         if !self.buffer_types.contains(ty) {
             writeln!(s,"layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
@@ -162,12 +184,22 @@ impl GlslBuilder {
                         VarType::Bool => u8::var_ty(),
                         _ => var.ty,
                     };
-                    self.buffer_binding(s, ir, ty)?;
+                    self.buffer_binding(s, ty)?;
                 }
                 crate::op::KernelOp::TextureRef { dim } => {
                     self.sampler_binding(s, ir, dim)?;
                 }
-                crate::op::KernelOp::AccelRef => todo!(),
+                crate::op::KernelOp::AccelRef => {
+                    let n_accels = ir.n_accels;
+                    if !self.ray_query {
+                        writeln!(s, "layout(set = 0, binding = 2) uniform accelerationStructureEXT accels[{n_accels}];")?;
+                        // writeln!(
+                        //     s,
+                        //     "layout(set = 0, binding = 2) uniform accelerationStructureEXT accels;"
+                        // )?;
+                        self.ray_query = true;
+                    }
+                }
                 _ => {}
             }
         }
@@ -206,7 +238,10 @@ impl std::fmt::Display for GlslTypeName {
                 VarType::F64 => write!(f, "f64vec{num}"),
                 _ => todo!(),
             },
-            VarType::Array { ty, num } => todo!(),
+            VarType::Array { ty, num } => {
+                let ty = GlslTypeName(ty);
+                write!(f, "{ty}x{num}")
+            }
             VarType::Mat { ty, rows, cols } => todo!(),
             VarType::Struct { tys } => {
                 write!(f, "struct_")?;
@@ -445,7 +480,49 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     "\t{glsl_ty} {dst} = texture(samplers[{sampler_idx}], {coord});"
                 )?;
             }
-            crate::op::KernelOp::TraceRay => todo!(),
+            crate::op::KernelOp::TraceRay => {
+                let accel_idx = ir.var(deps[0]).data;
+                let o = Reg(deps[1]);
+                let d = Reg(deps[2]);
+                let tmin = Reg(deps[3]);
+                let tmax = Reg(deps[4]);
+
+                let dst = Reg(id);
+
+                writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], gl_RayFlagsOpaqueEXT, 0xff, {o}, {tmin}, {d}, {tmax});")?;
+                // writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], gl_RayFlagsOpaqueEXT, 0xff, vec3(0.6, 0.6, 0.1), -10, vec3(0, 0, -1), 10000.);")?;
+                // writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], 0x01, 0xff, vec3(0.6, 0.6, 0.1), -10, vec3(0, 0, -1), 10000.);")?;
+
+                write!(
+                    s,
+                    r#"
+                    {glsl_ty} {dst};
+                    {dst}.e3 = 1;
+                    while (rayQueryProceedEXT(ray_query)){{
+                        {dst}.e3 += 1;
+                    
+                        uint32_t intersection_ty = rayQueryGetIntersectionTypeEXT(ray_query, false);
+                        bool opaque = intersection_ty == 0;
+                        if (opaque) rayQueryConfirmIntersectionEXT(ray_query);
+                    
+                        // if (intersection_ty == gl_RayQueryCandidateIntersectionTriangleEXT){{
+                        //     rayQueryConfirmIntersectionEXT(ray_query);
+                        // }}
+                    }}
+                    {{
+                        vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(ray_query, true);
+                        // {dst}.e0 = 1.;
+                        // {dst}.e0 = barycentrics.x;
+                        // {dst}.e1 = barycentrics.y;
+                        // {dst}.e2 = rayQueryGetIntersectionInstanceIdEXT(ray_query, true);
+                        // {dst}.e3 = rayQueryGetIntersectionPrimitiveIndexEXT(ray_query, true);
+                        // {dst}.e4 = 1;
+                        // {dst}.e4 = rayQueryGetIntersectionTypeEXT(ray_query, true);
+                    }}
+                "#
+                )?;
+                writeln!(s, "")?;
+            }
             crate::op::KernelOp::Bop(op) => {
                 let dst = Reg(id);
                 let lhs = Reg(deps[0]);
