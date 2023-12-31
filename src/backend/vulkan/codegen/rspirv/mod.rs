@@ -718,33 +718,55 @@ impl SpirvBuilder {
                     let rhs = self.reg(deps[1]);
                     let ty = self.spirv_ty(&var.ty);
                     match bop {
-                        Bop::Add => {
-                            if isint(&var.ty) {
+                        Bop::Add => match var.ty {
+                            VarType::I8
+                            | VarType::I16
+                            | VarType::I32
+                            | VarType::I64
+                            | VarType::U8
+                            | VarType::U16
+                            | VarType::U32
+                            | VarType::U64 => {
                                 self.i_add(ty, Some(res), lhs, rhs)?;
-                            } else if isfloat(&var.ty) {
+                            }
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_add(ty, Some(res), lhs, rhs)?;
-                            } else {
-                                todo!()
                             }
-                        }
-                        Bop::Sub => {
-                            if isint(&var.ty) {
+                            VarType::Vec { ty, num } => {}
+                            _ => todo!(),
+                        },
+                        Bop::Sub => match var.ty {
+                            VarType::I8
+                            | VarType::I16
+                            | VarType::I32
+                            | VarType::I64
+                            | VarType::U8
+                            | VarType::U16
+                            | VarType::U32
+                            | VarType::U64 => {
                                 self.i_sub(ty, Some(res), lhs, rhs)?;
-                            } else if isfloat(&var.ty) {
+                            }
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
                                 self.f_sub(ty, Some(res), lhs, rhs)?;
-                            } else {
-                                todo!()
                             }
-                        }
-                        Bop::Mul => {
-                            if isint(&var.ty) {
+                            _ => todo!(),
+                        },
+                        Bop::Mul => match var.ty {
+                            VarType::I8
+                            | VarType::I16
+                            | VarType::I32
+                            | VarType::I64
+                            | VarType::U8
+                            | VarType::U16
+                            | VarType::U32
+                            | VarType::U64 => {
                                 self.i_mul(ty, Some(res), lhs, rhs)?;
-                            } else if isfloat(&var.ty) {
-                                self.f_mul(ty, Some(res), lhs, rhs)?;
-                            } else {
-                                todo!()
                             }
-                        }
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                self.f_mul(ty, Some(res), lhs, rhs)?;
+                            }
+                            _ => todo!(),
+                        },
                         Bop::Div => match var.ty {
                             VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
                                 self.s_div(ty, Some(res), lhs, rhs)?;
