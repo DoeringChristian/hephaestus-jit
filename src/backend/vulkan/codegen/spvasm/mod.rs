@@ -69,12 +69,42 @@ impl std::fmt::Display for SpvType {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct SpirvBuilder {
+    types: HashSet<String>,
+    buffer_bindings: HashSet<&'static VarType>,
+    sampler_bindings: HashSet<usize>,
+    accel_bindings: bool,
+}
+impl SpirvBuilder {
+    pub fn add_type_def(&mut self, typedef: String) {
+        if !self.types.contains(&typedef) {
+            self.types.insert(typedef);
+        }
+    }
+}
+
 pub fn assemble_entry_point(
     s: &mut String,
     ir: &IR,
     info: &CompileInfo,
     entry_point: &str,
 ) -> std::fmt::Result {
+    let mut b = SpirvBuilder::default();
+
+    for var in &ir.vars {
+        b.add_type_def(var_type(var.ty));
+    }
+
+    let mut bindings = String::new();
+
+    assemble_bindings(&mut bindings, ir, &mut b)?;
+
+    let mut vars = String::new();
+
+    assemble_vars(&mut vars, &mut b, ir)?;
+
+    // Construct spirv assembly
     writeln!(
         s,
         r#"
@@ -89,23 +119,11 @@ pub fn assemble_entry_point(
         work_group_size = info.work_group_size
     )?;
 
-    let mut types = HashSet::new();
-    for var in &ir.vars {
-        assemble_type(s, &mut types, var.ty)?;
+    for ty in b.types {
+        writeln!(s, "{ty}")?;
     }
-    assemble_type(s, &mut types, &VarType::Void)?;
-    assemble_type(s, &mut types, &VarType::U32)?;
 
-    let mut buffer_bindings = HashSet::new();
-    let mut sampler_bindings = HashSet::new();
-    let mut accel_bindings = false;
-    assemble_bindings(
-        s,
-        ir,
-        &mut buffer_bindings,
-        &mut sampler_bindings,
-        &mut accel_bindings,
-    )?;
+    write!(s, "{bindings}")?;
 
     writeln!(
         s,
@@ -116,7 +134,7 @@ pub fn assemble_entry_point(
     "#
     )?;
 
-    assemble_vars(s, ir)?;
+    writeln!(s, "{vars}")?;
 
     writeln!(
         s,
@@ -129,7 +147,7 @@ pub fn assemble_entry_point(
     Ok(())
 }
 
-pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
+pub fn assemble_vars(s: &mut String, b: &mut SpirvBuilder, ir: &IR) -> std::fmt::Result {
     for id in ir.var_ids() {
         let var = ir.var(id);
         let deps = ir.deps(id);
@@ -146,12 +164,15 @@ pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let buffer_idx = ir.var(src).data;
 
                 let dst = Reg(dst);
+                let spv_ty = SpvType(ir.var(src).ty);
 
                 writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
-                writeln!(s, "{dst}_ptr_ty = OpTypePointer StorageBuffer %{spv_ty}")?;
+                b.add_type_def(format!(
+                    "%_ptr_StorageBuffer_{spv_ty} = OpTypePointer StorageBuffer %{spv_ty}"
+                ));
                 writeln!(
                     s,
-                    "{dst}_ptr = OpAccessChain {dst}_ptr_ty %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
+                    "{dst}_ptr = OpAccessChain %_ptr_StorageBuffer_{spv_ty} %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
                 )?;
             }
             crate::op::KernelOp::Gather => {
@@ -160,10 +181,12 @@ pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let buffer_idx = ir.var(src).data;
 
                 writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
-                writeln!(s, "{dst}_ptr_ty = OpTypePointer StorageBuffer %{spv_ty}")?;
+                b.add_type_def(format!(
+                    "%_ptr_StorageBuffer_{spv_ty} = OpTypePointer StorageBuffer %{spv_ty}"
+                ));
                 writeln!(
                     s,
-                    "{dst}_ptr = OpAccessChain {dst}_ptr_ty %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
+                    "{dst}_ptr = OpAccessChain %_ptr_StorageBuffer_{spv_ty} %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
                 )?;
             }
             crate::op::KernelOp::Index => {
@@ -211,38 +234,32 @@ pub fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
 pub fn assemble_buffer_binding(
     s: &mut String,
     ir: &IR,
-    buffer_bindings: &mut HashSet<&'static VarType>,
+    b: &mut SpirvBuilder,
     ty: &'static VarType,
 ) -> std::fmt::Result {
-    if !buffer_bindings.contains(ty) {
+    if !b.buffer_bindings.contains(ty) {
         let spv_ty = SpvType(ty);
         writeln!(s, "%_runtimearr_{spv_ty} = OpTypeRuntimeArray %{spv_ty}")?;
         writeln!(
             s,
             "%_struct_runtimearr_{spv_ty} = OpTypeStruct %_runtimearr_{spv_ty}"
         )?;
-        writeln!(s, "%_ptr_StorageBuffer_{spv_ty} = OpTypePointer StorageBuffer %_struct_runtimearr_{spv_ty}")?;
+        writeln!(s, "%_ptr_StorageBuffer_struct_runtimearr_{spv_ty} = OpTypePointer StorageBuffer %_struct_runtimearr_{spv_ty}")?;
         writeln!(
             s,
             "%_var_StorageBuffer_{spv_ty} = OpVariable %_ptr_StorageBuffer_{spv_ty} StorageBuffer"
         )?;
-        buffer_bindings.insert(ty);
+        b.buffer_bindings.insert(ty);
     }
     Ok(())
 }
 
-pub fn assemble_bindings(
-    s: &mut String,
-    ir: &IR,
-    buffer_bindings: &mut HashSet<&'static VarType>,
-    sampler_bindings: &mut HashSet<usize>,
-    accel_bindings: &mut bool,
-) -> std::fmt::Result {
+pub fn assemble_bindings(s: &mut String, ir: &IR, b: &mut SpirvBuilder) -> std::fmt::Result {
     for id in ir.var_ids() {
         let var = ir.var(id);
         match var.op {
             crate::op::KernelOp::BufferRef => {
-                assemble_buffer_binding(s, ir, buffer_bindings, var.ty)?;
+                assemble_buffer_binding(s, ir, b, var.ty)?;
             }
             crate::op::KernelOp::TextureRef { dim } => todo!(),
             crate::op::KernelOp::AccelRef => todo!(),
@@ -252,36 +269,32 @@ pub fn assemble_bindings(
     Ok(())
 }
 
-pub fn assemble_type(
-    s: &mut String,
-    types: &mut HashSet<&'static VarType>,
-    ty: &'static VarType,
-) -> std::fmt::Result {
-    if !types.contains(ty) {
-        let ty_name = SpvType(ty);
-        write!(s, "%{ty_name} = ")?;
-        match ty {
-            VarType::Void => writeln!(s, "OpTypeVoid")?,
-            VarType::Bool => writeln!(s, "OpTypeBool")?,
-            VarType::I8 => writeln!(s, "OpTypeInt 8 1")?,
-            VarType::U8 => writeln!(s, "OpTypeInt 8 0")?,
-            VarType::I16 => writeln!(s, "OpTypeInt 16 1")?,
-            VarType::U16 => writeln!(s, "OpTypeInt 16 0")?,
-            VarType::I32 => writeln!(s, "OpTypeInt 32 1")?,
-            VarType::U32 => writeln!(s, "OpTypeInt 32 0")?,
-            VarType::I64 => writeln!(s, "OpTypeInt 64 1")?,
-            VarType::U64 => writeln!(s, "OpTypeInt 64 0")?,
-            VarType::F16 => writeln!(s, "OpTypeFloat 16")?,
-            VarType::F32 => writeln!(s, "OpTypeFloat 32")?,
-            VarType::F64 => writeln!(s, "OpTypeFloat 64")?,
-            VarType::Vec { ty, num } => writeln!(s, "OpTypeVector %{ty} {num}", ty = SpvType(ty))?,
-            VarType::Array { ty, num } => {
-                todo!();
-            }
-            VarType::Mat { ty, rows, cols } => todo!(),
-            VarType::Struct { tys } => todo!(),
-        };
-        types.insert(ty);
-    }
-    Ok(())
+pub fn var_type(ty: &'static VarType) -> String {
+    let mut s = String::new();
+    let ty_name = SpvType(ty);
+    write!(s, "%{ty_name} = ").unwrap();
+    match ty {
+        VarType::Void => write!(s, "OpTypeVoid").unwrap(),
+        VarType::Bool => write!(s, "OpTypeBool").unwrap(),
+        VarType::I8 => write!(s, "OpTypeInt 8 1").unwrap(),
+        VarType::U8 => write!(s, "OpTypeInt 8 0").unwrap(),
+        VarType::I16 => write!(s, "OpTypeInt 16 1").unwrap(),
+        VarType::U16 => write!(s, "OpTypeInt 16 0").unwrap(),
+        VarType::I32 => write!(s, "OpTypeInt 32 1").unwrap(),
+        VarType::U32 => write!(s, "OpTypeInt 32 0").unwrap(),
+        VarType::I64 => write!(s, "OpTypeInt 64 1").unwrap(),
+        VarType::U64 => write!(s, "OpTypeInt 64 0").unwrap(),
+        VarType::F16 => write!(s, "OpTypeFloat 16").unwrap(),
+        VarType::F32 => write!(s, "OpTypeFloat 32").unwrap(),
+        VarType::F64 => write!(s, "OpTypeFloat 64").unwrap(),
+        VarType::Vec { ty, num } => {
+            write!(s, "OpTypeVector %{ty} {num}", ty = SpvType(ty)).unwrap()
+        }
+        VarType::Array { ty, num } => {
+            todo!();
+        }
+        VarType::Mat { ty, rows, cols } => todo!(),
+        VarType::Struct { tys } => todo!(),
+    };
+    s
 }
