@@ -77,7 +77,7 @@ pub struct SpirvBuilder {
     accel_bindings: bool,
 }
 impl SpirvBuilder {
-    pub fn add_type_def(&mut self, typedef: String) {
+    pub fn add_typedef(&mut self, typedef: String) {
         if !self.types.contains(&typedef) {
             self.types.insert(typedef);
         }
@@ -93,7 +93,7 @@ pub fn assemble_entry_point(
     let mut b = SpirvBuilder::default();
 
     for var in &ir.vars {
-        b.add_type_def(var_type(var.ty));
+        b.add_typedef(var_type(var.ty));
     }
 
     let mut bindings = String::new();
@@ -122,6 +122,8 @@ pub fn assemble_entry_point(
     for ty in b.types {
         writeln!(s, "{ty}")?;
     }
+
+    writeln!(s, "")?;
 
     write!(s, "{bindings}")?;
 
@@ -166,14 +168,14 @@ pub fn assemble_vars(s: &mut String, b: &mut SpirvBuilder, ir: &IR) -> std::fmt:
                 let dst = Reg(dst);
                 let spv_ty = SpvType(ir.var(src).ty);
 
-                writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
-                b.add_type_def(format!(
-                    "%_ptr_StorageBuffer_{spv_ty} = OpTypePointer StorageBuffer %{spv_ty}"
-                ));
-                writeln!(
-                    s,
-                    "{dst}_ptr = OpAccessChain %_ptr_StorageBuffer_{spv_ty} %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
-                )?;
+                // writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
+                // b.add_typedef(format!(
+                //     "%_ptr_StorageBuffer_{spv_ty} = OpTypePointer StorageBuffer %{spv_ty}"
+                // ));
+                // writeln!(
+                //     s,
+                //     "{dst}_ptr = OpAccessChain %_ptr_StorageBuffer_{spv_ty} %_var_StorageBuffer_{spv_ty} {dst}_buffer_idx"
+                // )?;
             }
             crate::op::KernelOp::Gather => {
                 let src = deps[0];
@@ -181,7 +183,7 @@ pub fn assemble_vars(s: &mut String, b: &mut SpirvBuilder, ir: &IR) -> std::fmt:
                 let buffer_idx = ir.var(src).data;
 
                 writeln!(s, "{dst}_buffer_idx = OpConstant %u32 {buffer_idx}")?;
-                b.add_type_def(format!(
+                b.add_typedef(format!(
                     "%_ptr_StorageBuffer_{spv_ty} = OpTypePointer StorageBuffer %{spv_ty}"
                 ));
                 writeln!(
@@ -233,22 +235,24 @@ pub fn assemble_vars(s: &mut String, b: &mut SpirvBuilder, ir: &IR) -> std::fmt:
 
 pub fn assemble_buffer_binding(
     s: &mut String,
-    ir: &IR,
     b: &mut SpirvBuilder,
     ty: &'static VarType,
 ) -> std::fmt::Result {
     if !b.buffer_bindings.contains(ty) {
         let spv_ty = SpvType(ty);
-        writeln!(s, "%_runtimearr_{spv_ty} = OpTypeRuntimeArray %{spv_ty}")?;
-        writeln!(
-            s,
-            "%_struct_runtimearr_{spv_ty} = OpTypeStruct %_runtimearr_{spv_ty}"
-        )?;
-        writeln!(s, "%_ptr_StorageBuffer_struct_runtimearr_{spv_ty} = OpTypePointer StorageBuffer %_struct_runtimearr_{spv_ty}")?;
-        writeln!(
-            s,
-            "%_var_StorageBuffer_{spv_ty} = OpVariable %_ptr_StorageBuffer_{spv_ty} StorageBuffer"
-        )?;
+        b.add_typedef(format!(
+            "%_runtimearr_{spv_ty} = OpTypeRuntimeArray %{spv_ty}"
+        ));
+        // b.add_typedef(format!(
+        //     "%_struct_runtimearr_{spv_ty} = OpTypeStruct %_runtimearr_{spv_ty}"
+        // ));
+        // b.add_typedef(format!(
+        //     "%_ptr_StorageBuffer_struct_runtimearr_{spv_ty} = OpTypePointer StorageBuffer %_struct_runtimearr_{spv_ty}"
+        // ));
+        // writeln!(
+        //     s,
+        //     "%_var_StorageBuffer_{spv_ty} = OpVariable %_ptr_StorageBuffer_struct_runtimearr_{spv_ty} StorageBuffer"
+        // )?;
         b.buffer_bindings.insert(ty);
     }
     Ok(())
@@ -259,7 +263,7 @@ pub fn assemble_bindings(s: &mut String, ir: &IR, b: &mut SpirvBuilder) -> std::
         let var = ir.var(id);
         match var.op {
             crate::op::KernelOp::BufferRef => {
-                assemble_buffer_binding(s, ir, b, var.ty)?;
+                assemble_buffer_binding(s, b, var.ty)?;
             }
             crate::op::KernelOp::TextureRef { dim } => todo!(),
             crate::op::KernelOp::AccelRef => todo!(),
