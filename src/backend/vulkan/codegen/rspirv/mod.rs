@@ -24,6 +24,21 @@ pub const ACCEL_BINDING: u32 = 2;
 // }
 //
 
+macro_rules! glsl_ext {
+    ($self:ident, $ty:ident, $ext:ident, $($operand:expr),*) => {
+        {
+        let ext = $self.glsl_ext;
+        $self.ext_inst(
+            $ty,
+            None,
+            ext,
+            GLSL450Instruction::$ext as _,
+            [$(dr::Operand::IdRef($operand)),*],
+        )
+        }
+    };
+}
+
 pub fn assemble_trace(
     trace: &IR,
     info: &CompileInfo,
@@ -681,352 +696,17 @@ impl SpirvBuilder {
     }
 
     fn assemble_vars(&mut self, ir: &IR, global_invocation_id: u32) -> Result<(), dr::Error> {
-        macro_rules! bop {
-            ($bop:ident: $int:ident, $float:ident) => {
-                crate::op::Bop::$bop => {
-                    if isint(&var.ty) {
-                        self.$int(ty, Some(dst), lhs, rhs)?;
-                    } else if isfloat(&var.ty) {
-                        self.$float(ty, Some(dst), lhs, rhs)?;
-                    } else {
-                        todo!()
-                    }
-                }
-            };
-        }
-        macro_rules! glsl_ext {
-            ($self:ident; $dst:ident : $ty:ident = $ext:ident, $($operand:expr),*) => {
-                let ext = $self.glsl_ext;
-                $self.ext_inst(
-                    $ty,
-                    Some($dst),
-                    ext,
-                    GLSL450Instruction::$ext as _,
-                    [$(dr::Operand::IdRef($operand)),*],
-                )?;
-            };
-        }
         for varid in ir.var_ids() {
             let var = ir.var(varid);
             let deps = ir.deps(varid);
             let res = match var.op {
                 KernelOp::Nop => 0,
-                KernelOp::Bop(bop) => {
-                    let res = self.id();
+                KernelOp::Bop(op) => {
                     let src_ty = &ir.var(deps[0]).ty;
                     let lhs = self.reg(deps[0]);
                     let rhs = self.reg(deps[1]);
-                    let ty = self.spirv_ty(&var.ty);
-                    match bop {
-                        Bop::Add => match var.ty {
-                            VarType::I8
-                            | VarType::I16
-                            | VarType::I32
-                            | VarType::I64
-                            | VarType::U8
-                            | VarType::U16
-                            | VarType::U32
-                            | VarType::U64
-                            | VarType::Vec {
-                                ty:
-                                    VarType::I8
-                                    | VarType::I16
-                                    | VarType::I32
-                                    | VarType::I64
-                                    | VarType::U8
-                                    | VarType::U16
-                                    | VarType::U32
-                                    | VarType::U64,
-                                ..
-                            } => {
-                                self.i_add(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16
-                            | VarType::F32
-                            | VarType::F64
-                            | VarType::Vec {
-                                ty: VarType::F16 | VarType::F32 | VarType::F64,
-                                ..
-                            } => {
-                                self.f_add(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Vec { ty, num } => {}
-                            _ => todo!(),
-                        },
-                        Bop::Sub => match var.ty {
-                            VarType::I8
-                            | VarType::I16
-                            | VarType::I32
-                            | VarType::I64
-                            | VarType::U8
-                            | VarType::U16
-                            | VarType::U32
-                            | VarType::U64 => {
-                                self.i_sub(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_sub(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Mul => match var.ty {
-                            VarType::I8
-                            | VarType::I16
-                            | VarType::I32
-                            | VarType::I64
-                            | VarType::U8
-                            | VarType::U16
-                            | VarType::U32
-                            | VarType::U64 => {
-                                self.i_mul(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_mul(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Div => match var.ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.s_div(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_div(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_div(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Modulus => match var.ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.s_mod(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_mod(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_mod(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Min => match var.ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                glsl_ext!(self; res: ty = SMin, lhs, rhs);
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                glsl_ext!(self; res: ty = UMin, lhs, rhs);
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                glsl_ext!(self; res: ty = FMin, lhs, rhs);
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Max => match var.ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                glsl_ext!(self; res: ty = SMax, lhs, rhs);
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                glsl_ext!(self; res: ty = UMax, lhs, rhs);
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                glsl_ext!(self; res: ty = FMax, lhs, rhs);
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::And => match var.ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.bitwise_and(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                self.logical_and(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Or => match var.ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.bitwise_or(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                self.logical_or(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Xor => match var.ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.bitwise_xor(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                let n_lhs = self.logical_not(ty, None, lhs)?;
-                                let n_rhs = self.logical_not(ty, None, rhs)?;
-                                let t0 = self.logical_and(ty, None, n_lhs, rhs)?;
-                                let t1 = self.logical_and(ty, None, lhs, n_rhs)?;
-                                self.logical_or(ty, Some(res), t0, t1)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Shl => match var.ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.shift_left_logical(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Shr => match var.ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.shift_left_logical(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Eq => match src_ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.i_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_ord_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                self.logical_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Neq => match src_ty {
-                            VarType::U8
-                            | VarType::I8
-                            | VarType::U16
-                            | VarType::I16
-                            | VarType::U32
-                            | VarType::I32
-                            | VarType::U64
-                            | VarType::I64 => {
-                                self.i_not_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_ord_not_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                self.logical_not_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Lt => match src_ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.b.s_less_than(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_less_than(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_ord_less_than(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                let n_lhs = self.logical_not(ty, None, lhs)?;
-                                self.logical_and(ty, Some(res), n_lhs, rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Le => match src_ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.b.s_less_than_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_less_than_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_ord_less_than_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                let n_lhs = self.logical_not(ty, None, lhs)?;
-                                let n_rhs = self.logical_not(ty, None, rhs)?;
-                                let t0 = self.logical_and(ty, None, n_lhs, rhs)?;
-                                let t1 = self.logical_and(ty, None, lhs, rhs)?;
-                                let t2 = self.logical_and(ty, None, n_lhs, n_rhs)?;
 
-                                let t3 = self.logical_or(ty, None, t0, t1)?;
-                                self.logical_or(ty, Some(res), t3, t2)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Gt => match src_ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.b.s_greater_than(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_greater_than(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_ord_greater_than(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                let n_rhs = self.logical_not(ty, None, lhs)?;
-                                self.logical_and(ty, Some(res), lhs, n_rhs)?;
-                            }
-                            _ => todo!(),
-                        },
-                        Bop::Ge => match src_ty {
-                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                self.b.s_greater_than_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
-                                self.u_greater_than_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::F16 | VarType::F32 | VarType::F64 => {
-                                self.f_ord_greater_than_equal(ty, Some(res), lhs, rhs)?;
-                            }
-                            VarType::Bool => {
-                                let n_lhs = self.logical_not(ty, None, lhs)?;
-                                let n_rhs = self.logical_not(ty, None, rhs)?;
-                                let t0 = self.logical_and(ty, None, lhs, n_rhs)?;
-                                let t1 = self.logical_and(ty, None, lhs, rhs)?;
-                                let t2 = self.logical_and(ty, None, n_lhs, n_rhs)?;
-
-                                let t3 = self.logical_or(ty, None, t0, t1)?;
-                                self.logical_or(ty, Some(res), t3, t2)?;
-                            }
-                            _ => todo!(),
-                        },
-                    };
-                    res
+                    self.bop(op, var.ty, &src_ty, lhs, rhs)?
                 }
                 KernelOp::Uop(op) => {
                     // let res = self.id();
@@ -1088,64 +768,40 @@ impl SpirvBuilder {
                             }
                             _ => todo!(),
                         },
-                        Uop::Sqrt => {
-                            let res = self.id();
-                            glsl_ext!(self; res: spirv_ty = Sqrt, src);
-                            res
-                        }
-                        Uop::Abs => {
-                            let res = self.id();
-                            match ty {
-                                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
-                                    glsl_ext!(self; res: spirv_ty = SAbs, src);
-                                }
-                                VarType::F16 | VarType::F32 | VarType::F64 => {
-                                    glsl_ext!(self; res: spirv_ty = FAbs, src);
-                                }
-                                _ => todo!(),
-                            };
-                            res
-                        }
-                        Uop::Sin => {
-                            let res = self.id();
-                            match ty {
-                                VarType::F16 | VarType::F32 | VarType::F64 => {
-                                    glsl_ext!(self; res: spirv_ty = Sin, src);
-                                }
-                                _ => todo!(),
+                        Uop::Sqrt => glsl_ext!(self, spirv_ty, Sqrt, src)?,
+                        Uop::Abs => match ty {
+                            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                                glsl_ext!(self, spirv_ty, SAbs, src)?
                             }
-                            res
-                        }
-                        Uop::Cos => {
-                            let res = self.id();
-                            match ty {
-                                VarType::F16 | VarType::F32 | VarType::F64 => {
-                                    glsl_ext!(self; res: spirv_ty = Cos, src);
-                                }
-                                _ => todo!(),
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self, spirv_ty, FAbs, src)?
                             }
-                            res
-                        }
-                        Uop::Exp2 => {
-                            let res = self.id();
-                            match ty {
-                                VarType::F16 | VarType::F32 | VarType::F64 => {
-                                    glsl_ext!(self; res: spirv_ty = Exp2, src);
-                                }
-                                _ => todo!(),
+                            _ => todo!(),
+                        },
+                        Uop::Sin => match ty {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self, spirv_ty, Sin, src)?
                             }
-                            res
-                        }
-                        Uop::Log2 => {
-                            let res = self.id();
-                            match ty {
-                                VarType::F16 | VarType::F32 | VarType::F64 => {
-                                    glsl_ext!(self; res: spirv_ty = Log2, src);
-                                }
-                                _ => todo!(),
+                            _ => todo!(),
+                        },
+                        Uop::Cos => match ty {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self, spirv_ty, Cos, src)?
                             }
-                            res
-                        }
+                            _ => todo!(),
+                        },
+                        Uop::Exp2 => match ty {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self, spirv_ty, Exp2, src)?
+                            }
+                            _ => todo!(),
+                        },
+                        Uop::Log2 => match ty {
+                            VarType::F16 | VarType::F32 | VarType::F64 => {
+                                glsl_ext!(self, spirv_ty, Log2, src)?
+                            }
+                            _ => todo!(),
+                        },
                     }
                 }
                 KernelOp::Select => {
@@ -1501,5 +1157,141 @@ impl SpirvBuilder {
             }
         }
         Ok(())
+    }
+}
+impl SpirvBuilder {
+    fn bop(
+        &mut self,
+        op: Bop,
+        result_type: &'static VarType,
+        src_type: &'static VarType,
+        lhs: u32,
+        rhs: u32,
+    ) -> Result<u32, dr::Error> {
+        let spv_type = self.spirv_ty(result_type);
+        match src_type {
+            VarType::Bool => self.bool_bop(op, spv_type, lhs, rhs),
+            VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => {
+                self.u_bop(op, spv_type, lhs, rhs)
+            }
+            VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => {
+                self.s_bop(op, spv_type, lhs, rhs)
+            }
+            VarType::F16 | VarType::F32 | VarType::F64 => self.f_bop(op, spv_type, lhs, rhs),
+            VarType::Vec { ty, .. } => self.bop(op, result_type, ty, lhs, rhs),
+            _ => todo!(),
+        }
+    }
+    fn bool_bop(
+        &mut self,
+        op: Bop,
+        result_type: u32,
+        lhs: u32,
+        rhs: u32,
+    ) -> Result<u32, dr::Error> {
+        match op {
+            Bop::And => self.logical_and(result_type, None, lhs, rhs),
+            Bop::Or => self.logical_or(result_type, None, lhs, rhs),
+            Bop::Xor => {
+                let n_lhs = self.logical_not(result_type, None, lhs)?;
+                let n_rhs = self.logical_not(result_type, None, rhs)?;
+                let t0 = self.logical_and(result_type, None, n_lhs, rhs)?;
+                let t1 = self.logical_and(result_type, None, lhs, n_rhs)?;
+                self.logical_or(result_type, None, t0, t1)
+            }
+            Bop::Eq => self.logical_equal(result_type, None, lhs, rhs),
+            Bop::Neq => self.logical_not_equal(result_type, None, lhs, rhs),
+            Bop::Lt => {
+                let n_lhs = self.logical_not(result_type, None, lhs)?;
+                self.logical_and(result_type, None, n_lhs, rhs)
+            }
+            Bop::Le => {
+                let n_lhs = self.logical_not(result_type, None, lhs)?;
+                let n_rhs = self.logical_not(result_type, None, rhs)?;
+                let t0 = self.logical_and(result_type, None, n_lhs, rhs)?;
+                let t1 = self.logical_and(result_type, None, lhs, rhs)?;
+                let t2 = self.logical_and(result_type, None, n_lhs, n_rhs)?;
+
+                let t3 = self.logical_or(result_type, None, t0, t1)?;
+                self.logical_or(result_type, None, t3, t2)
+            }
+            Bop::Gt => {
+                let n_rhs = self.logical_not(result_type, None, lhs)?;
+                self.logical_and(result_type, None, lhs, n_rhs)
+            }
+            Bop::Ge => {
+                let n_lhs = self.logical_not(result_type, None, lhs)?;
+                let n_rhs = self.logical_not(result_type, None, rhs)?;
+                let t0 = self.logical_and(result_type, None, lhs, n_rhs)?;
+                let t1 = self.logical_and(result_type, None, lhs, rhs)?;
+                let t2 = self.logical_and(result_type, None, n_lhs, n_rhs)?;
+
+                let t3 = self.logical_or(result_type, None, t0, t1)?;
+                self.logical_or(result_type, None, t3, t2)
+            }
+            _ => todo!(),
+        }
+    }
+    fn u_bop(&mut self, op: Bop, result_type: u32, lhs: u32, rhs: u32) -> Result<u32, dr::Error> {
+        match op {
+            Bop::Add => self.i_add(result_type, None, lhs, rhs),
+            Bop::Sub => self.i_sub(result_type, None, lhs, rhs),
+            Bop::Mul => self.i_mul(result_type, None, lhs, rhs),
+            Bop::Div => self.u_div(result_type, None, lhs, rhs),
+            Bop::Modulus => self.u_mod(result_type, None, lhs, rhs),
+            Bop::Min => glsl_ext!(self, result_type, UMin, lhs, rhs),
+            Bop::Max => glsl_ext!(self, result_type, UMax, lhs, rhs),
+            Bop::And => self.bitwise_and(result_type, None, lhs, rhs),
+            Bop::Or => self.bitwise_or(result_type, None, lhs, rhs),
+            Bop::Xor => self.bitwise_xor(result_type, None, lhs, rhs),
+            Bop::Shl => self.shift_left_logical(result_type, None, lhs, rhs),
+            Bop::Shr => self.shift_right_logical(result_type, None, lhs, rhs),
+            Bop::Eq => self.i_equal(result_type, None, lhs, rhs),
+            Bop::Neq => self.i_not_equal(result_type, None, lhs, rhs),
+            Bop::Lt => self.u_less_than(result_type, None, lhs, rhs),
+            Bop::Le => self.u_less_than_equal(result_type, None, lhs, rhs),
+            Bop::Gt => self.u_greater_than(result_type, None, lhs, rhs),
+            Bop::Ge => self.u_greater_than_equal(result_type, None, lhs, rhs),
+        }
+    }
+    fn s_bop(&mut self, op: Bop, result_type: u32, lhs: u32, rhs: u32) -> Result<u32, dr::Error> {
+        match op {
+            Bop::Add => self.i_add(result_type, None, lhs, rhs),
+            Bop::Sub => self.i_sub(result_type, None, lhs, rhs),
+            Bop::Mul => self.i_mul(result_type, None, lhs, rhs),
+            Bop::Div => self.s_div(result_type, None, lhs, rhs),
+            Bop::Modulus => self.s_mod(result_type, None, lhs, rhs),
+            Bop::Min => glsl_ext!(self, result_type, SMin, lhs, rhs),
+            Bop::Max => glsl_ext!(self, result_type, SMax, lhs, rhs),
+            Bop::And => self.bitwise_and(result_type, None, lhs, rhs),
+            Bop::Or => self.bitwise_or(result_type, None, lhs, rhs),
+            Bop::Xor => self.bitwise_xor(result_type, None, lhs, rhs),
+            Bop::Shl => self.shift_left_logical(result_type, None, lhs, rhs),
+            Bop::Shr => self.shift_right_logical(result_type, None, lhs, rhs),
+            Bop::Eq => self.i_equal(result_type, None, lhs, rhs),
+            Bop::Neq => self.i_not_equal(result_type, None, lhs, rhs),
+            Bop::Lt => self.s_less_than(result_type, None, lhs, rhs),
+            Bop::Le => self.s_less_than_equal(result_type, None, lhs, rhs),
+            Bop::Gt => self.s_greater_than(result_type, None, lhs, rhs),
+            Bop::Ge => self.s_greater_than_equal(result_type, None, lhs, rhs),
+        }
+    }
+    fn f_bop(&mut self, op: Bop, result_type: u32, lhs: u32, rhs: u32) -> Result<u32, dr::Error> {
+        match op {
+            Bop::Add => self.f_add(result_type, None, lhs, rhs),
+            Bop::Sub => self.f_sub(result_type, None, lhs, rhs),
+            Bop::Mul => self.f_mul(result_type, None, lhs, rhs),
+            Bop::Div => self.f_div(result_type, None, lhs, rhs),
+            Bop::Modulus => self.f_mod(result_type, None, lhs, rhs),
+            Bop::Min => glsl_ext!(self, result_type, FMin, lhs, rhs),
+            Bop::Max => glsl_ext!(self, result_type, FMax, lhs, rhs),
+            Bop::Eq => self.f_ord_equal(result_type, None, lhs, rhs),
+            Bop::Neq => self.f_ord_not_equal(result_type, None, lhs, rhs),
+            Bop::Lt => self.f_ord_less_than(result_type, None, lhs, rhs),
+            Bop::Le => self.f_ord_less_than_equal(result_type, None, lhs, rhs),
+            Bop::Gt => self.f_ord_greater_than(result_type, None, lhs, rhs),
+            Bop::Ge => self.f_ord_less_than_equal(result_type, None, lhs, rhs),
+            _ => todo!(),
+        }
     }
 }
