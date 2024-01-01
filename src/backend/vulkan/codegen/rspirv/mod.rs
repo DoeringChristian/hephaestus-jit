@@ -1178,6 +1178,8 @@ impl SpirvBuilder {
                 self.s_bop(op, spv_type, lhs, rhs)
             }
             VarType::F16 | VarType::F32 | VarType::F64 => self.f_bop(op, spv_type, lhs, rhs),
+            // NOTE: this is a bit of a cheat, but we can change the src type to select the correct
+            // binary op variant
             VarType::Vec { ty, .. } => self.bop(op, result_type, ty, lhs, rhs),
             _ => todo!(),
         }
