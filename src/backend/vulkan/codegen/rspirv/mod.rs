@@ -49,7 +49,25 @@ pub fn assemble_trace(
 
     let module = b.module();
     log::trace!("Shader: \n {}", module.disassemble());
-    Ok(module.assemble())
+
+    let spv = module.assemble();
+
+    use spirv_tools::val::compiled::CompiledValidator;
+    use spirv_tools::val::{Validator, ValidatorOptions};
+
+    let val = CompiledValidator::default();
+    val.validate(
+        &spv,
+        Some(ValidatorOptions {
+            ..Default::default()
+        }),
+    )
+    .map_err(|err| {
+        log::error!("Spirv Validation {err}");
+    })
+    .ok();
+
+    Ok(spv)
 }
 fn isfloat(ty: &VarType) -> bool {
     match ty {
@@ -178,6 +196,7 @@ impl SpirvBuilder {
         self.extension("SPV_KHR_16bit_storage");
         self.extension("SPV_KHR_ray_query");
         self.extension("SPV_EXT_shader_atomic_float_add");
+        self.extension("SPV_EXT_shader_atomic_float16_add");
         self.extension("SPV_EXT_shader_atomic_float_min_max");
 
         self.memory_model(spirv::AddressingModel::Logical, spirv::MemoryModel::GLSL450);
@@ -232,11 +251,7 @@ impl SpirvBuilder {
         let cond = self.u_greater_than_equal(bool_ty, None, index, size)?;
 
         // Early exit if index >= size
-        self.if_block(cond, |s| {
-            let inst = dr::Instruction::new(spirv::Op::Return, None, None, vec![]);
-            s.insert_into_block(rspirv::dr::InsertPoint::End, inst)
-                .unwrap();
-        });
+        self.return_if(cond)?;
 
         self.assemble_vars(ir, global_invocation_id)?;
 
@@ -294,6 +309,28 @@ impl SpirvBuilder {
         self.select_block(current)?;
         Ok(res)
     }
+
+    pub fn selection_merge(
+        &mut self,
+        merge_block: spirv::Word,
+        selection_control: spirv::SelectionControl,
+    ) -> Result<(), dr::Error> {
+        // According to spirv OpSelectionMerge should be second to last
+        // instruction in block. Rspirv however ends block with
+        // selection_merge. Therefore, we insert the instruction by hand.
+        self.b.insert_into_block(
+            rspirv::dr::InsertPoint::End,
+            rspirv::dr::Instruction::new(
+                spirv::Op::SelectionMerge,
+                None,
+                None,
+                vec![
+                    rspirv::dr::Operand::IdRef(merge_block),
+                    rspirv::dr::Operand::SelectionControl(selection_control),
+                ],
+            ),
+        )
+    }
     fn while_block(
         &mut self,
         cond: impl FnOnce(&mut Self) -> Result<u32, dr::Error>,
@@ -346,46 +383,39 @@ impl SpirvBuilder {
 
         Ok(())
     }
-    /// Represents an if condition.
-    /// Returns the label of the true bloc
-    fn if_block(&mut self, cond: u32, f: impl FnOnce(&mut Self)) -> u32 {
-        let ty_bool = self.type_bool();
-        let bool_true = self.constant_true(ty_bool);
-
-        let cond = self.logical_equal(ty_bool, None, cond, bool_true).unwrap();
-
+    fn return_if(&mut self, cond: u32) -> Result<u32, dr::Error> {
         let true_label = self.id();
         let false_label = self.id();
 
-        // According to spirv OpSelectionMerge should be second to last
-        // instruction in block. Rspirv however ends block with
-        // selection_merge. Therefore, we insert the instruction by hand.
-        self.b
-            .insert_into_block(
-                rspirv::dr::InsertPoint::End,
-                rspirv::dr::Instruction::new(
-                    spirv::Op::SelectionMerge,
-                    None,
-                    None,
-                    vec![
-                        rspirv::dr::Operand::IdRef(false_label),
-                        rspirv::dr::Operand::SelectionControl(spirv::SelectionControl::NONE),
-                    ],
-                ),
-            )
-            .unwrap();
-        self.branch_conditional(cond, true_label, false_label, [])
-            .unwrap();
+        self.selection_merge(false_label, spirv::SelectionControl::NONE)?;
+        self.branch_conditional(cond, true_label, false_label, [])?;
 
-        self.begin_block(Some(true_label)).unwrap();
+        self.begin_block(Some(true_label))?;
+
+        self.ret()?;
+
+        self.begin_block(Some(false_label))?;
+
+        Ok(true_label)
+    }
+    /// Represents an if condition.
+    /// Returns the label of the true bloc
+    fn if_block(&mut self, cond: u32, f: impl FnOnce(&mut Self)) -> Result<u32, dr::Error> {
+        let true_label = self.id();
+        let false_label = self.id();
+
+        self.selection_merge(false_label, spirv::SelectionControl::NONE)?;
+        self.branch_conditional(cond, true_label, false_label, [])?;
+
+        self.begin_block(Some(true_label))?;
 
         f(self);
 
-        self.branch(false_label).unwrap();
+        self.branch(false_label)?;
 
-        self.begin_block(Some(false_label)).unwrap();
+        self.begin_block(Some(false_label))?;
 
-        true_label
+        Ok(true_label)
     }
     /// Store value at src in ptr, potentially atomically
     fn store_reduce(
@@ -964,7 +994,7 @@ impl SpirvBuilder {
                     let img_idx = self.constant_bit32(int_ty, img_idx as _);
 
                     let samplers = self.get_samplers(SamplerDesc {
-                        ty: ir.var_ty(img).clone(),
+                        ty: ir.var_ty(img),
                         dim,
                     });
                     let ptr = self.access_chain(ptr_ty, None, samplers, [img_idx])?;
@@ -1090,7 +1120,7 @@ impl SpirvBuilder {
                                 _ => s.load(spirv_data_ty, None, ptr, None, None).unwrap(),
                             };
                             result_true = res;
-                        });
+                        })?;
                         self.phi(
                             spirv_ty,
                             None,
