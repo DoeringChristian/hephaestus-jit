@@ -56,16 +56,18 @@ pub fn assemble_trace(
     use spirv_tools::val::{Validator, ValidatorOptions};
 
     let val = CompiledValidator::default();
-    val.validate(
+    let val_res = val.validate(
         &spv,
         Some(ValidatorOptions {
             ..Default::default()
         }),
-    )
-    .map_err(|err| {
+    );
+    if let Err(err) = val_res {
         log::error!("Spirv Validation {err}");
-    })
-    .ok();
+        // panic!("{err}");
+    };
+
+    std::fs::write("/tmp/test.spv", bytemuck::cast_slice(&spv)).unwrap();
 
     Ok(spv)
 }
@@ -135,6 +137,9 @@ struct SpirvBuilder {
     n_buffers: usize,
     n_textures: usize,
     n_accels: usize,
+
+    constants_32bit: HashMap<(u32, u32), u32>,
+    constants_64bit: HashMap<(u32, u64), u32>,
 }
 impl Deref for SpirvBuilder {
     type Target = dr::Builder;
@@ -310,7 +315,26 @@ impl SpirvBuilder {
         Ok(res)
     }
 
-    pub fn selection_merge(
+    // Utility functions
+    fn constant_bit32(&mut self, result_type: spirv::Word, value: u32) -> spirv::Word {
+        if !self.constants_32bit.contains_key(&(result_type, value)) {
+            let res = self.b.constant_bit32(result_type, value);
+            self.constants_32bit.insert((result_type, value), res);
+            res
+        } else {
+            self.constants_32bit[&(result_type, value)]
+        }
+    }
+    fn constant_bit64(&mut self, result_type: spirv::Word, value: u64) -> spirv::Word {
+        if !self.constants_64bit.contains_key(&(result_type, value)) {
+            let res = self.b.constant_bit64(result_type, value);
+            self.constants_64bit.insert((result_type, value), res);
+            res
+        } else {
+            self.constants_64bit[&(result_type, value)]
+        }
+    }
+    fn selection_merge(
         &mut self,
         merge_block: spirv::Word,
         selection_control: spirv::SelectionControl,
@@ -916,7 +940,7 @@ impl SpirvBuilder {
                             let is_opaque = s.i_equal(bool_ty, None, intersection_ty, u32_0)?;
                             s.if_block(is_opaque, |s| {
                                 s.ray_query_confirm_intersection_khr(ray_query_var).unwrap();
-                            });
+                            })?;
                             Ok(())
                         },
                     )?;
