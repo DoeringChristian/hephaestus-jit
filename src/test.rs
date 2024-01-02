@@ -975,5 +975,6 @@ fn example() {
         graph.launch(&device);
     }
 
+    // Read data back to CPU and print it
     dbg!(a.to_vec::<f32>(..));
 }
