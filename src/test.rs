@@ -3,6 +3,8 @@ use std::collections::HashSet;
 
 use approx::assert_abs_diff_eq;
 
+use crate::backend::Device;
+use crate::tr::VarRef;
 use crate::vartype::{AsVarType, Instance, Intersection};
 use crate::{backend, tr, vulkan};
 
@@ -932,4 +934,46 @@ fn dynamic_index() {
         .collect::<Vec<_>>();
 
     assert_eq!(values, reference);
+}
+#[test]
+fn example() {
+    use rand::Rng;
+
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let n = 128;
+
+    // Create random values and mask
+    let a = tr::array(
+        &(0..n)
+            .map(|_| rand::thread_rng().gen_range(0f32..1f32))
+            .collect::<Vec<_>>(),
+        &device,
+    );
+    let mask = tr::sized_literal(true, n);
+
+    // Compress wavefront
+    let indices = mask.compress_dyn();
+    let b = a.gather(&indices);
+
+    // Do some (RR style) work on the values
+    let b = b.mul(&tr::literal(0.9f32));
+    let new_mask = b.gt(&tr::literal(0.1f32));
+
+    // Write wavefront back to arrays
+    new_mask.scatter(&mask, &indices);
+    b.scatter(&a, &indices);
+
+    a.schedule();
+
+    // Compile render graph
+    let mut graph = tr::compile();
+    // Launch it multiple times
+    for _ in 0..10 {
+        graph.launch(&device);
+    }
+
+    dbg!(a.to_vec::<f32>(..));
 }

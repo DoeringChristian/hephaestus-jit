@@ -9,7 +9,7 @@ pub enum Extent {
     Size(usize), // TODO: make this on-zero
     DynSize {
         capacity: usize, // TODO: make this non-zero
-        size_dep: VarId,
+        size: VarId,
     },
     Texture {
         shape: [usize; 3],
@@ -26,11 +26,11 @@ impl PartialOrd for Extent {
             (
                 Extent::DynSize {
                     capacity: self_cap,
-                    size_dep: self_size,
+                    size: self_size,
                 },
                 Extent::DynSize {
                     capacity: other_cap,
-                    size_dep: other_size,
+                    size: other_size,
                 },
             ) => Some(self_cap.cmp(other_cap).then(self_size.cmp(other_size))),
             _ => None,
@@ -64,7 +64,7 @@ impl Extent {
     }
     pub fn get_dynamic(&self) -> Option<VarId> {
         match self {
-            Extent::DynSize { size_dep, .. } => Some(*size_dep),
+            Extent::DynSize { size: size_dep, .. } => Some(*size_dep),
             _ => None,
         }
     }
@@ -78,12 +78,29 @@ impl Extent {
         match (self, other) {
             (Extent::None, other) | (other, Extent::None) => other.clone(),
             (Extent::Size(a), Extent::Size(b)) => Extent::Size(*a.max(b)),
-            (Extent::Size(a), Extent::DynSize { capacity, size_dep })
-            | (Extent::DynSize { capacity, size_dep }, Extent::Size(a)) => Extent::DynSize {
+            (Extent::Size(a), Extent::DynSize { capacity, size })
+            | (Extent::DynSize { capacity, size }, Extent::Size(a)) => Extent::DynSize {
                 capacity: *a.max(capacity),
-                size_dep: *size_dep,
+                size: *size,
             },
             (Extent::Size(size), _) | (_, Extent::Size(size)) => Extent::Size(*size),
+            (
+                Extent::DynSize {
+                    capacity: capacity_self,
+                    size: size_self,
+                },
+                Extent::DynSize {
+                    capacity: capacity_other,
+                    size: size_other,
+                },
+            ) => {
+                assert_eq!(capacity_self, capacity_other);
+                assert_eq!(size_self, size_other);
+                Extent::DynSize {
+                    capacity: *capacity_self,
+                    size: *size_self,
+                }
+            }
             _ => todo!(),
         }
     }

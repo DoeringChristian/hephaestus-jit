@@ -298,10 +298,7 @@ pub fn dynamic_index(capacity: usize, size: &VarRef) -> VarRef {
         Var {
             op: Op::KernelOp(KernelOp::Index),
             ty: u32::var_ty(),
-            extent: Extent::DynSize {
-                capacity,
-                size_dep: id,
-            },
+            extent: Extent::DynSize { capacity, size: id },
             ..Default::default()
         },
         [],
@@ -843,7 +840,7 @@ impl VarRef {
         assert_eq!(self._thread_id, std::thread::current().id());
         let size = match self.extent() {
             Extent::Size(size) => size,
-            Extent::DynSize { size_dep, .. } => {
+            Extent::DynSize { size: size_dep, .. } => {
                 VarRef::borrow(size_dep).to_vec::<i32>(0..1)[0] as usize
             }
             _ => todo!(),

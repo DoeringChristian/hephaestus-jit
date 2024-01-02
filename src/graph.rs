@@ -238,7 +238,9 @@ pub fn compile(trace: &mut trace::Trace, schedule: &trace::Schedule) -> Graph {
         // Note: we know, that all variables in a group have the same size
         // TODO: validate, that the the size_buffer is a buffer
         let size_buffer = match first_var.extent {
-            Extent::DynSize { size_dep, .. } => graph_builder.try_push_resource(trace, size_dep),
+            Extent::DynSize { size: size_dep, .. } => {
+                graph_builder.try_push_resource(trace, size_dep)
+            }
             _ => None,
         };
 
