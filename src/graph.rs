@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 pub enum GraphResource {
     Param { param: usize },
     Captured { resource: Resource },
-    Internal,
+    Internal { id: trace::VarId },
 }
 
 #[derive(Debug, Default)]
@@ -128,7 +128,7 @@ impl Graph {
                         var.data.match_and_get(desc).unwrap()
                     }
                     GraphResource::Captured { resource } => resource.clone(),
-                    GraphResource::Internal => Resource::create(device, desc),
+                    GraphResource::Internal { .. } => Resource::create(device, desc),
                 })
                 .collect::<Vec<_>>();
         });
@@ -137,21 +137,20 @@ impl Graph {
         let report = device.execute_graph(self, &env).unwrap();
         log::trace!("Report:\n {report}");
 
-        // // Update resources of variables in the trace and graph.
-        // // NOTE: We might not want the second one
-        // trace::with_trace(|trace| {
-        //     for (i, resource) in env.resources.into_iter().map(|r| r.unwrap()).enumerate() {
-        //         let (id, desc) = &self.resource_descs[i];
-        //         if let Some(var) = trace.get_var_mut(*id) {
-        //             var.data = match &resource {
-        //                 Resource::Buffer(buffer) => Resource::Buffer(buffer.clone()),
-        //                 Resource::Texture(texture) => Resource::Texture(texture.clone()),
-        //                 Resource::Accel(accel) => Resource::Accel(accel.clone()),
-        //                 _ => todo!(),
-        //             }
-        //         }
-        //     }
-        // });
+        // Update resources of variables in the trace.
+        trace::with_trace(|trace| {
+            env.resources
+                .into_iter()
+                .zip(self.resources.iter())
+                .for_each(|(res, gres)| match gres {
+                    GraphResource::Internal { id } => {
+                        if let Some(var) = trace.get_var_mut(*id) {
+                            var.data = res;
+                        }
+                    }
+                    _ => {}
+                });
+        });
 
         report
     }
@@ -327,7 +326,7 @@ pub fn compile(
                 var.data
                     .match_and_get(desc)
                     .map(|resource| GraphResource::Captured { resource })
-                    .unwrap_or_else(|| GraphResource::Internal)
+                    .unwrap_or_else(|| GraphResource::Internal { id: *id })
             }
         })
         .collect::<Vec<_>>();

@@ -78,23 +78,20 @@ Graph {
         },
     ],
     resource_descs: [
-        (
-            VarId(
+        BufferDesc(
+            BufferDesc {
+                size: 100,
+                ty: Bool,
+            },
+        ),
+    ],
+    resources: [
+        Internal {
+            id: VarId(
                 DefaultKey(
                     1v1,
                 ),
             ),
-            BufferDesc(
-                BufferDesc {
-                    size: 100,
-                    ty: Bool,
-                },
-            ),
-        ),
+        },
     ],
-    env: Env {
-        resources: [
-            None,
-        ],
-    },
 }

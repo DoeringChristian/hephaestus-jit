@@ -189,45 +189,35 @@ Graph {
         },
     ],
     resource_descs: [
-        (
-            VarId(
+        BufferDesc(
+            BufferDesc {
+                size: 10,
+                ty: I32,
+            },
+        ),
+        BufferDesc(
+            BufferDesc {
+                size: 10,
+                ty: Bool,
+            },
+        ),
+    ],
+    resources: [
+        Internal {
+            id: VarId(
                 DefaultKey(
                     1v1,
                 ),
             ),
-            BufferDesc(
-                BufferDesc {
-                    size: 10,
-                    ty: I32,
-                },
-            ),
-        ),
-        (
-            VarId(
-                DefaultKey(
-                    2v1,
+        },
+        Captured {
+            resource: Buffer(
+                VulkanBuffer(
+                    VulkanBuffer {
+                        size: 16,
+                    },
                 ),
             ),
-            BufferDesc(
-                BufferDesc {
-                    size: 10,
-                    ty: Bool,
-                },
-            ),
-        ),
+        },
     ],
-    env: Env {
-        resources: [
-            None,
-            Some(
-                Buffer(
-                    VulkanBuffer(
-                        VulkanBuffer {
-                            size: 16,
-                        },
-                    ),
-                ),
-            ),
-        ],
-    },
 }
