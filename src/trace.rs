@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Range;
+use std::sync::Mutex;
 use std::thread::ThreadId;
 
 use crate::extent::Extent;
@@ -10,6 +11,7 @@ use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::Resource;
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, utils};
+use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
 
 pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[VarRef]) {
@@ -73,8 +75,10 @@ impl Schedule {
     }
 }
 
+pub static TRACE: Lazy<Mutex<Trace>> = Lazy::new(|| Mutex::new(Trace::default()));
+
 thread_local! {
-    pub static TRACE: RefCell<Trace> = RefCell::new(Default::default());
+    // pub static TRACE: RefCell<Trace> = RefCell::new(Default::default());
     pub static SCHEDULE: RefCell<Schedule> = RefCell::new(Default::default());
 }
 
@@ -226,10 +230,12 @@ impl Default for Var {
     }
 }
 pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
-    TRACE.with(|t| {
-        let mut t = t.borrow_mut();
-        f(&mut t)
-    })
+    let mut t = TRACE.lock().unwrap();
+    f(&mut *t)
+    // TRACE.with(|t| {
+    //     let mut t = t.borrow_mut();
+    //     f(&mut t)
+    // })
 }
 ///
 /// This function is used to push a Variable ([Var]) to the trace.

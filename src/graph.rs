@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 use crate::backend;
 use crate::extent::Extent;
@@ -6,11 +7,23 @@ use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
 
-#[derive(Debug)]
 pub enum GraphResource {
     Param { param: usize },
     Captured { resource: Resource },
     Internal { id: trace::VarId },
+}
+// Have to implement debug for snapshot tests to work
+impl Debug for GraphResource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Param { param } => f.debug_struct("Param").field("param", param).finish(),
+            Self::Captured { resource } => f
+                .debug_struct("Captured")
+                .field("resource", resource)
+                .finish(),
+            Self::Internal { .. } => f.debug_struct("Internal").finish(),
+        }
+    }
 }
 
 #[derive(Debug, Default)]

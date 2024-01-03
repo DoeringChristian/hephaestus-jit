@@ -203,13 +203,7 @@ Graph {
         ),
     ],
     resources: [
-        Internal {
-            id: VarId(
-                DefaultKey(
-                    1v1,
-                ),
-            ),
-        },
+        Internal,
         Captured {
             resource: Buffer(
                 VulkanBuffer(

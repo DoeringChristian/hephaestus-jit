@@ -146,6 +146,8 @@ pub struct AccelerationStructure {
     sizes: vk::AccelerationStructureBuildSizesInfoKHR,
     pub info: AccelerationStructureInfo,
 }
+unsafe impl Send for AccelerationStructure {}
+unsafe impl Sync for AccelerationStructure {}
 impl AccelerationStructure {
     pub fn device(&self) -> &Device {
         &self.device

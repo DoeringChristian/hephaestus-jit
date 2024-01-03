@@ -164,12 +164,6 @@ Graph {
                 ),
             ),
         },
-        Internal {
-            id: VarId(
-                DefaultKey(
-                    4v1,
-                ),
-            ),
-        },
+        Internal,
     ],
 }

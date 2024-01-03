@@ -114,6 +114,8 @@ pub struct InternalDevice {
 
     pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
 }
+unsafe impl Send for InternalDevice {}
+unsafe impl Sync for InternalDevice {}
 impl Debug for InternalDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InternalDevice")

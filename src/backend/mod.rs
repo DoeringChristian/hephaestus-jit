@@ -144,7 +144,7 @@ impl Accel {
     }
 }
 
-pub trait BackendDevice: Clone {
+pub trait BackendDevice: Clone + Send + Sync {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
     type Accel: BackendAccel;
@@ -157,7 +157,7 @@ pub trait BackendDevice: Clone {
     }
 }
 
-pub trait BackendBuffer: Clone {
+pub trait BackendBuffer: Clone + Send + Sync {
     type Device: BackendDevice;
     fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>>;
     // fn size(&self) -> usize;
@@ -173,11 +173,11 @@ impl AsRef<CudaBuffer> for Buffer {
     }
 }
 
-pub trait BackendTexture: Debug + Clone {
+pub trait BackendTexture: Debug + Clone + Send + Sync {
     type Device: BackendDevice;
 }
 
-pub trait BackendAccel: Clone {
+pub trait BackendAccel: Clone + Send + Sync {
     type Device: BackendDevice;
 }
 
