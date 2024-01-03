@@ -6,6 +6,13 @@ use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
 
+#[derive(Debug)]
+pub enum GraphResource {
+    Param { param: usize },
+    Captured { resource: Resource },
+    Internal,
+}
+
 #[derive(Debug, Default)]
 pub struct GraphBuilder {
     resources: IndexMap<trace::VarId, ResourceDesc>,
@@ -47,23 +54,23 @@ impl GraphBuilder {
 
 #[derive(Debug, Default, Clone)]
 pub struct Env {
-    resources: Vec<Option<Resource>>,
+    resources: Vec<Resource>,
 }
 impl Env {
     pub fn buffer(&self, id: ResourceId) -> Option<&backend::Buffer> {
-        match self.resources[id.0].as_ref().unwrap() {
+        match &self.resources[id.0] {
             Resource::Buffer(buffer) => Some(buffer),
             _ => None,
         }
     }
     pub fn texture(&self, id: ResourceId) -> Option<&backend::Texture> {
-        match self.resources[id.0].as_ref().unwrap() {
+        match &self.resources[id.0] {
             Resource::Texture(texture) => Some(texture),
             _ => None,
         }
     }
     pub fn accel(&self, id: ResourceId) -> Option<&backend::Accel> {
-        match self.resources[id.0].as_ref().unwrap() {
+        match &self.resources[id.0] {
             Resource::Accel(accel) => Some(accel),
             _ => None,
         }
@@ -74,8 +81,7 @@ impl Env {
 pub struct Graph {
     pub passes: Vec<Pass>,
     pub resource_descs: Vec<ResourceDesc>,
-    pub params: Vec<Option<usize>>,
-    pub env: Env,
+    pub resources: Vec<GraphResource>,
 }
 
 impl Graph {
@@ -113,36 +119,16 @@ impl Graph {
         let mut env = Env::default();
         trace::with_trace(|trace| {
             env.resources = self
-                .resource_descs
+                .resources
                 .iter()
-                .enumerate()
-                .map(|(i, desc)| {
-                    Some(
-                        // A resource might be captured from different locations
-                        // 1. The trace of this thread (if the variable is still alive)
-                        // 2. The resources maintained by this graph
-                        // 3. Creating new resources
-                        if let Some(resource) = self.params[i]
-                            .map(|i| trace.var(params[i].id()))
-                            .and_then(|var| match desc {
-                                ResourceDesc::BufferDesc(_) => {
-                                    Some(Resource::Buffer(var.data.buffer().cloned()?))
-                                }
-                                ResourceDesc::TextureDesc(_) => {
-                                    Some(Resource::Texture(var.data.texture().cloned()?))
-                                }
-                                ResourceDesc::AccelDesc(_) => {
-                                    Some(Resource::Accel(var.data.accel().cloned()?))
-                                }
-                            })
-                        {
-                            resource
-                        } else if let Some(resource) = &self.env.resources[i] {
-                            resource.clone()
-                        } else {
-                            Resource::create(device, desc)
-                        },
-                    )
+                .zip(self.resource_descs.iter())
+                .map(|(res, desc)| match res {
+                    GraphResource::Param { param } => {
+                        let var = trace.var(params[*param].id());
+                        var.data.match_and_get(desc).unwrap()
+                    }
+                    GraphResource::Captured { resource } => resource.clone(),
+                    GraphResource::Internal => Resource::create(device, desc),
                 })
                 .collect::<Vec<_>>();
         });
@@ -333,23 +319,17 @@ pub fn compile(
     let resources = graph_builder
         .resources
         .iter()
-        .map(|(id, desc)| -> Option<Resource> {
-            (!params.contains_key(&id)).then_some(())?;
-            let var = trace.var(*id);
-            match desc {
-                ResourceDesc::BufferDesc(_) => Some(Resource::Buffer(var.data.buffer().cloned()?)),
-                ResourceDesc::TextureDesc(_) => {
-                    Some(Resource::Texture(var.data.texture().cloned()?))
-                }
-                ResourceDesc::AccelDesc(_) => Some(Resource::Accel(var.data.accel().cloned()?)),
+        .map(|(id, desc)| {
+            if params.contains_key(&id) {
+                GraphResource::Param { param: params[&id] }
+            } else {
+                let var = trace.var(*id);
+                var.data
+                    .match_and_get(desc)
+                    .map(|resource| GraphResource::Captured { resource })
+                    .unwrap_or_else(|| GraphResource::Internal)
             }
         })
-        .collect::<Vec<_>>();
-
-    let params = graph_builder
-        .resources
-        .iter()
-        .map(|(id, _)| params.get(id).cloned())
         .collect::<Vec<_>>();
 
     let resource_descs = graph_builder
@@ -381,8 +361,7 @@ pub fn compile(
     let graph = Graph {
         passes: graph_builder.passes,
         resource_descs,
-        params,
-        env: Env { resources },
+        resources,
     };
     graph
 }

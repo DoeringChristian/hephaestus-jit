@@ -43,6 +43,14 @@ impl Resource {
             ResourceDesc::AccelDesc(desc) => Resource::Accel(device.create_accel(desc).unwrap()),
         }
     }
+    pub fn match_and_get(&self, desc: &ResourceDesc) -> Option<Self> {
+        match (self, desc) {
+            (Resource::Buffer(_), ResourceDesc::BufferDesc(_)) => Some(self.clone()),
+            (Resource::Texture(_), ResourceDesc::TextureDesc(_)) => Some(self.clone()),
+            (Resource::Accel(_), ResourceDesc::AccelDesc(_)) => Some(self.clone()),
+            _ => None,
+        }
+    }
     pub fn is_none(&self) -> bool {
         match self {
             Self::None => true,
