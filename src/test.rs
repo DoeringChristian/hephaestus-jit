@@ -954,25 +954,25 @@ fn example() {
     );
     let mask = tr::sized_literal(true, n);
 
-    // Compress wavefront
-    let indices = mask.compress_dyn();
-    let b = a.gather(&indices);
+    let mut f = tr::record(|params| {
+        // Compress wavefront
+        let indices = mask.compress_dyn();
+        let b = a.gather(&indices);
 
-    // Do some (RR style) work on the values
-    let b = b.mul(&tr::literal(0.9f32));
-    let new_mask = b.gt(&tr::literal(0.1f32));
+        // Do some (RR style) work on the values
+        let b = b.mul(&tr::literal(0.9f32));
+        let new_mask = b.gt(&tr::literal(0.1f32));
 
-    // Write wavefront back to arrays
-    new_mask.scatter(&mask, &indices);
-    b.scatter(&a, &indices);
+        // Write wavefront back to arrays
+        new_mask.scatter(&mask, &indices);
+        b.scatter(&a, &indices);
 
-    a.schedule();
+        a.schedule();
+    });
 
-    // Compile render graph
-    let mut graph = tr::compile();
     // Launch it multiple times
     for _ in 0..10 {
-        graph.launch(&device);
+        f(&device, &[]);
     }
 
     // Read data back to CPU and print it

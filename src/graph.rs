@@ -98,7 +98,7 @@ impl Graph {
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
-    pub fn launch(&mut self, device: &backend::Device) -> backend::Report {
+    pub fn launch(&self, device: &backend::Device) -> backend::Report {
         // Capture Environment
         let mut env = Env::default();
         trace::with_trace(|trace| {
@@ -112,19 +112,7 @@ impl Graph {
                         // 1. The trace of this thread (if the variable is still alive)
                         // 2. The resources maintained by this graph
                         // 3. Creating new resources
-                        if let Some(resource) = trace.get_var(*id).and_then(|var| match desc {
-                            ResourceDesc::BufferDesc(_) => {
-                                Some(Resource::Buffer(var.data.buffer().cloned()?))
-                            }
-                            ResourceDesc::TextureDesc(_) => {
-                                Some(Resource::Texture(var.data.texture().cloned()?))
-                            }
-                            ResourceDesc::AccelDesc(_) => {
-                                Some(Resource::Accel(var.data.accel().cloned()?))
-                            }
-                        }) {
-                            resource
-                        } else if let Some(resource) = &self.env.resources[i] {
+                        if let Some(resource) = &self.env.resources[i] {
                             resource.clone()
                         } else {
                             Resource::create(device, desc)
@@ -150,9 +138,6 @@ impl Graph {
                         Resource::Accel(accel) => Resource::Accel(accel.clone()),
                         _ => todo!(),
                     }
-                }
-                if let Some(input_resource) = &mut self.env.resources[i] {
-                    *input_resource = resource
                 }
             }
         });

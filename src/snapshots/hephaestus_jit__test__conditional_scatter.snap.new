@@ -1,0 +1,220 @@
+---
+source: src/test.rs
+assertion_line: 270
+expression: graph
+---
+Graph {
+    passes: [
+        Pass {
+            resources: [
+                ResourceId(
+                    0,
+                ),
+            ],
+            size_buffer: None,
+            op: Kernel {
+                ir: IR {
+                    vars: [
+                        Var {
+                            ty: I32,
+                            op: Literal,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: BufferRef,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: U32,
+                            op: Index,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Void,
+                            op: Scatter(
+                                None,
+                            ),
+                            deps: (
+                                0,
+                                3,
+                            ),
+                            data: 0,
+                        },
+                    ],
+                    deps: [
+                        VarId(
+                            1,
+                        ),
+                        VarId(
+                            0,
+                        ),
+                        VarId(
+                            2,
+                        ),
+                    ],
+                    n_buffers: 1,
+                    n_textures: 0,
+                    n_accels: 0,
+                    hash: Mutex {
+                        data: None,
+                        poisoned: false,
+                        ..
+                    },
+                },
+                size: 10,
+            },
+        },
+        Pass {
+            resources: [
+                ResourceId(
+                    0,
+                ),
+                ResourceId(
+                    1,
+                ),
+            ],
+            size_buffer: None,
+            op: Kernel {
+                ir: IR {
+                    vars: [
+                        Var {
+                            ty: I32,
+                            op: BufferRef,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Literal,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 1,
+                        },
+                        Var {
+                            ty: U32,
+                            op: Index,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Bool,
+                            op: BufferRef,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 1,
+                        },
+                        Var {
+                            ty: U32,
+                            op: Index,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Bool,
+                            op: Gather,
+                            deps: (
+                                0,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Void,
+                            op: Scatter(
+                                None,
+                            ),
+                            deps: (
+                                2,
+                                6,
+                            ),
+                            data: 0,
+                        },
+                    ],
+                    deps: [
+                        VarId(
+                            3,
+                        ),
+                        VarId(
+                            4,
+                        ),
+                        VarId(
+                            0,
+                        ),
+                        VarId(
+                            1,
+                        ),
+                        VarId(
+                            2,
+                        ),
+                        VarId(
+                            5,
+                        ),
+                    ],
+                    n_buffers: 2,
+                    n_textures: 0,
+                    n_accels: 0,
+                    hash: Mutex {
+                        data: None,
+                        poisoned: false,
+                        ..
+                    },
+                },
+                size: 10,
+            },
+        },
+    ],
+    resource_descs: [
+        BufferDesc(
+            BufferDesc {
+                size: 10,
+                ty: I32,
+            },
+        ),
+        BufferDesc(
+            BufferDesc {
+                size: 10,
+                ty: Bool,
+            },
+        ),
+    ],
+    env: Env {
+        resources: [
+            None,
+            Some(
+                Buffer(
+                    VulkanBuffer(
+                        VulkanBuffer {
+                            size: 16,
+                        },
+                    ),
+                ),
+            ),
+        ],
+    },
+}

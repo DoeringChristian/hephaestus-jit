@@ -5,12 +5,35 @@ use std::ops::Range;
 use std::thread::ThreadId;
 
 use crate::extent::Extent;
+use crate::graph;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::Resource;
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
-use crate::{backend, ir, utils};
-use crate::{compiler, graph};
+use crate::{backend, utils};
 use slotmap::{DefaultKey, SlotMap};
+
+pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[VarRef]) {
+    let mut graph = None;
+    move |device, params| {
+        if graph.is_none() {
+            // Swap out current schedule
+            let tmp = SCHEDULE.with(|s| {
+                let mut s = s.borrow_mut();
+                std::mem::take(&mut *s)
+            });
+
+            f(params);
+            graph = Some(compile());
+
+            // Swap in old schedule
+            SCHEDULE.with(|s| {
+                let mut s = s.borrow_mut();
+                *s = tmp;
+            });
+        }
+        graph.as_ref().unwrap().launch(device);
+    }
+}
 
 /// This struct describes a set of variables, which are scheduled for evaluation as well as groups
 /// of these variables, that can be evaluated at once.
