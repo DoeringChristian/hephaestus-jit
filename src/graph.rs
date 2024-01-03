@@ -80,19 +80,19 @@ pub struct Graph {
 
 impl Graph {
     pub fn buffer_desc(&self, id: ResourceId) -> &BufferDesc {
-        match &self.resource_descs[id.0].1 {
+        match &self.resource_descs[id.0] {
             ResourceDesc::BufferDesc(desc) => desc,
             _ => todo!(),
         }
     }
     pub fn texture_descs(&self, id: ResourceId) -> &TextureDesc {
-        match &self.resource_descs[id.0].1 {
+        match &self.resource_descs[id.0] {
             ResourceDesc::TextureDesc(desc) => desc,
             _ => todo!(),
         }
     }
     pub fn accel_desc(&self, id: ResourceId) -> &backend::AccelDesc {
-        match &self.resource_descs[id.0].1 {
+        match &self.resource_descs[id.0] {
             ResourceDesc::AccelDesc(desc) => desc,
             _ => todo!(),
         }
@@ -116,7 +116,7 @@ impl Graph {
                 .resource_descs
                 .iter()
                 .enumerate()
-                .map(|(i, (_, desc))| {
+                .map(|(i, desc)| {
                     Some(
                         // A resource might be captured from different locations
                         // 1. The trace of this thread (if the variable is still alive)
@@ -352,7 +352,11 @@ pub fn compile(
         .map(|(id, _)| params.get(id).cloned())
         .collect::<Vec<_>>();
 
-    let resource_descs = graph_builder.resources.into_iter().collect::<Vec<_>>();
+    let resource_descs = graph_builder
+        .resources
+        .into_iter()
+        .map(|(_, desc)| desc)
+        .collect::<Vec<_>>();
 
     // Cleanup
     for group in groups {
