@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::backend;
 use crate::extent::Extent;
 use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
@@ -71,7 +73,8 @@ impl Env {
 #[derive(Debug)]
 pub struct Graph {
     pub passes: Vec<Pass>,
-    pub resource_descs: Vec<(trace::VarId, ResourceDesc)>,
+    pub resource_descs: Vec<ResourceDesc>,
+    pub params: Vec<Option<usize>>,
     pub env: Env,
 }
 
@@ -99,6 +102,13 @@ impl Graph {
         self.passes.len()
     }
     pub fn launch(&self, device: &backend::Device) -> backend::Report {
+        self.launch_with(device, &[])
+    }
+    pub fn launch_with(
+        &self,
+        device: &backend::Device,
+        params: &[trace::VarRef],
+    ) -> backend::Report {
         // Capture Environment
         let mut env = Env::default();
         trace::with_trace(|trace| {
@@ -106,13 +116,28 @@ impl Graph {
                 .resource_descs
                 .iter()
                 .enumerate()
-                .map(|(i, (id, desc))| {
+                .map(|(i, (_, desc))| {
                     Some(
                         // A resource might be captured from different locations
                         // 1. The trace of this thread (if the variable is still alive)
                         // 2. The resources maintained by this graph
                         // 3. Creating new resources
-                        if let Some(resource) = &self.env.resources[i] {
+                        if let Some(resource) = self.params[i]
+                            .map(|i| trace.var(params[i].id()))
+                            .and_then(|var| match desc {
+                                ResourceDesc::BufferDesc(_) => {
+                                    Some(Resource::Buffer(var.data.buffer().cloned()?))
+                                }
+                                ResourceDesc::TextureDesc(_) => {
+                                    Some(Resource::Texture(var.data.texture().cloned()?))
+                                }
+                                ResourceDesc::AccelDesc(_) => {
+                                    Some(Resource::Accel(var.data.accel().cloned()?))
+                                }
+                            })
+                        {
+                            resource
+                        } else if let Some(resource) = &self.env.resources[i] {
                             resource.clone()
                         } else {
                             Resource::create(device, desc)
@@ -126,21 +151,21 @@ impl Graph {
         let report = device.execute_graph(self, &env).unwrap();
         log::trace!("Report:\n {report}");
 
-        // Update resources of variables in the trace and graph.
-        // NOTE: We might not want the second one
-        trace::with_trace(|trace| {
-            for (i, resource) in env.resources.into_iter().map(|r| r.unwrap()).enumerate() {
-                let (id, desc) = &self.resource_descs[i];
-                if let Some(var) = trace.get_var_mut(*id) {
-                    var.data = match &resource {
-                        Resource::Buffer(buffer) => Resource::Buffer(buffer.clone()),
-                        Resource::Texture(texture) => Resource::Texture(texture.clone()),
-                        Resource::Accel(accel) => Resource::Accel(accel.clone()),
-                        _ => todo!(),
-                    }
-                }
-            }
-        });
+        // // Update resources of variables in the trace and graph.
+        // // NOTE: We might not want the second one
+        // trace::with_trace(|trace| {
+        //     for (i, resource) in env.resources.into_iter().map(|r| r.unwrap()).enumerate() {
+        //         let (id, desc) = &self.resource_descs[i];
+        //         if let Some(var) = trace.get_var_mut(*id) {
+        //             var.data = match &resource {
+        //                 Resource::Buffer(buffer) => Resource::Buffer(buffer.clone()),
+        //                 Resource::Texture(texture) => Resource::Texture(texture.clone()),
+        //                 Resource::Accel(accel) => Resource::Accel(accel.clone()),
+        //                 _ => todo!(),
+        //             }
+        //         }
+        //     }
+        // });
 
         report
     }
@@ -177,7 +202,17 @@ pub enum PassOp {
 /// * `refs`: Variable references
 ///
 /// TODO: should we compile for a device?
-pub fn compile(trace: &mut trace::Trace, schedule: &trace::Schedule) -> Graph {
+pub fn compile(
+    trace: &mut trace::Trace,
+    schedule: &trace::Schedule,
+    params: &[trace::VarRef],
+) -> Graph {
+    let params = params
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (r.id(), i))
+        .collect::<HashMap<_, _>>();
+
     let mut vars = schedule.vars.iter().map(|r| r.id()).collect::<Vec<_>>();
     let groups = schedule.groups.clone();
 
@@ -294,11 +329,12 @@ pub fn compile(trace: &mut trace::Trace, schedule: &trace::Schedule) -> Graph {
     }
 
     // Collect descriptors and input resources
-    let resource_descs = graph_builder.resources.into_iter().collect::<Vec<_>>();
 
-    let resources = resource_descs
+    let resources = graph_builder
+        .resources
         .iter()
         .map(|(id, desc)| -> Option<Resource> {
+            (!params.contains_key(&id)).then_some(())?;
             let var = trace.var(*id);
             match desc {
                 ResourceDesc::BufferDesc(_) => Some(Resource::Buffer(var.data.buffer().cloned()?)),
@@ -309,6 +345,14 @@ pub fn compile(trace: &mut trace::Trace, schedule: &trace::Schedule) -> Graph {
             }
         })
         .collect::<Vec<_>>();
+
+    let params = graph_builder
+        .resources
+        .iter()
+        .map(|(id, _)| params.get(id).cloned())
+        .collect::<Vec<_>>();
+
+    let resource_descs = graph_builder.resources.into_iter().collect::<Vec<_>>();
 
     // Cleanup
     for group in groups {
@@ -333,6 +377,7 @@ pub fn compile(trace: &mut trace::Trace, schedule: &trace::Schedule) -> Graph {
     let graph = Graph {
         passes: graph_builder.passes,
         resource_descs,
+        params,
         env: Env { resources },
     };
     graph

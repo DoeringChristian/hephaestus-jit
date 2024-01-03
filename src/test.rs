@@ -978,3 +978,28 @@ fn example() {
     // Read data back to CPU and print it
     dbg!(a.to_vec::<f32>(..));
 }
+#[test]
+fn record() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let mut f = tr::record(|params| {
+        params[0]
+            .add(&tr::literal(1))
+            .scatter(&params[0], &tr::index(3));
+    });
+
+    let a = tr::array(&[1, 2, 3], &device);
+
+    f(&device, &[a.clone()]);
+    assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
+
+    let b = tr::array(&[4, 5, 6], &device);
+
+    f(&device, &[b.clone()]);
+    dbg!(&a);
+    dbg!(&b);
+    assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
+    assert_eq!(b.to_vec::<i32>(..), vec![5, 6, 7]);
+}

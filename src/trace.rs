@@ -23,7 +23,14 @@ pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[Va
             });
 
             f(params);
-            graph = Some(compile());
+
+            // Compile with params
+            schedule_eval();
+            graph = Some(SCHEDULE.with(|s| {
+                let mut s = s.borrow_mut();
+                let schedule = std::mem::take(&mut (*s));
+                with_trace(|t| graph::compile(t, &schedule, params))
+            }));
 
             // Swap in old schedule
             SCHEDULE.with(|s| {
@@ -31,7 +38,8 @@ pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[Va
                 *s = tmp;
             });
         }
-        graph.as_ref().unwrap().launch(device);
+        dbg!(&graph);
+        graph.as_ref().unwrap().launch_with(device, params);
     }
 }
 
@@ -278,7 +286,7 @@ pub fn compile() -> graph::Graph {
     SCHEDULE.with(|s| {
         let mut s = s.borrow_mut();
         let schedule = std::mem::take(&mut (*s));
-        let graph = with_trace(|t| graph::compile(t, &schedule));
+        let graph = with_trace(|t| graph::compile(t, &schedule, &[]));
         graph
     })
 }
