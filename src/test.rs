@@ -3,7 +3,6 @@ use std::collections::HashSet;
 
 use approx::assert_abs_diff_eq;
 
-use crate::backend::Device;
 use crate::tr::VarRef;
 use crate::vartype::{AsVarType, Instance, Intersection};
 use crate::{backend, tr, vulkan};
@@ -984,20 +983,18 @@ fn record() {
 
     let device = vulkan(0);
 
-    let mut f = tr::record(|params| {
-        params[0]
-            .add(&tr::literal(1))
-            .scatter(&params[0], &tr::index(3));
+    let mut f = tr::record(|a: VarRef| {
+        a.add(&tr::literal(1)).scatter(&a, &tr::index(3));
     });
 
     let a = tr::array(&[1, 2, 3], &device);
 
-    f(&device, &[a.clone()]);
+    f(&device, a.clone());
     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
 
     let b = tr::array(&[4, 5, 6], &device);
 
-    f(&device, &[b.clone()]);
+    f(&device, b.clone());
     dbg!(&a);
     dbg!(&b);
     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
