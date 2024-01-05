@@ -971,7 +971,7 @@ fn example() {
 
     // Launch it multiple times
     for _ in 0..10 {
-        f(&device, &[]);
+        f(&device, ());
     }
 
     // Read data back to CPU and print it

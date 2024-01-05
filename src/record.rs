@@ -22,6 +22,22 @@ impl Param for VarRef {
     }
 }
 
+impl Param for Vec<VarRef> {
+    type Iterator = std::vec::IntoIter<VarRef>;
+
+    fn iter(&self) -> Self::Iterator {
+        self.clone().into_iter()
+    }
+}
+
+impl Param for () {
+    type Iterator = std::option::IntoIter<VarRef>;
+
+    fn iter(&self) -> Self::Iterator {
+        None.into_iter()
+    }
+}
+
 impl<A: Param, B: Param> Param for (A, B) {
     type Iterator = core::iter::Chain<A::Iterator, B::Iterator>;
 
