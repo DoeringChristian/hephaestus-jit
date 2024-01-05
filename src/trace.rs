@@ -14,8 +14,9 @@ use crate::{backend, utils};
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
 
-pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[VarRef]) {
+pub fn record(f: impl FnOnce(&[VarRef])) -> impl FnMut(&backend::Device, &[VarRef]) {
     let mut graph = None;
+    let mut f = Some(f);
     move |device, params| {
         if graph.is_none() {
             // Swap out current schedule
@@ -24,6 +25,7 @@ pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[Va
                 std::mem::take(&mut *s)
             });
 
+            let f = f.take().unwrap();
             f(params);
 
             // Compile with params
@@ -40,7 +42,6 @@ pub fn record(mut f: impl FnMut(&[VarRef])) -> impl FnMut(&backend::Device, &[Va
                 *s = tmp;
             });
         }
-        dbg!(&graph);
         graph.as_ref().unwrap().launch_with(device, params);
     }
 }
