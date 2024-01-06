@@ -84,7 +84,7 @@ impl Compiler {
                 self.ir.push_var(
                     ir::Var {
                         op: KernelOp::Gather,
-                        ty: var.ty.clone(),
+                        ty: var.ty,
                         ..Default::default()
                     },
                     [data, idx],
@@ -94,7 +94,7 @@ impl Compiler {
                 KernelOp::Literal => self.ir.push_var(
                     ir::Var {
                         op: KernelOp::Literal,
-                        ty: var.ty.clone(),
+                        ty: var.ty,
                         data: var.data.literal().unwrap(),
                         ..Default::default()
                     },
@@ -109,7 +109,7 @@ impl Compiler {
                     self.ir.push_var(
                         ir::Var {
                             op: kop,
-                            ty: var.ty.clone(),
+                            ty: var.ty,
                             ..Default::default()
                         },
                         deps,

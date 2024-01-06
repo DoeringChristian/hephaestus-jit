@@ -33,6 +33,7 @@ impl<T: Traverse> Traverse for &[T] {
 
 macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
+        #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
             fn traverse(&self, f: &mut Vec<VarRef>){
                 let ($($param,)*) = self;

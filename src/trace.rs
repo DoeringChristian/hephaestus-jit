@@ -982,7 +982,7 @@ impl VarRef {
         push_var(
             Var {
                 op: Op::KernelOp(KernelOp::TraceRay),
-                ty: ty.clone(),
+                ty: ty,
                 extent,
                 ..Default::default()
             },
