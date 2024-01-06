@@ -953,7 +953,7 @@ fn example() {
     );
     let mask = tr::sized_literal(true, n);
 
-    let mut f = tr::record(|params| {
+    let mut f = tr::record(|()| {
         // Compress wavefront
         let indices = mask.compress_dyn();
         let b = a.gather(&indices);

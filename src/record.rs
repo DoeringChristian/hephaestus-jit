@@ -9,65 +9,63 @@ struct Test {
     y: VarRef,
 }
 
-pub trait Param {
-    type Iterator: Iterator<Item = VarRef>;
-    fn iter(&self) -> Self::Iterator;
+pub trait Traverse {
+    fn traverse(&self, f: &mut Vec<VarRef>);
 }
 
-impl Param for VarRef {
-    type Iterator = core::array::IntoIter<VarRef, 1>;
-
-    fn iter(&self) -> Self::Iterator {
-        [self.clone()].into_iter()
+impl Traverse for VarRef {
+    fn traverse(&self, f: &mut Vec<VarRef>) {
+        f.push(self.clone())
+    }
+}
+impl<const N: usize, T: Traverse> Traverse for [T; N] {
+    fn traverse(&self, f: &mut Vec<VarRef>) {
+        for v in self {
+            v.traverse(f)
+        }
     }
 }
 
-impl Param for Vec<VarRef> {
-    type Iterator = std::vec::IntoIter<VarRef>;
-
-    fn iter(&self) -> Self::Iterator {
-        self.clone().into_iter()
-    }
+macro_rules! impl_traverse_for_tuple {
+    ($($param:ident),*) => {
+        impl<$($param: Traverse),*> Traverse for ($($param,)*){
+            fn traverse(&self, f: &mut Vec<VarRef>){
+                let ($($param,)*) = self;
+                $($param.traverse(f);)*
+            }
+        }
+    };
 }
+impl_traverse_for_tuple!();
+impl_traverse_for_tuple!(A);
+impl_traverse_for_tuple!(A, B);
+impl_traverse_for_tuple!(A, B, C);
+impl_traverse_for_tuple!(A, B, C, D);
+impl_traverse_for_tuple!(A, B, C, D, E);
+impl_traverse_for_tuple!(A, B, C, D, E, F);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-impl Param for () {
-    type Iterator = std::option::IntoIter<VarRef>;
-
-    fn iter(&self) -> Self::Iterator {
-        None.into_iter()
-    }
-}
-
-impl<A: Param, B: Param> Param for (A, B) {
-    type Iterator = core::iter::Chain<A::Iterator, B::Iterator>;
-
-    fn iter(&self) -> Self::Iterator {
-        self.0.iter().chain(self.1.iter())
-    }
-}
-
-pub trait Closure<F> {
-    type In: Param;
-    fn run(&mut self, input: Self::In);
-}
-
-impl<Input: Param, F: Send + Sync + 'static> Closure<fn(Input)> for F
+pub fn record<'a, Input, Fin>(f: Fin) -> impl FnMut(&backend::Device, Input) + 'a
 where
-    F: FnMut(Input),
+    Input: Traverse + Clone,
+    Fin: FnOnce(Input) + 'a,
 {
-    type In = Input;
-
-    fn run(&mut self, input: Self::In) {
-        self(input)
-    }
-}
-
-pub fn record<Input: Param + Clone, F: Send + Sync + 'static + FnMut(Input)>(
-    mut f: impl Closure<fn(Input), In = Input>,
-) -> impl FnMut(&backend::Device, Input) {
     let mut graph = None;
-    let mut ret = None;
-    move |device, params| {
+    let mut f = Some(f);
+
+    move |device, params: Input| {
+        let mut param_vec = vec![];
+        params.traverse(&mut param_vec);
+
         if graph.is_none() {
             // Swap out current schedule
             let tmp = SCHEDULE.with(|s| {
@@ -75,9 +73,8 @@ pub fn record<Input: Param + Clone, F: Send + Sync + 'static + FnMut(Input)>(
                 std::mem::take(&mut *s)
             });
 
-            let param_vec = params.iter().collect::<Vec<_>>();
-
-            ret = Some(f.run(params.clone()));
+            let f = f.take().unwrap();
+            f(params.clone());
 
             // Compile with params
             schedule_eval();
@@ -93,9 +90,6 @@ pub fn record<Input: Param + Clone, F: Send + Sync + 'static + FnMut(Input)>(
                 *s = tmp;
             });
         }
-        dbg!(&graph);
-        let param_vec = params.iter().collect::<Vec<_>>();
         graph.as_ref().unwrap().launch_with(device, &param_vec);
-        ret.clone().unwrap()
     }
 }
