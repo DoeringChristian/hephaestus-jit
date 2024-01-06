@@ -25,6 +25,11 @@ impl<const N: usize, T: Traverse> Traverse for [T; N] {
         }
     }
 }
+impl<T: Traverse> Traverse for &[T] {
+    fn traverse(&self, f: &mut Vec<VarRef>) {
+        self.iter().for_each(|t| t.traverse(f))
+    }
+}
 
 macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
