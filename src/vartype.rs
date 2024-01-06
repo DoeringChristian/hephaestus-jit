@@ -55,7 +55,7 @@ pub fn vector(ty: &'static VarType, num: usize) -> &'static VarType {
         .or_insert_with(|| Box::leak(Box::new(VarType::Vec { ty, num })))
 }
 pub fn void() -> &'static VarType {
-    from_ty::<std::ffi::c_void>(|| VarType::Void)
+    from_ty::<()>(|| VarType::Void)
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Default)]

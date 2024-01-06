@@ -191,7 +191,7 @@ impl Default for Var {
     fn default() -> Self {
         Self {
             op: Default::default(),
-            ty: vartype::from_ty::<std::ffi::c_void>(|| VarType::Void),
+            ty: vartype::void(),
             extent: Default::default(),
             dirty: Default::default(),
             data: Default::default(),
