@@ -54,10 +54,10 @@ impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-pub fn record<'a, Input, Fin>(f: Fin) -> impl FnMut(&backend::Device, Input) + 'a
+pub fn record<'a, Input, F>(f: F) -> impl FnMut(&backend::Device, Input) + 'a
 where
     Input: Traverse + Clone,
-    Fin: FnOnce(Input) + 'a,
+    F: FnOnce(Input) + 'a,
 {
     let mut graph = None;
     let mut f = Some(f);
