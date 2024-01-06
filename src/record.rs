@@ -4,29 +4,25 @@ use crate::{backend, graph};
 
 use crate::tr::{schedule_eval, with_trace, VarRef, SCHEDULE};
 
-struct Test {
-    x: VarRef,
-    y: VarRef,
-}
-
 pub trait Traverse {
-    fn traverse(&self, f: &mut Vec<VarRef>);
+    // This operation flattens the structure to it's VarRef components
+    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>);
 }
 
 impl Traverse for VarRef {
-    fn traverse(&self, f: &mut Vec<VarRef>) {
-        f.push(self.clone())
+    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>) {
+        f.push(self)
     }
 }
 impl<const N: usize, T: Traverse> Traverse for [T; N] {
-    fn traverse(&self, f: &mut Vec<VarRef>) {
+    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>) {
         for v in self {
             v.traverse(f)
         }
     }
 }
 impl<T: Traverse> Traverse for &[T] {
-    fn traverse(&self, f: &mut Vec<VarRef>) {
+    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>) {
         self.iter().for_each(|t| t.traverse(f))
     }
 }
@@ -35,7 +31,7 @@ macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
-            fn traverse(&self, f: &mut Vec<VarRef>){
+            fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>){
                 let ($($param,)*) = self;
                 $($param.traverse(f);)*
             }

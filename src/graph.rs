@@ -126,7 +126,7 @@ impl Graph {
     pub fn launch_with(
         &self,
         device: &backend::Device,
-        params: &[trace::VarRef],
+        params: &[&trace::VarRef],
     ) -> backend::Report {
         // Capture Environment
         let mut env = Env::default();
@@ -203,7 +203,7 @@ pub enum PassOp {
 pub fn compile(
     trace: &mut trace::Trace,
     schedule: &trace::Schedule,
-    params: &[trace::VarRef],
+    params: &[&trace::VarRef],
 ) -> Graph {
     let params = params
         .into_iter()
