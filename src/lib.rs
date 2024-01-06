@@ -4,6 +4,7 @@ mod extent;
 mod graph;
 pub mod ir;
 mod op;
+pub mod record;
 mod resource;
 pub mod trace;
 mod utils;

@@ -14,37 +14,7 @@ use crate::{backend, utils};
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
 
-pub fn record(f: impl FnOnce(&[VarRef])) -> impl FnMut(&backend::Device, &[VarRef]) {
-    let mut graph = None;
-    let mut f = Some(f);
-    move |device, params| {
-        if graph.is_none() {
-            // Swap out current schedule
-            let tmp = SCHEDULE.with(|s| {
-                let mut s = s.borrow_mut();
-                std::mem::take(&mut *s)
-            });
-
-            let f = f.take().unwrap();
-            f(params);
-
-            // Compile with params
-            schedule_eval();
-            graph = Some(SCHEDULE.with(|s| {
-                let mut s = s.borrow_mut();
-                let schedule = std::mem::take(&mut (*s));
-                with_trace(|t| graph::compile(t, &schedule, params))
-            }));
-
-            // Swap in old schedule
-            SCHEDULE.with(|s| {
-                let mut s = s.borrow_mut();
-                *s = tmp;
-            });
-        }
-        graph.as_ref().unwrap().launch_with(device, params);
-    }
-}
+pub use crate::record::record;
 
 /// This struct describes a set of variables, which are scheduled for evaluation as well as groups
 /// of these variables, that can be evaluated at once.

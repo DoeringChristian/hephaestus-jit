@@ -47,7 +47,7 @@ impl<R: Resource> Default for ResourcePool<R> {
 }
 
 impl<R: Resource> ResourcePool<R> {
-    fn lease(&mut self, context: &R::Context, info: &R::Info) -> Lease<R> {
+    pub fn lease(&mut self, context: &R::Context, info: &R::Info) -> Lease<R> {
         let cache = self
             .resources
             .entry(info.clone())
