@@ -44,6 +44,7 @@ impl Resource {
         }
     }
     pub fn match_and_get(&self, desc: &ResourceDesc) -> Option<Self> {
+        // TODO: match sizes as well.
         match (self, desc) {
             (Resource::Buffer(_), ResourceDesc::BufferDesc(_)) => Some(self.clone()),
             (Resource::Texture(_), ResourceDesc::TextureDesc(_)) => Some(self.clone()),
