@@ -6,24 +6,25 @@ use crate::tr::{schedule_eval, with_trace, VarRef, SCHEDULE};
 
 pub trait Traverse {
     // This operation flattens the structure to it's VarRef components
-    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>);
+    // fn traverse<'a>(&'a self);
+    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
+        None.into_iter()
+    }
 }
 
 impl Traverse for VarRef {
-    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>) {
-        f.push(self)
+    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
+        [self].into_iter()
     }
 }
 impl<const N: usize, T: Traverse> Traverse for [T; N] {
-    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>) {
-        for v in self {
-            v.traverse(f)
-        }
+    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
+        self.iter().flat_map(|i| i.traverse())
     }
 }
 impl<T: Traverse> Traverse for &[T] {
-    fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>) {
-        self.iter().for_each(|t| t.traverse(f))
+    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
+        self.iter().flat_map(|i| i.traverse())
     }
 }
 
@@ -31,9 +32,10 @@ macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
-            fn traverse<'a>(&'a self, f: &mut Vec<&'a VarRef>){
+            fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef>{
                 let ($($param,)*) = self;
-                $($param.traverse(f);)*
+                [].into_iter()
+                $(.chain($param.traverse()))*
             }
         }
     };
@@ -65,8 +67,7 @@ where
     let mut f = Some(f);
 
     move |device, params: Input| {
-        let mut param_vec = vec![];
-        params.traverse(&mut param_vec);
+        let param_vec = params.traverse().collect::<Vec<_>>();
 
         if graph.is_none() {
             // Swap out current schedule
