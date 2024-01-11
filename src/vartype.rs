@@ -54,6 +54,20 @@ pub fn vector(ty: &'static VarType, num: usize) -> &'static VarType {
         .entry(id)
         .or_insert_with(|| Box::leak(Box::new(VarType::Vec { ty, num })))
 }
+pub fn matrix(ty: &'static VarType, cols: usize, rows: usize) -> &'static VarType {
+    let mut hasher = DefaultHasher::new();
+    ty.hash(&mut hasher);
+    cols.hash(&mut hasher);
+    rows.hash(&mut hasher);
+    2u32.hash(&mut hasher);
+    let id = hasher.finish();
+
+    TYPE_CACHE
+        .lock()
+        .unwrap()
+        .entry(id)
+        .or_insert_with(|| Box::leak(Box::new(VarType::Mat { ty, cols, rows })))
+}
 pub fn void() -> &'static VarType {
     from_ty::<()>(|| VarType::Void)
 }

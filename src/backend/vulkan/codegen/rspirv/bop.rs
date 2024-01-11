@@ -48,6 +48,85 @@ impl SpirvBuilder {
             (VarType::Vec { ty: lhs_type, .. }, VarType::Vec { ty: rhs_type, .. }) => {
                 self.bop(op, result_type, lhs_type, rhs_type, lhs, rhs)
             }
+            (
+                VarType::Vec {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+                VarType::F16 | VarType::F32 | VarType::F64,
+            ) => match op {
+                Bop::Mul => self.vector_times_scalar(spv_type, None, lhs, rhs),
+                _ => todo!(),
+            },
+            (
+                VarType::F16 | VarType::F32 | VarType::F64,
+                VarType::Vec {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+            ) => match op {
+                Bop::Mul => self.vector_times_scalar(spv_type, None, rhs, lhs),
+                _ => todo!(),
+            },
+            (
+                VarType::Mat {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+                VarType::F16 | VarType::F32 | VarType::F64,
+            ) => match op {
+                Bop::Mul => self.matrix_times_scalar(spv_type, None, lhs, rhs),
+                _ => todo!(),
+            },
+            (
+                VarType::F16 | VarType::F32 | VarType::F64,
+                VarType::Mat {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+            ) => match op {
+                Bop::Mul => self.matrix_times_scalar(spv_type, None, rhs, lhs),
+                _ => todo!(),
+            },
+            (
+                VarType::Mat {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+                VarType::Vec {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+            ) => match op {
+                Bop::Mul => self.matrix_times_vector(spv_type, None, lhs, rhs),
+                _ => todo!(),
+            },
+            (
+                VarType::Vec {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+                VarType::Mat {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+            ) => match op {
+                Bop::Mul => self.vector_times_matrix(spv_type, None, lhs, rhs),
+                _ => todo!(),
+            },
+            (
+                VarType::Mat {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+                VarType::Mat {
+                    ty: VarType::F16 | VarType::F32 | VarType::F64,
+                    ..
+                },
+            ) => match op {
+                Bop::Mul => self.matrix_times_matrix(spv_type, None, lhs, rhs),
+                _ => todo!(),
+            },
             _ => todo!(),
         }
     }

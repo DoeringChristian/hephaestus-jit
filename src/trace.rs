@@ -425,6 +425,29 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
     )
 }
 
+pub fn mat(columns: &[&VarRef]) -> VarRef {
+    let ty = columns[0].ty();
+    let cols = columns.len();
+    let (ty, rows) = match ty {
+        VarType::Vec { ty, num } => (*ty, *num),
+        _ => todo!(),
+    };
+
+    let extent = resulting_extent(columns.iter().map(|r| *r));
+
+    let ty = vartype::matrix(ty, cols, rows);
+
+    push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::Construct),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        columns.iter().cloned(),
+    )
+}
+
 #[derive(Debug, Clone)]
 pub enum GeometryDesc {
     Triangles { triangles: VarRef, vertices: VarRef },

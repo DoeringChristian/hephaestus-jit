@@ -1000,3 +1000,26 @@ fn record() {
     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_eq!(b.to_vec::<i32>(..), vec![5, 6, 7]);
 }
+#[test]
+fn matrix_times_matrix() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let c0 = tr::vec(&[&tr::sized_literal(1f32, 1), &tr::literal(3f32)]);
+    let c1 = tr::vec(&[&tr::literal(2f32), &tr::literal(4f32)]);
+    let m0 = tr::mat(&[&c0, &c1]);
+
+    let c0 = tr::vec(&[&tr::literal(5f32), &tr::literal(7f32)]);
+    let c1 = tr::vec(&[&tr::literal(6f32), &tr::literal(8f32)]);
+    let m1 = tr::mat(&[&c0, &c1]);
+
+    let res = m0.mul(&m1);
+    res.schedule();
+
+    let graph = tr::compile();
+    dbg!(&graph);
+    graph.launch(&device);
+
+    dbg!(res.to_vec::<f32>(..));
+}
