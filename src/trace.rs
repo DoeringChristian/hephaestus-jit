@@ -426,6 +426,7 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
 }
 
 pub fn mat(columns: &[&VarRef]) -> VarRef {
+    // TODO: valiate
     let ty = columns[0].ty();
     let cols = columns.len();
     let (ty, rows) = match ty {
