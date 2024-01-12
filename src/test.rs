@@ -317,16 +317,11 @@ fn accel() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    let x = tr::array(&[1f32, 0f32, 1f32], &device);
-    let y = tr::array(&[0f32, 1f32, 1f32], &device);
-    let z = tr::array(&[0f32, 0f32, 0f32], &device);
-
-    let vertices = tr::vec(&[&x, &y, &z]);
-    let triangles = tr::vec(&[
-        &tr::sized_literal(0u32, 1),
-        &tr::literal(1u32),
-        &tr::literal(2u32),
-    ]);
+    let vertices = tr::array(
+        &[1f32, 0f32, 0f32, 0f32, 1f32, 0f32, 1f32, 1f32, 0f32],
+        &device,
+    );
+    let triangles = tr::array(&[0u32, 1u32, 2u32], &device);
 
     let instances = tr::array(
         &[Instance {
@@ -392,8 +387,8 @@ fn accel() {
     dbg!(intersection.to_vec::<i32>(..));
     let intersections = intersection.to_vec::<Intersection>(..);
 
-    assert_abs_diff_eq!(intersections[0].barycentrics[0], 0.4, epsilon = 0.001);
-    assert_abs_diff_eq!(intersections[0].barycentrics[1], 0.2, epsilon = 0.001);
+    assert_abs_diff_eq!(intersections[0].bx, 0.4, epsilon = 0.001);
+    assert_abs_diff_eq!(intersections[0].by, 0.2, epsilon = 0.001);
     assert!(intersections[0].valid > 0);
     assert_eq!(intersections[0].instance_id, 0);
     assert_eq!(intersections[0].primitive_idx, 0);

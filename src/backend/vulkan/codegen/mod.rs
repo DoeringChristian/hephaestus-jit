@@ -9,6 +9,6 @@ pub struct CompileInfo {
 }
 
 pub fn assemble_trace(ir: &IR, info: &CompileInfo, entry_point: &str) -> Vec<u32> {
-    rspirv::assemble_trace(ir, info, entry_point).unwrap()
-    // glsl::assemble_ir(ir, info, entry_point).unwrap()
+    // rspirv::assemble_trace(ir, info, entry_point).unwrap()
+    glsl::assemble_ir(ir, info, entry_point).unwrap()
 }

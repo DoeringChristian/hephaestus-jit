@@ -266,7 +266,8 @@ impl AsVarType for Instance {
 /// Ray Intersection
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Intersection {
-    pub barycentrics: [f32; 2],
+    pub bx: f32,
+    pub by: f32,
     pub instance_id: u32,
     pub primitive_idx: u32,
     pub valid: u32, // 0 if invalid, >0 if valid
@@ -278,7 +279,7 @@ impl AsVarType for Intersection {
         let f32x2_ty = vector(f32_ty, 2);
         let u32_ty = u32::var_ty();
         from_ty::<Self>(|| VarType::Struct {
-            tys: vec![f32x2_ty, u32_ty, u32_ty, u32_ty],
+            tys: vec![f32_ty, f32_ty, u32_ty, u32_ty, u32_ty],
         })
     }
 }
