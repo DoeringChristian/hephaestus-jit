@@ -1009,3 +1009,21 @@ fn matrix_times_matrix() {
 
     dbg!(res.to_vec::<f32>(..));
 }
+#[test]
+fn array() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let a0 = tr::sized_literal(1, 2);
+    let a1 = tr::literal(2);
+    let a2 = tr::literal(3);
+
+    let array = tr::arr(&[&a0, &a1, &a2]);
+    array.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(array.to_vec::<[i32; 3]>(..), vec![[1, 2, 3], [1, 2, 3]]);
+}
