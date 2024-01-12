@@ -317,10 +317,6 @@ fn accel() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    let vertices = tr::array(
-        &[1f32, 0f32, 0f32, 0f32, 1f32, 0f32, 1f32, 1f32, 0f32],
-        &device,
-    );
     let x = tr::array(&[1f32, 0f32, 1f32], &device);
     let y = tr::array(&[0f32, 1f32, 1f32], &device);
     let z = tr::array(&[0f32, 0f32, 0f32], &device);
