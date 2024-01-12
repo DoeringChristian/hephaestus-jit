@@ -159,7 +159,7 @@ impl GlslBuilder {
     pub fn buffer_binding(&mut self, s: &mut String, ty: &'static VarType) -> std::fmt::Result {
         let n_buffers = self.n_buffers;
         if !self.buffer_types.contains(ty) {
-            writeln!(s,"layout(set = 0, binding = 0) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
+            writeln!(s,"layout(set = 0, binding = 0, std430) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
             self.buffer_types.insert(ty);
         }
         Ok(())
