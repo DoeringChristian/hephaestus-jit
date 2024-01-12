@@ -242,7 +242,15 @@ impl std::fmt::Display for GlslTypeName {
                 let ty = GlslTypeName(ty);
                 write!(f, "{ty}x{num}")
             }
-            VarType::Mat { ty, rows, cols } => todo!(),
+            VarType::Mat { ty, rows, cols } => {
+                let ty = match ty {
+                    VarType::F16 => "f16",
+                    VarType::F32 => "f32",
+                    VarType::F64 => "f64",
+                    _ => todo!(),
+                };
+                write!(f, "{ty}mat{rows}x{cols}")
+            }
             VarType::Struct { tys } => {
                 write!(f, "struct_")?;
                 for ty in tys {
@@ -458,6 +466,13 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                             }
                         }
                         write!(s, "}};\n")?;
+                    }
+                    VarType::Mat { ty, cols, rows } => {
+                        writeln!(s, "\t{glsl_ty} {dst};")?;
+                        for (i, id) in deps.iter().enumerate() {
+                            let src = Reg(*id);
+                            writeln!(s, "\t{dst}[{i}] = {src};")?;
+                        }
                     }
                     _ => todo!(),
                 };
