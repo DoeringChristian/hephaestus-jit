@@ -969,6 +969,9 @@ impl SpirvBuilder {
                         ray_query_var,
                         i32_1,
                     )?;
+                    let f32_ty = self.spirv_ty(f32::var_ty());
+                    let bx = self.composite_extract(f32_ty, None, barycentrics, [0])?;
+                    let by = self.composite_extract(f32_ty, None, barycentrics, [1])?;
                     let intersection_type_khr = self.ray_query_get_intersection_type_khr(
                         u32_ty,
                         None,
@@ -980,12 +983,7 @@ impl SpirvBuilder {
 
                     let intersection = self.composite_construct(
                         intersection_ty,
-                        [
-                            barycentrics,
-                            instance_id,
-                            primitive_idx,
-                            intersection_type_khr,
-                        ],
+                        [bx, by, instance_id, primitive_idx, intersection_type_khr],
                     )?;
 
                     intersection
