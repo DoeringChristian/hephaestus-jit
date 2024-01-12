@@ -18,6 +18,9 @@ pub mod usize {
         };
         start..end
     }
+    pub const fn align_up(v: usize, base: usize) -> usize {
+        ((v + base - 1) / base) * base
+    }
 }
 pub mod u64 {
     pub fn round_pow2(x: u64) -> u64 {

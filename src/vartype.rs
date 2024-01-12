@@ -1,3 +1,4 @@
+use crate::utils;
 use half::f16;
 use once_cell::sync::Lazy;
 use std::any::TypeId;
@@ -5,10 +6,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
-
-const fn align_up(v: usize, base: usize) -> usize {
-    ((v + base - 1) / base) * base
-}
 
 // TODO: create a Type struct, wrapping &'static VarType
 
@@ -67,6 +64,19 @@ pub fn matrix(ty: &'static VarType, cols: usize, rows: usize) -> &'static VarTyp
         .unwrap()
         .entry(id)
         .or_insert_with(|| Box::leak(Box::new(VarType::Mat { ty, cols, rows })))
+}
+pub fn array(ty: &'static VarType, num: usize) -> &'static VarType {
+    let mut hasher = DefaultHasher::new();
+    ty.hash(&mut hasher);
+    num.hash(&mut hasher);
+    2u32.hash(&mut hasher);
+    let id = hasher.finish();
+
+    TYPE_CACHE
+        .lock()
+        .unwrap()
+        .entry(id)
+        .or_insert_with(|| Box::leak(Box::new(VarType::Array { ty, num })))
 }
 pub fn void() -> &'static VarType {
     from_ty::<()>(|| VarType::Void)
@@ -128,9 +138,12 @@ impl VarType {
                 let mut offset = 0;
                 for i in 0..tys.len() - 1 {
                     offset += tys[i].size();
-                    offset = align_up(offset, tys[i + 1].alignment());
+                    offset = utils::usize::align_up(offset, tys[i + 1].alignment());
                 }
-                return align_up(offset + tys.last().unwrap().size(), self.alignment());
+                return utils::usize::align_up(
+                    offset + tys.last().unwrap().size(),
+                    self.alignment(),
+                );
             }
             VarType::Mat { ty, cols, rows } => ty.size() * cols * rows,
             VarType::Array { ty, num } => ty.size() * num,
@@ -142,7 +155,7 @@ impl VarType {
                 let mut offset = 0;
                 for i in 0..elem {
                     offset += tys[i].size();
-                    offset = align_up(offset, tys[i + 1].alignment());
+                    offset = utils::usize::align_up(offset, tys[i + 1].alignment());
                 }
                 offset
             }
@@ -287,7 +300,7 @@ impl AsVarType for Intersection {
 impl<const N: usize, T: AsVarType + 'static> AsVarType for [T; N] {
     fn var_ty() -> &'static VarType {
         let ty = T::var_ty();
-        from_ty::<Self>(|| VarType::Array { ty, num: N })
+        array(ty, N)
     }
 }
 

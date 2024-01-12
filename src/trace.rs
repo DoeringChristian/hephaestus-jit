@@ -401,6 +401,24 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
         refs.into_iter().cloned(),
     )
 }
+pub fn arr(refs: &[&VarRef]) -> VarRef {
+    // TODO: validate
+    let ty = refs[0].ty();
+
+    let extent = resulting_extent(refs.iter().map(|r| *r));
+
+    let ty = vartype::array(ty, refs.len());
+
+    push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::Construct),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        refs.iter().cloned(),
+    )
+}
 ///
 /// Returns a variable of type [VarType::Vec], from the elements given.
 /// The input variables should all have the same type.
