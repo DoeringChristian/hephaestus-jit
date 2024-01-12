@@ -1,5 +1,5 @@
 mod cuda;
-mod vulkan;
+pub mod vulkan;
 use std::fmt::Debug;
 
 use cuda::{CudaBuffer, CudaDevice};
@@ -38,6 +38,12 @@ impl Device {
     }
     pub fn vulkan(id: usize) -> Result<Self> {
         Ok(Device::VulkanDevice(VulkanDevice::create(id)?))
+    }
+    pub fn as_vulkan(&self) -> Option<&VulkanDevice> {
+        match self {
+            Device::VulkanDevice(device) => Some(device),
+            _ => None,
+        }
     }
     pub fn create_buffer(&self, size: usize) -> Result<Buffer> {
         let buffer = match self {

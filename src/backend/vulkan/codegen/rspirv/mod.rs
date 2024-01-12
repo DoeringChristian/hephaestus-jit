@@ -68,7 +68,7 @@ pub fn assemble_trace(
         // panic!("{err}");
     };
 
-    std::fs::write("/tmp/test.spv", bytemuck::cast_slice(&spv)).unwrap();
+    // std::fs::write("/tmp/test.spv", bytemuck::cast_slice(&spv)).unwrap();
 
     Ok(spv)
 }

@@ -6,7 +6,7 @@ mod shader_cache;
 #[cfg(test)]
 mod test;
 mod vkdevice;
-mod vulkan_core;
+pub mod vulkan_core;
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;

@@ -329,16 +329,6 @@ fn accel() {
     ]);
 
     let instances = tr::array(
-        &[
-            1f32, 0f32, 0f32, 0f32, //
-            0f32, 1f32, 0f32, 0f32, //
-            0f32, 0f32, 1f32, 0f32, //
-            0f32, // WARN: This is 0x00000000 in bytes
-        ],
-        &device,
-    );
-
-    let instances = tr::array(
         &[Instance {
             transform: [
                 1f32, 0f32, 0f32, 0f32, //

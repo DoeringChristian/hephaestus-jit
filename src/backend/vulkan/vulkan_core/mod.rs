@@ -5,4 +5,5 @@ pub mod graph;
 pub mod image;
 pub mod physical_device;
 pub mod pool;
+pub mod presenter;
 pub mod profiler;

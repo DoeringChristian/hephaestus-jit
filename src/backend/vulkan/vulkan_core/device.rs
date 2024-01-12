@@ -57,7 +57,7 @@ unsafe extern "system" fn vulkan_debug_callback(
 pub struct Device(Arc<InternalDevice>);
 impl Device {
     pub fn create(index: usize) -> Self {
-        Self(Arc::new(InternalDevice::create(index).unwrap()))
+        Self(Arc::new(InternalDevice::create(index, true).unwrap()))
     }
     pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(&'a self, f: F) {
         unsafe {
@@ -113,6 +113,8 @@ pub struct InternalDevice {
     pub fence: vk::Fence,
 
     pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
+    pub surface_ext: Option<khr::Surface>,
+    pub swapchain_ext: Option<khr::Swapchain>,
 }
 unsafe impl Send for InternalDevice {}
 unsafe impl Sync for InternalDevice {}
@@ -130,7 +132,7 @@ impl Debug for InternalDevice {
 }
 
 impl InternalDevice {
-    pub fn create(index: usize) -> Result<Self> {
+    pub fn create(index: usize, display: bool) -> Result<Self> {
         unsafe {
             let entry = Entry::linked();
             let app_name = CStr::from_bytes_with_nul_unchecked(b"Candle\0");
@@ -139,7 +141,12 @@ impl InternalDevice {
                 [CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0").as_ptr()];
             // let layer_names = [];
 
-            let extension_names = [DebugUtils::name().as_ptr()];
+            let extension_names = [
+                DebugUtils::name().as_ptr(),
+                khr::Surface::name().as_ptr(),
+                khr::WaylandSurface::name().as_ptr(),
+                khr::XlibSurface::name().as_ptr(),
+            ];
 
             let appinfo = vk::ApplicationInfo::builder()
                 .application_name(app_name)
@@ -205,6 +212,9 @@ impl InternalDevice {
             if physical_device.supports_accel_struct {
                 device_extension_names.push(vk::KhrAccelerationStructureFn::name().as_ptr());
                 device_extension_names.push(vk::KhrDeferredHostOperationsFn::name().as_ptr());
+            }
+            if display {
+                device_extension_names.push(vk::KhrSwapchainFn::name().as_ptr());
             }
 
             let queue_family_index = physical_device.queue_family_index;
@@ -283,6 +293,8 @@ impl InternalDevice {
             let acceleration_structure_ext = physical_device
                 .supports_accel_struct
                 .then(|| khr::AccelerationStructure::new(&instance, &device));
+            let surface_ext = display.then(|| khr::Surface::new(&entry, &instance));
+            let swapchain_ext = display.then(|| khr::Swapchain::new(&instance, &device));
 
             Ok(Self {
                 entry,
@@ -297,6 +309,8 @@ impl InternalDevice {
                 command_buffer,
                 fence,
                 acceleration_structure_ext,
+                surface_ext,
+                swapchain_ext,
             })
         }
     }
