@@ -489,16 +489,21 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
                 triangles,
                 vertices,
             } => {
+                assert_eq!(triangles.ty(), vartype::array(u32::var_ty(), 3));
                 // WARN: order in which triangles/vertices are pushed must match how they are
                 // used when building Accel
                 // triangles.schedule();
                 // vertices.schedule();
 
+                let n_vertices = vertices.capacity();
+                let n_triangles = triangles.capacity();
+                log::trace!("Pushing triangle geometry with max {n_triangles} triangles and max {n_vertices} vertices");
+
                 deps.push(triangles);
                 deps.push(vertices);
                 backend::GeometryDesc::Triangles {
-                    n_triangles: triangles.size(),
-                    n_vertices: vertices.size(),
+                    n_triangles,
+                    n_vertices
                 }
             }
         })

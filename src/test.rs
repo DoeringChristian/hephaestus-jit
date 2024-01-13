@@ -322,7 +322,7 @@ fn accel() {
     let z = tr::array(&[0f32, 0f32, 0f32], &device);
     let vertices = tr::composite(&[&x, &y, &z]);
 
-    let triangles = tr::array(&[0u32, 1u32, 2u32], &device);
+    let triangles = tr::array(&[[0u32, 1u32, 2u32]], &device);
 
     let instances = tr::array(
         &[Instance {
