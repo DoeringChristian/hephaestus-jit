@@ -52,6 +52,7 @@ pub enum KernelOp {
     Literal,
 
     Extract(usize),
+    DynExtract,
     Construct,
 
     Select,

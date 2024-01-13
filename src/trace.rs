@@ -932,6 +932,7 @@ impl VarRef {
         let ty = match ty {
             VarType::Vec { ty, .. } => ty,
             VarType::Struct { tys } => tys[elem],
+            VarType::Array { ty, .. } => ty,
             _ => todo!(),
         };
         push_var(
@@ -944,7 +945,25 @@ impl VarRef {
             [self],
         )
     }
-    pub fn extract_all(self) -> Vec<Self> {
+    pub fn extract_dyn(&self, elem: &VarRef) -> Self {
+        let extent = self.extent();
+        let ty = self.ty();
+        let ty = match ty {
+            VarType::Array { ty, .. } => ty,
+            _ => todo!(),
+        };
+
+        push_var(
+            Var {
+                op: Op::KernelOp(KernelOp::DynExtract),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self, elem],
+        )
+    }
+    pub fn extract_all(&self) -> Vec<Self> {
         let n_elements = self.ty().num_elements().unwrap();
         (0..n_elements).map(|i| self.extract(i)).collect()
     }

@@ -439,6 +439,18 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     _ => todo!(),
                 }?;
             }
+            crate::op::KernelOp::DynExtract => {
+                let src = Reg(deps[0]);
+                let idx = Reg(deps[1]);
+                let dst = Reg(id);
+                let src_ty = ir.var(deps[0]).ty;
+                match src_ty {
+                    VarType::Array { ty, num } => {
+                        writeln!(s, "\t{glsl_ty} {dst} = {src}[{idx}];")?;
+                    }
+                    _ => todo!(),
+                }
+            }
             crate::op::KernelOp::Construct => {
                 let dst = Reg(id);
                 match ty {
