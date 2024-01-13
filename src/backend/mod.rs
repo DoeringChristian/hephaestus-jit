@@ -184,6 +184,7 @@ pub trait BackendAccel: Clone + Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GeometryDesc {
     Triangles {
+        // TODO: add stride
         n_triangles: usize,
         n_vertices: usize,
     },

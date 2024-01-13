@@ -7,6 +7,15 @@ use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
 
+///
+/// Specifies a Graph Resource.
+/// These can either be parameters, given to a closure or
+/// resources captured by the closure or
+/// Resources used internally by the graph.
+/// In the case where variables, referenced by
+/// internal resources still exist at time of execution,
+/// they get overriden by the internal resource.
+///
 pub enum GraphResource {
     Param { param: usize },
     Captured { resource: Resource },
@@ -26,6 +35,10 @@ impl Debug for GraphResource {
     }
 }
 
+///
+/// Helper struct, used to build a Graph.
+/// It manages passes and resource, using an index map.
+///
 #[derive(Debug, Default)]
 pub struct GraphBuilder {
     resources: IndexMap<trace::VarId, ResourceDesc>,

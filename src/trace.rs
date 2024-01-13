@@ -513,7 +513,6 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
             op: Op::DeviceOp(DeviceOp::BuildAccel),
             ty: vartype::void(),
             extent: Extent::Accel(create_desc.clone()),
-            // accel_desc: Some(create_desc),
             ..Default::default()
         },
         deps,
