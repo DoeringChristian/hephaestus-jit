@@ -472,8 +472,8 @@ pub enum GeometryDesc {
     Triangles { triangles: VarRef, vertices: VarRef },
 }
 #[derive(Debug, Clone)]
-pub struct AccelDesc {
-    pub geometries: Vec<GeometryDesc>,
+pub struct AccelDesc<'a> {
+    pub geometries: &'a [GeometryDesc],
     pub instances: VarRef,
 }
 

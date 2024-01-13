@@ -339,7 +339,7 @@ fn accel() {
     dbg!(instances.to_vec::<u32>(..));
 
     let desc = tr::AccelDesc {
-        geometries: vec![tr::GeometryDesc::Triangles {
+        geometries: &[tr::GeometryDesc::Triangles {
             triangles,
             vertices,
         }],
