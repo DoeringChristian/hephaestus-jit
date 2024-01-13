@@ -10,8 +10,7 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
     let mut s = String::new();
     assemble_entry_point(&mut s, ir, info, entry_point).unwrap();
 
-    // log::trace!("\n{s}");
-    print!("{s}");
+    log::trace!("\n{s}");
 
     let mut options = shaderc::CompileOptions::new().unwrap();
     options.set_optimization_level(shaderc::OptimizationLevel::Performance);
