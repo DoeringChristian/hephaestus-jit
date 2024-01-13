@@ -14,7 +14,7 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
     print!("{s}");
 
     let mut options = shaderc::CompileOptions::new().unwrap();
-    options.set_optimization_level(shaderc::OptimizationLevel::Zero);
+    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
     options.set_hlsl_offsets(true);
     options.set_target_env(
         shaderc::TargetEnv::Vulkan,
