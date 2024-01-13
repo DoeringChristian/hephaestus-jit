@@ -9,6 +9,9 @@ use std::sync::Mutex;
 
 // TODO: create a Type struct, wrapping &'static VarType
 
+///
+/// A hashmap, mapping a hash value to a leaked VarType reference.
+///
 static TYPE_CACHE: Lazy<Mutex<HashMap<u64, &'static VarType>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -56,7 +59,7 @@ pub fn matrix(ty: &'static VarType, cols: usize, rows: usize) -> &'static VarTyp
     ty.hash(&mut hasher);
     cols.hash(&mut hasher);
     rows.hash(&mut hasher);
-    2u32.hash(&mut hasher);
+    3u32.hash(&mut hasher);
     let id = hasher.finish();
 
     TYPE_CACHE
@@ -69,7 +72,7 @@ pub fn array(ty: &'static VarType, num: usize) -> &'static VarType {
     let mut hasher = DefaultHasher::new();
     ty.hash(&mut hasher);
     num.hash(&mut hasher);
-    2u32.hash(&mut hasher);
+    4u32.hash(&mut hasher);
     let id = hasher.finish();
 
     TYPE_CACHE
