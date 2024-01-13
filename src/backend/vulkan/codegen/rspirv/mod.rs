@@ -876,6 +876,26 @@ impl SpirvBuilder {
                     let src = self.reg(deps[0]);
                     self.composite_extract(ty, None, src, [elem as u32])?
                 }
+                KernelOp::DynExtract => {
+                    let ty = self.spirv_ty(&ir.var(varid).ty);
+                    let src_ty = self.spirv_ty(&ir.var(deps[0]).ty);
+                    let src = self.reg(deps[0]);
+                    let idx = self.reg(deps[1]);
+
+                    let array_ptr_ty =
+                        self.type_pointer(None, spirv::StorageClass::Function, src_ty);
+                    let ptr_ty = self.type_pointer(None, spirv::StorageClass::Function, ty);
+
+                    let var = self.with_function(|s| {
+                        let var =
+                            s.variable(array_ptr_ty, None, spirv::StorageClass::Function, None);
+                        Ok(var)
+                    })?;
+
+                    self.store(var, src, None, None)?;
+                    let ptr = self.access_chain(ptr_ty, None, var, [idx])?;
+                    self.load(ty, None, ptr, None, None)?
+                }
                 KernelOp::TraceRay => {
                     let accels = deps[0];
                     let accel_idx = ir.var(accels).data;
@@ -1040,7 +1060,55 @@ impl SpirvBuilder {
                         [dr::Operand::IdRef(float_0)],
                     )?
                 }
-                KernelOp::Scatter(reduce_op) => {
+                KernelOp::Scatter => {
+                    let dst = deps[0];
+                    let src = deps[1];
+                    let idx = deps[2];
+                    let cond = deps.get(3);
+                    let ty = &ir.var(src).ty;
+                    let data_ty = match ty {
+                        VarType::Bool => &VarType::U8,
+                        _ => &ir.var(src).ty,
+                    };
+
+                    let buffer_idx = self.buffer_idx(ir.var(dst).data);
+
+                    let spriv_ty = self.spirv_ty(data_ty);
+                    let ptr_ty =
+                        self.type_pointer(None, spirv::StorageClass::StorageBuffer, spriv_ty);
+                    let int_ty = self.type_int(32, 0);
+                    let buffer = self.constant_bit32(int_ty, buffer_idx);
+                    let elem = self.constant_bit32(int_ty, 0);
+
+                    let buffer_array = self.get_buffer_array(&ty);
+                    let idx = self.reg(idx);
+                    let src = self.reg(src);
+
+                    // Don't need to condition the scatter if that's not neccesarry
+                    // TODO: unify conditioned and uncoditioned part
+                    if let Some(cond) = cond {
+                        assert_eq!(ir.var(*cond).ty, bool::var_ty());
+
+                        let cond = self.reg(*cond);
+                        self.if_block(cond, |s| {
+                            let ptr = s
+                                .access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])
+                                .unwrap();
+
+                            // TODO: suport returning atomic in if block
+                            s.store_reduce(src, ptr, ty, &None).unwrap().unwrap_or(0);
+                        });
+                        0
+                    } else {
+                        let ptr =
+                            self.access_chain(ptr_ty, None, buffer_array, [buffer, elem, idx])?;
+
+                        self.store_reduce(src, ptr, ty, &None)?.unwrap_or(0)
+                    }
+                }
+                KernelOp::ScatterReduce(reduce_op) | KernelOp::ScatterAtomic(reduce_op) => {
+                    let reduce_op = Some(reduce_op);
+
                     let dst = deps[0];
                     let src = deps[1];
                     let idx = deps[2];

@@ -46,7 +46,9 @@ pub enum KernelOp {
     #[default]
     Nop,
 
-    Scatter(Option<ReduceOp>),
+    Scatter,
+    ScatterReduce(ReduceOp),
+    ScatterAtomic(ReduceOp),
     Gather,
     Index,
     Literal,

@@ -230,7 +230,7 @@ pub fn assemble_var(
                 _ => todo!(),
             }
         }
-        KernelOp::Scatter(reduce_op) => {
+        KernelOp::Scatter => {
             let dst = deps[0];
             let src = deps[1];
             let idx = deps[2];

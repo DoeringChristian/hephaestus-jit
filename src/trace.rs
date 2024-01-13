@@ -744,7 +744,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Scatter(None)),
+                op: Op::KernelOp(KernelOp::Scatter),
                 ty: vartype::void(),
                 extent,
                 ..Default::default()
@@ -762,7 +762,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Scatter(None)),
+                op: Op::KernelOp(KernelOp::Scatter),
                 ty: vartype::void(),
                 extent,
                 ..Default::default()
@@ -780,7 +780,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::ScatterReduce(op)),
                 ty: vartype::void(),
                 extent,
                 ..Default::default()
@@ -798,7 +798,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::ScatterReduce(op)),
                 ty: vartype::void(),
                 extent,
                 ..Default::default()
@@ -817,7 +817,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::ScatterAtomic(op)),
                 ty,
                 extent,
                 ..Default::default()
@@ -836,7 +836,7 @@ impl VarRef {
         let dst_ref = dst.get_mut();
         let res = push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Scatter(Some(op))),
+                op: Op::KernelOp(KernelOp::ScatterAtomic(op)),
                 ty,
                 extent,
                 ..Default::default()

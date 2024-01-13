@@ -43,9 +43,7 @@ Graph {
                         },
                         Var {
                             ty: Void,
-                            op: Scatter(
-                                None,
-                            ),
+                            op: Scatter,
                             deps: (
                                 0,
                                 3,

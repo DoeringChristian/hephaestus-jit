@@ -288,7 +288,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     src = Reg(deps[0])
                 )?;
             }
-            crate::op::KernelOp::Scatter(op) => {
+            crate::op::KernelOp::Scatter => {
                 let dst = deps[0];
                 let src = deps[1];
                 let idx = deps[2];
@@ -304,41 +304,103 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let dst = Reg(id);
 
                 // Forward declare `dst`
-                writeln!(s, "\t{glsl_ty} {dst};")?;
                 if let Some(cond) = cond {
                     writeln!(s, "\tif ({cond}){{", cond = Reg(*cond))?;
                 }
-                if let Some(op) = op {
-                    let atomic_fn = match op {
-                        crate::op::ReduceOp::Max => "atomicMax",
-                        crate::op::ReduceOp::Min => "atomicMin",
-                        crate::op::ReduceOp::Sum => "atomicAdd",
-                        crate::op::ReduceOp::Prod => todo!(),
-                        crate::op::ReduceOp::Or => "atomicOr",
-                        crate::op::ReduceOp::And => "atomicAnd",
-                        crate::op::ReduceOp::Xor => "atomicXor",
-                    };
-                    match ty {
-                        VarType::Bool => {
-                            let glsl_data_ty = GlslTypeName(u8::var_ty());
-                    writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
-                        },
-                        _ =>
-                    writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});")?,
-                    }
-                } else {
-                    match ty {
-                        VarType::Bool => {
-                            let glsl_data_ty = GlslTypeName(u8::var_ty());
+                match ty {
+                    VarType::Bool => {
+                        let glsl_data_ty = GlslTypeName(u8::var_ty());
 
-                            writeln!(s,"\tbuffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",)?;
-                        }
-                        _ => {
-                            writeln!(s, "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",)?;
-                        }
+                        writeln!(s,"\tbuffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",)?;
+                    }
+                    _ => {
+                        writeln!(s, "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",)?;
                     }
                 }
 
+                if let Some(_) = cond {
+                    writeln!(s, "\t}}")?;
+                }
+            }
+            crate::op::KernelOp::ScatterReduce(op) => {
+                let dst = deps[0];
+                let src = deps[1];
+                let idx = deps[2];
+                let cond = deps.get(3);
+
+                let ty = ir.var(src).ty;
+                let glsl_ty = GlslTypeName(ty);
+
+                let buffer_idx = ir.var(dst).data + 1;
+
+                let src = Reg(src);
+                let idx = Reg(idx);
+                let dst = Reg(id);
+
+                if let Some(cond) = cond {
+                    writeln!(s, "\tif({cond}){{", cond = Reg(*cond))?;
+                }
+                let atomic_fn = match op {
+                    crate::op::ReduceOp::Max => "atomicMax",
+                    crate::op::ReduceOp::Min => "atomicMin",
+                    crate::op::ReduceOp::Sum => "atomicAdd",
+                    crate::op::ReduceOp::Prod => todo!(),
+                    crate::op::ReduceOp::Or => "atomicOr",
+                    crate::op::ReduceOp::And => "atomicAnd",
+                    crate::op::ReduceOp::Xor => "atomicXor",
+                };
+                match ty {
+                    VarType::Bool => {
+                        let glsl_data_ty = GlslTypeName(u8::var_ty());
+                        writeln!(s, "\t{atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
+                    }
+                    _ => writeln!(
+                        s,
+                        "\t{atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});"
+                    )?,
+                }
+                if let Some(_) = cond {
+                    writeln!(s, "\t}}")?;
+                }
+            }
+            crate::op::KernelOp::ScatterAtomic(op) => {
+                let dst = deps[0];
+                let src = deps[1];
+                let idx = deps[2];
+                let cond = deps.get(3);
+
+                let ty = ir.var(src).ty;
+                let glsl_ty = GlslTypeName(ty);
+
+                let buffer_idx = ir.var(dst).data + 1;
+
+                let src = Reg(src);
+                let idx = Reg(idx);
+                let dst = Reg(id);
+
+                writeln!(s, "\t{glsl_ty} {dst};")?;
+                if let Some(cond) = cond {
+                    writeln!(s, "\tif({cond}){{", cond = Reg(*cond))?;
+                }
+                let atomic_fn = match op {
+                    crate::op::ReduceOp::Max => "atomicMax",
+                    crate::op::ReduceOp::Min => "atomicMin",
+                    crate::op::ReduceOp::Sum => "atomicAdd",
+                    crate::op::ReduceOp::Prod => todo!(),
+                    crate::op::ReduceOp::Or => "atomicOr",
+                    crate::op::ReduceOp::And => "atomicAnd",
+                    crate::op::ReduceOp::Xor => "atomicXor",
+                };
+                match ty {
+                    VarType::Bool => {
+                        let glsl_data_ty = GlslTypeName(u8::var_ty());
+                        writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
+                    }
+                    _ => writeln!(
+                        s,
+                        "\t{dst} = {atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});"
+                    )?,
+                }
                 if let Some(_) = cond {
                     writeln!(s, "\t}}")?;
                 }

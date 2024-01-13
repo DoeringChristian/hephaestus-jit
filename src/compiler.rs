@@ -47,7 +47,7 @@ impl Compiler {
             );
             self.ir.push_var(
                 ir::Var {
-                    op: KernelOp::Scatter(None),
+                    op: KernelOp::Scatter,
                     ty: vartype::void(),
                     ..Default::default()
                 },

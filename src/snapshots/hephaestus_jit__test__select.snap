@@ -91,9 +91,7 @@ Graph {
                         },
                         Var {
                             ty: Void,
-                            op: Scatter(
-                                None,
-                            ),
+                            op: Scatter,
                             deps: (
                                 5,
                                 8,
