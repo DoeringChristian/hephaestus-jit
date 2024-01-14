@@ -489,15 +489,29 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
                 triangles,
                 vertices,
             } => {
-                assert_eq!(triangles.ty(), vartype::array(u32::var_ty(), 3));
                 // WARN: order in which triangles/vertices are pushed must match how they are
                 // used when building Accel
                 // triangles.schedule();
                 // vertices.schedule();
 
-                let n_vertices = vertices.capacity();
-                let n_triangles = triangles.capacity();
-                log::trace!("Pushing triangle geometry with max {n_triangles} triangles and max {n_vertices} vertices");
+                let capacity = vertices.capacity();
+                let n_vertices = match vertices.ty(){
+                    VarType::F32 if capacity % 3 == 0=> capacity/3,
+                    VarType::Vec { ty, num } if *ty == f32::var_ty() && *num == 3 => capacity,
+                    VarType::Array { ty, num } if *ty == f32::var_ty() && *num == 3 => capacity,
+                    _ => todo!()
+                };
+                    
+                let capacity = triangles.capacity();
+                    dbg!(triangles.ty());
+                let n_triangles = match triangles.ty(){
+                    VarType::U32 if capacity % 3 == 0=> capacity/3,
+                    VarType::Vec { ty, num } if *ty == u32::var_ty() && *num == 3 => capacity,
+                    VarType::Array { ty, num } if *ty == u32::var_ty() && *num == 3 => capacity,
+                    _ => todo!()
+                };
+                    
+                log::trace!("Adding triangle geometry with max {n_triangles} triangles and max {n_vertices} vertices");
 
                 deps.push(triangles);
                 deps.push(vertices);
