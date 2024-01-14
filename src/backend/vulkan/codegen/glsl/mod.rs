@@ -2,7 +2,7 @@ use half::f16;
 
 use super::CompileInfo;
 use crate::ir::{VarId, IR};
-use crate::vartype::{AsVarType, VarType};
+use crate::vartype::{self, AsVarType, VarType};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
@@ -75,6 +75,7 @@ pub fn assemble_entry_point(
     // Generate Composite types
     for var in ir.vars.iter() {
         b.composite_type(s, ir, var.ty)?;
+        b.composite_type(s, ir, memory_type(var.ty))?;
     }
 
     // Generate Bindigns
@@ -158,7 +159,8 @@ impl GlslBuilder {
     pub fn buffer_binding(&mut self, s: &mut String, ty: &'static VarType) -> std::fmt::Result {
         let n_buffers = self.n_buffers;
         if !self.buffer_types.contains(ty) {
-            writeln!(s,"layout(set = 0, binding = 0, std430) buffer Buffer_{name}{{ {name} b[]; }} buffer_{name}[{n_buffers}];",name = GlslTypeName(ty))?;
+            let glsl_ty = GlslTypeName(ty);
+            writeln!(s,"layout(set = 0, binding = 0, std430) buffer Buffer_{glsl_ty}{{ {glsl_ty} b[]; }} buffer_{glsl_ty}[{n_buffers}];")?;
             self.buffer_types.insert(ty);
         }
         Ok(())
@@ -179,11 +181,8 @@ impl GlslBuilder {
             let var = ir.var(id);
             match var.op {
                 crate::op::KernelOp::BufferRef => {
-                    let ty = match var.ty {
-                        VarType::Bool => u8::var_ty(),
-                        _ => var.ty,
-                    };
-                    self.buffer_binding(s, ty)?;
+                    let memory_type = memory_type(var.ty);
+                    self.buffer_binding(s, memory_type)?;
                 }
                 crate::op::KernelOp::TextureRef { dim } => {
                     self.sampler_binding(s, ir, dim)?;
@@ -203,6 +202,14 @@ impl GlslBuilder {
             }
         }
         Ok(())
+    }
+}
+
+fn memory_type(ty: &VarType) -> &VarType {
+    match ty {
+        VarType::Bool => u8::var_ty(),
+        VarType::Vec { ty, num } if *num == 3 => vartype::array(ty, 3),
+        _ => ty,
     }
 }
 
@@ -313,6 +320,10 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
 
                         writeln!(s,"\tbuffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",)?;
                     }
+                    VarType::Vec { ty: vec_ty, num } if *num == 3 => {
+                        let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
+                        writeln!(s,"\tbuffer_{memory_type}[{buffer_idx}].b[{idx}] = {memory_type}({src}.x, {src}.y, {src}.z);",)?;
+                    }
                     _ => {
                         writeln!(s, "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",)?;
                     }
@@ -351,8 +362,13 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 };
                 match ty {
                     VarType::Bool => {
-                        let glsl_data_ty = GlslTypeName(u8::var_ty());
-                        writeln!(s, "\t{atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
+                        let memory_type = GlslTypeName(u8::var_ty());
+                        writeln!(s, "\t{atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], {memory_type}({src}));")?;
+                    }
+
+                    VarType::Vec { ty: vec_ty, num } if *num == 3 => {
+                        let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
+                        writeln!(s, "\t{atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], {memory_type}({src}.x, {src}.y, {src}.z));")?;
                     }
                     _ => writeln!(
                         s,
@@ -396,6 +412,10 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                         let glsl_data_ty = GlslTypeName(u8::var_ty());
                         writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
                     }
+                    VarType::Vec { ty: vec_ty, num } if *num == 3 => {
+                        let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
+                        writeln!(s, "\t{dst} = {atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], {memory_type}({src}.x, {src}.y, {src}.z));")?;
+                    }
                     _ => writeln!(
                         s,
                         "\t{dst} = {atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});"
@@ -419,9 +439,16 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
                     match ty {
                         VarType::Bool => {
-                            let glsl_data_ty = GlslTypeName(u8::var_ty());
+                            let memory_type = GlslTypeName(u8::var_ty());
 
-                            writeln!(s, "\tif ({cond}) {{ {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] ); }}")?;
+                            writeln!(s, "\tif ({cond}) {{ {dst} = {glsl_ty}( buffer_{memory_type}[{buffer_idx}].b[{idx}] ); }}")?;
+                        }
+                        VarType::Vec { ty: vec_ty, num } if *num == 3 => {
+                            let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
+                            writeln!(s, "\tif({cond}) {{")?;
+                            writeln!(s, "\t\t{memory_type} tmp = buffer_{memory_type}[{buffer_idx}].b[{idx}];")?;
+                            writeln!(s, "\t\t{dst} = {glsl_ty}(tmp[0], tmp[1], tmp[2]);")?;
+                            writeln!(s, "\t}}")?;
                         }
                         _ => {
                             writeln!(s, "\tif ({cond}) {{ {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}]; }}")?;
@@ -430,8 +457,16 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 } else {
                     match ty {
                         VarType::Bool => {
-                            let glsl_data_ty = GlslTypeName(u8::var_ty());
-                            writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}( buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] );")?;
+                            let memory_type = GlslTypeName(u8::var_ty());
+                            writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}( buffer_{memory_type}[{buffer_idx}].b[{idx}] );")?;
+                        }
+                        VarType::Vec { ty: vec_ty, num } if *num == 3 => {
+                            let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
+                            writeln!(s, "\t{glsl_ty} {dst};")?;
+                            writeln!(s, "\t{{")?;
+                            writeln!(s, "\t\t{memory_type} tmp = buffer_{memory_type}[{buffer_idx}].b[{idx}];")?;
+                            writeln!(s, "\t\t{dst} = {glsl_ty}(tmp[0], tmp[1], tmp[2]);")?;
+                            writeln!(s, "\t}}")?;
                         }
                         _ => {
                             writeln!(

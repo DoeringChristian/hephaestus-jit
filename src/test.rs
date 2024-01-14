@@ -320,7 +320,7 @@ fn accel() {
     let x = tr::array(&[1f32, 0f32, 1f32], &device);
     let y = tr::array(&[0f32, 1f32, 1f32], &device);
     let z = tr::array(&[0f32, 0f32, 0f32], &device);
-    let vertices = tr::composite(&[&x, &y, &z]);
+    let vertices = tr::vec(&[&x, &y, &z]);
 
     let triangles = tr::array(&[[0u32, 1u32, 2u32]], &device);
 
@@ -1048,4 +1048,22 @@ fn dyn_extract() {
     graph.launch(&device);
 
     dbg!(res.to_vec::<i32>(..));
+}
+#[test]
+fn vec3_memory_layout() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let vec = tr::vec(&[&tr::sized_literal(1, 2), &tr::literal(2), &tr::literal(3)]);
+
+    let tmp = vec.gather(&tr::index(2));
+
+    vec.schedule();
+    tmp.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
 }
