@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use ash::extensions::ext::DebugUtils;
 use ash::Entry;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
-use gpu_allocator::AllocatorDebugSettings;
+use gpu_allocator::{AllocationSizes, AllocatorDebugSettings};
 
 pub use ash::{extensions::khr, vk};
 
@@ -62,7 +62,7 @@ impl Device {
     pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(&'a self, f: F) {
         unsafe {
             // Record command buffer
-            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
+            let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
             self.begin_command_buffer(self.command_buffer, &command_buffer_begin_info)
                 .unwrap();
@@ -72,9 +72,8 @@ impl Device {
             // Wait for fences and submit command buffer
             self.reset_fences(&[self.fence]).unwrap();
 
-            let submit_info = vk::SubmitInfo::builder()
-                .command_buffers(&[self.command_buffer])
-                .build();
+            let command_buffers = [self.command_buffer];
+            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
 
             self.queue_submit(self.queue, &[submit_info], self.fence)
                 .unwrap();
@@ -139,9 +138,9 @@ impl InternalDevice {
                 [CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0").as_ptr()];
             // let layer_names = [];
 
-            let extension_names = [DebugUtils::name().as_ptr()];
+            let extension_names = [DebugUtils::NAME.as_ptr()];
 
-            let appinfo = vk::ApplicationInfo::builder()
+            let appinfo = vk::ApplicationInfo::default()
                 .application_name(app_name)
                 .application_version(0)
                 .engine_name(app_name)
@@ -150,7 +149,7 @@ impl InternalDevice {
 
             let create_flags = vk::InstanceCreateFlags::default();
 
-            let create_info = vk::InstanceCreateInfo::builder()
+            let create_info = vk::InstanceCreateInfo::default()
                 .application_info(&appinfo)
                 .enabled_layer_names(&layer_names)
                 .enabled_extension_names(&extension_names)
@@ -159,7 +158,7 @@ impl InternalDevice {
             let instance = entry.create_instance(&create_info, None).unwrap();
             // .map_err(|_| VulkanError::InstanceCreationError)?;
 
-            let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+            let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
                 .message_severity(
                     vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
                         | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -197,14 +196,14 @@ impl InternalDevice {
             log::trace!("Compatible Devices: {physical_devices:?}");
             let physical_device = physical_devices.into_iter().nth(index).unwrap();
 
-            let mut device_extension_names = vec![vk::ExtDescriptorIndexingFn::name().as_ptr()];
+            let mut device_extension_names = vec![vk::ExtDescriptorIndexingFn::NAME.as_ptr()];
 
             if physical_device.supports_ray_query {
-                device_extension_names.push(vk::KhrRayQueryFn::name().as_ptr());
+                device_extension_names.push(vk::KhrRayQueryFn::NAME.as_ptr());
             }
             if physical_device.supports_accel_struct {
-                device_extension_names.push(vk::KhrAccelerationStructureFn::name().as_ptr());
-                device_extension_names.push(vk::KhrDeferredHostOperationsFn::name().as_ptr());
+                device_extension_names.push(vk::KhrAccelerationStructureFn::NAME.as_ptr());
+                device_extension_names.push(vk::KhrDeferredHostOperationsFn::NAME.as_ptr());
             }
 
             let queue_family_index = physical_device.queue_family_index;
@@ -217,22 +216,21 @@ impl InternalDevice {
                 vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default();
             let mut ray_query_features = vk::PhysicalDeviceRayQueryFeaturesKHR::default();
 
-            let mut features2 = vk::PhysicalDeviceFeatures2::builder()
+            let mut features2 = vk::PhysicalDeviceFeatures2::default()
                 .push_next(&mut features_v1_1)
                 .push_next(&mut features_v1_2)
                 .push_next(&mut acceleration_structure_features)
-                .push_next(&mut ray_query_features)
-                .build();
+                .push_next(&mut ray_query_features);
 
             instance.get_physical_device_features2(physical_device.physical_device, &mut features2);
 
             let priorities = [1.0];
 
-            let queue_info = vk::DeviceQueueCreateInfo::builder()
+            let queue_info = vk::DeviceQueueCreateInfo::default()
                 .queue_family_index(queue_family_index)
                 .queue_priorities(&priorities);
 
-            let device_create_info = vk::DeviceCreateInfo::builder()
+            let device_create_info = vk::DeviceCreateInfo::default()
                 .queue_create_infos(std::slice::from_ref(&queue_info))
                 .enabled_extension_names(&device_extension_names)
                 .push_next(&mut features2);
@@ -247,13 +245,13 @@ impl InternalDevice {
             // let device_memory_properties =
             //     instance.get_physical_device_memory_properties(physical_device.physical_device);
 
-            let pool_create_info = vk::CommandPoolCreateInfo::builder()
+            let pool_create_info = vk::CommandPoolCreateInfo::default()
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
                 .queue_family_index(physical_device.queue_family_index);
 
             let pool = device.create_command_pool(&pool_create_info, None).unwrap();
 
-            let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
+            let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
                 .command_buffer_count(1)
                 .command_pool(pool)
                 .level(vk::CommandBufferLevel::PRIMARY);
@@ -273,10 +271,11 @@ impl InternalDevice {
                     ..Default::default()
                 },
                 buffer_device_address: true,
+                allocation_sizes: AllocationSizes::new(u64::MAX, u64::MAX),
             })
             .unwrap();
 
-            let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+            let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
             let fence = device.create_fence(&fence_info, None).unwrap();
 
             // Extensons:

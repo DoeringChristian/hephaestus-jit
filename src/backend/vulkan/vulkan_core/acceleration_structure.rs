@@ -77,7 +77,7 @@ impl AccelerationStructureGeometryData {
         self,
     ) -> (
         vk::GeometryTypeKHR,
-        vk::AccelerationStructureGeometryDataKHR,
+        vk::AccelerationStructureGeometryDataKHR<'static>,
     ) {
         match self {
             AccelerationStructureGeometryData::AABBs { stride } => (
@@ -143,7 +143,7 @@ pub struct AccelerationStructure {
 
     device: Device,
 
-    sizes: vk::AccelerationStructureBuildSizesInfoKHR,
+    sizes: vk::AccelerationStructureBuildSizesInfoKHR<'static>,
     pub info: AccelerationStructureInfo,
 }
 unsafe impl Send for AccelerationStructure {}
@@ -171,12 +171,13 @@ impl AccelerationStructure {
             })
             .unzip();
 
-        let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
+        let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::default()
             .ty(info.ty)
             .flags(info.flags)
             .geometries(&geometries);
 
         let sizes = unsafe {
+            let mut size_info = vk::AccelerationStructureBuildSizesInfoKHR::default();
             device
                 .acceleration_structure_ext
                 .as_ref()
@@ -185,7 +186,9 @@ impl AccelerationStructure {
                     vk::AccelerationStructureBuildTypeKHR::DEVICE,
                     &geometry_info,
                     &max_primitive_counts,
-                )
+                    &mut size_info,
+                );
+            size_info
         };
         let buffer = Buffer::create(
             device,
@@ -197,7 +200,7 @@ impl AccelerationStructure {
                 ..Default::default()
             },
         );
-        let create_info = vk::AccelerationStructureCreateInfoKHR::builder()
+        let create_info = vk::AccelerationStructureCreateInfoKHR::default()
             .ty(info.ty)
             .buffer(buffer.vk())
             .size(sizes.acceleration_structure_size);
@@ -279,7 +282,7 @@ impl AccelerationStructure {
         pass.write(self, AccessType::AccelerationStructureBuildWrite)
             .record(move |device, cb, _| unsafe {
                 // We need to construct geometry_info here, because vulkan uses pointers
-                let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::builder()
+                let geometry_info = vk::AccelerationStructureBuildGeometryInfoKHR::default()
                     .ty(s.info.ty)
                     .flags(s.info.flags)
                     .mode(vk::BuildAccelerationStructureModeKHR::BUILD)
@@ -287,8 +290,7 @@ impl AccelerationStructure {
                     .geometries(&geometries)
                     .scratch_data(vk::DeviceOrHostAddressKHR {
                         device_address: scratch_buffer_address,
-                    })
-                    .build();
+                    });
 
                 device
                     .acceleration_structure_ext

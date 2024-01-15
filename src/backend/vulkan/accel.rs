@@ -142,7 +142,7 @@ impl Accel {
                     .as_ref()
                     .unwrap()
                     .get_acceleration_structure_device_address(
-                        &vk::AccelerationStructureDeviceAddressInfoKHR::builder()
+                        &vk::AccelerationStructureDeviceAddressInfoKHR::default()
                             .acceleration_structure(blas.accel),
                     )
             })
@@ -246,7 +246,7 @@ impl Accel {
                 .as_ref()
                 .unwrap()
                 .get_acceleration_structure_device_address(
-                    &vk::AccelerationStructureDeviceAddressInfoKHR::builder()
+                    &vk::AccelerationStructureDeviceAddressInfoKHR::default()
                         .acceleration_structure(self.blases[id].accel),
                 )
         }

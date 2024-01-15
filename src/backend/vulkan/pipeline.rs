@@ -41,9 +41,7 @@ impl Drop for Pipeline {
 impl Pipeline {
     pub fn create<'a>(device: &Device, desc: &PipelineDesc<'a>) -> Self {
         unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::builder()
-                .code(desc.code)
-                .build();
+            let shader_info = vk::ShaderModuleCreateInfo::default().code(desc.code);
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
@@ -68,7 +66,7 @@ impl Pipeline {
                             ..Default::default()
                         })
                         .collect::<Vec<_>>();
-                    let desc_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                    let desc_info = vk::DescriptorSetLayoutCreateInfo::default()
                         .bindings(&desc_layout_bindings);
                     device
                         .create_descriptor_set_layout(&desc_info, None)
@@ -92,24 +90,24 @@ impl Pipeline {
 
             // Create Pipeline
             let pipeline_layout_info =
-                vk::PipelineLayoutCreateInfo::builder().set_layouts(&desc_set_layouts);
+                vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
             let pipeline_layout = device
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .unwrap();
             let pipeline_cache = device
-                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::builder(), None)
+                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::default(), None)
                 .unwrap();
 
-            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::builder()
+            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::COMPUTE)
                 .module(shader)
                 .name(CStr::from_bytes_with_nul(b"main\0").unwrap());
 
-            let compute_pipeline_info = vk::ComputePipelineCreateInfo::builder()
-                .stage(pipeline_shader_info.build())
+            let compute_pipeline_info = vk::ComputePipelineCreateInfo::default()
+                .stage(pipeline_shader_info)
                 .layout(pipeline_layout);
             let compute_pipeline = device
-                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info.build()], None)
+                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info], None)
                 .unwrap()[0];
 
             // Destruct temporary elements
@@ -134,9 +132,7 @@ impl Pipeline {
         let num_accels = ir.n_accels;
 
         unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::builder()
-                .code(spirv.as_slice())
-                .build();
+            let shader_info = vk::ShaderModuleCreateInfo::default().code(spirv.as_slice());
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Layout
@@ -164,7 +160,7 @@ impl Pipeline {
                 },
             ];
             let desc_info =
-                vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
+                vk::DescriptorSetLayoutCreateInfo::default().bindings(&desc_layout_bindings);
 
             let desc_set_layouts = vec![device
                 .create_descriptor_set_layout(&desc_info, None)
@@ -174,24 +170,24 @@ impl Pipeline {
 
             // Create Pipeline
             let pipeline_layout_info =
-                vk::PipelineLayoutCreateInfo::builder().set_layouts(&desc_set_layouts);
+                vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
             let pipeline_layout = device
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .unwrap();
             let pipeline_cache = device
-                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::builder(), None)
+                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::default(), None)
                 .unwrap();
 
-            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::builder()
+            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::COMPUTE)
                 .module(shader)
                 .name(CStr::from_bytes_with_nul(b"main\0").unwrap());
 
-            let compute_pipeline_info = vk::ComputePipelineCreateInfo::builder()
-                .stage(pipeline_shader_info.build())
+            let compute_pipeline_info = vk::ComputePipelineCreateInfo::default()
+                .stage(pipeline_shader_info)
                 .layout(pipeline_layout);
             let compute_pipeline = device
-                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info.build()], None)
+                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info], None)
                 .unwrap()[0];
 
             // Destruct temporary elements
@@ -237,12 +233,11 @@ impl Pipeline {
             .iter()
             .enumerate()
             .map(|(i, write_set)| {
-                vk::WriteDescriptorSet::builder()
+                vk::WriteDescriptorSet::default()
                     .dst_set(desc_sets[write_set.set as usize])
                     .buffer_info(&buffer_infos[i])
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                     .dst_binding(write_set.binding)
-                    .build()
             })
             .collect::<Vec<_>>();
         unsafe {
@@ -320,41 +315,38 @@ impl Pipeline {
             .map(|accel| accel.get_tlas())
             .collect::<Vec<_>>();
 
-        let mut desc_accel_infos = vk::WriteDescriptorSetAccelerationStructureKHR::builder()
+        let mut desc_accel_infos = vk::WriteDescriptorSetAccelerationStructureKHR::default()
             .acceleration_structures(&acceleration_structures);
 
         let write_desc_sets = [
             if !desc_buffer_infos.is_empty() {
                 Some(
-                    vk::WriteDescriptorSet::builder()
+                    vk::WriteDescriptorSet::default()
                         .dst_set(desc_sets[0])
                         .buffer_info(&desc_buffer_infos)
                         .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                        .dst_binding(0)
-                        .build(),
+                        .dst_binding(0),
                 )
             } else {
                 None
             },
             if !desc_image_infos.is_empty() {
                 Some(
-                    vk::WriteDescriptorSet::builder()
+                    vk::WriteDescriptorSet::default()
                         .dst_set(desc_sets[0])
                         .image_info(&desc_image_infos)
                         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                        .dst_binding(1)
-                        .build(),
+                        .dst_binding(1),
                 )
             } else {
                 None
             },
             if !acceleration_structures.is_empty() {
-                let mut write_desc_set = vk::WriteDescriptorSet::builder()
+                let mut write_desc_set = vk::WriteDescriptorSet::default()
                     .dst_set(desc_sets[0])
                     .dst_binding(2)
                     .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
-                    .push_next(&mut desc_accel_infos)
-                    .build();
+                    .push_next(&mut desc_accel_infos);
                 write_desc_set.descriptor_count = acceleration_structures.len() as _; // WARN: no
                                                                                       // Idea if this is correct
                 Some(write_desc_set)

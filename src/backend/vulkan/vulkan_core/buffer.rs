@@ -55,7 +55,7 @@ impl Buffer {
     pub fn create(device: &Device, info: BufferInfo) -> Self {
         let device = device.clone();
         let queue_family_indices = [device.physical_device.queue_family_index];
-        let buffer_info = vk::BufferCreateInfo::builder()
+        let buffer_info = vk::BufferCreateInfo::default()
             .size(info.size as _)
             .usage(info.usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
@@ -120,7 +120,7 @@ impl Buffer {
     pub fn device_address(&self) -> vk::DeviceAddress {
         unsafe {
             self.device.get_buffer_device_address(
-                &vk::BufferDeviceAddressInfo::builder().buffer(self.buffer),
+                &vk::BufferDeviceAddressInfo::default().buffer(self.buffer),
             )
         }
     }

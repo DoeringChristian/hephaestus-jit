@@ -302,7 +302,7 @@ impl RGraphPool {
                 descriptor_count: 2 ^ 16,
             },
         ];
-        let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+        let desc_pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&desc_sizes)
             .max_sets(set_layouts.len() as _);
         let desc_pool = unsafe {
@@ -312,7 +312,7 @@ impl RGraphPool {
         };
         self.desc_pools.push(desc_pool);
 
-        let desc_set_allocation_info = vk::DescriptorSetAllocateInfo::builder()
+        let desc_set_allocation_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(desc_pool)
             .set_layouts(set_layouts);
         let desc_sets = unsafe {

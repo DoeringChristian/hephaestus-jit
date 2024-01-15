@@ -1067,3 +1067,11 @@ fn vec3_memory_layout() {
 
     assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
 }
+#[test]
+fn cooperative_matrix() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    dbg!(&device.as_vulkan().unwrap().physical_device.properties2);
+}
