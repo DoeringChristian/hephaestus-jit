@@ -1073,5 +1073,7 @@ fn cooperative_matrix() {
 
     let device = vulkan(0);
 
-    dbg!(&device.as_vulkan().unwrap().physical_device.properties2);
+    let pdevice = &device.as_vulkan().unwrap().physical_device;
+    dbg!(&pdevice.cooperative_matrix_properties);
+    dbg!(&pdevice.cooperative_matrix_features);
 }

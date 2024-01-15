@@ -26,6 +26,7 @@ pub struct PhysicalDevice {
     pub acceleration_structure_features:
         vk::PhysicalDeviceAccelerationStructureFeaturesKHR<'static>,
     pub ray_query_features: vk::PhysicalDeviceRayQueryFeaturesKHR<'static>,
+    pub cooperative_matrix_features: vk::PhysicalDeviceCooperativeMatrixFeaturesKHR<'static>,
 
     pub properties: vk::PhysicalDeviceProperties,
 
@@ -35,6 +36,7 @@ pub struct PhysicalDevice {
     pub acceleration_structure_properties:
         vk::PhysicalDeviceAccelerationStructurePropertiesKHR<'static>,
     pub subgroup_properties: vk::PhysicalDeviceSubgroupProperties<'static>,
+    pub cooperative_matrix_properties: vk::PhysicalDeviceCooperativeMatrixPropertiesKHR<'static>,
 
     pub extensions: Vec<vk::ExtensionProperties>,
 
@@ -67,12 +69,15 @@ impl PhysicalDevice {
         let mut acceleration_structure_features =
             vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default();
         let mut ray_query_features = vk::PhysicalDeviceRayQueryFeaturesKHR::default();
+        let mut cooperative_matrix_features =
+            vk::PhysicalDeviceCooperativeMatrixFeaturesKHR::default();
 
         let mut features2 = vk::PhysicalDeviceFeatures2::default()
             .push_next(&mut features_v1_1)
             .push_next(&mut features_v1_2)
             .push_next(&mut acceleration_structure_features)
-            .push_next(&mut ray_query_features);
+            .push_next(&mut ray_query_features)
+            .push_next(&mut cooperative_matrix_features);
 
         unsafe { instance.get_physical_device_features2(physical_device, &mut features2) };
 
@@ -83,12 +88,15 @@ impl PhysicalDevice {
         let mut acceleration_structure_properties =
             vk::PhysicalDeviceAccelerationStructurePropertiesKHR::default();
         let mut subgroup_properties = vk::PhysicalDeviceSubgroupProperties::default();
-        let mut cooperative_matrix_properties = vk::CooperativeMatrixPropertiesKHR::default();
+        let mut cooperative_matrix_properties =
+            vk::PhysicalDeviceCooperativeMatrixPropertiesKHR::default();
+
         let mut properties2 = vk::PhysicalDeviceProperties2::default()
             .push_next(&mut properties_v1_1)
             .push_next(&mut properties_v1_2)
             .push_next(&mut acceleration_structure_properties)
-            .push_next(&mut subgroup_properties);
+            .push_next(&mut subgroup_properties)
+            .push_next(&mut cooperative_matrix_properties);
 
         unsafe { instance.get_physical_device_properties2(physical_device, &mut properties2) };
 
@@ -149,6 +157,8 @@ impl PhysicalDevice {
                 features_v1_2: std::mem::transmute(features_v1_2),
                 acceleration_structure_features,
                 ray_query_features,
+                cooperative_matrix_features: std::mem::transmute(cooperative_matrix_features),
+
                 properties,
                 properties2: std::mem::transmute(properties2),
                 properties_v1_1: std::mem::transmute(properties_v1_1),
@@ -157,6 +167,7 @@ impl PhysicalDevice {
                     acceleration_structure_properties,
                 ),
                 subgroup_properties: std::mem::transmute(subgroup_properties),
+                cooperative_matrix_properties: std::mem::transmute(cooperative_matrix_properties),
 
                 extensions,
                 queue_family_index,
