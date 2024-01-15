@@ -47,8 +47,8 @@ raw-window-handle = "0.5"
 # ash-window = "0.12.0"
 gpu-profiler = { git = "https://github.com/h3r2tic/gpu-profiler.git", version = "0.1.0", features = ["ash", "use-ash"] }
 spirv-tools = "0.9.0"
-ash = { git = "https://github.com/ash-rs/ash.git", version = "0.37.0", rev = "92084df", features = ["linked", "debug"] }
-ash-window = { git = "https://github.com/ash-rs/ash.git", version = "0.12.0", rev = "92084df" }
+ash = { git = "https://github.com/DoeringChristian/ash.git", version = "0.37.0", features = ["linked", "debug"] }
+ash-window = { git = "https://github.com/DoeringChristian/ash.git", version = "0.12.0" }
 vk-sync = { git = "https://github.com/DoeringChristian/vk-sync-rs.git", branch = "custom-ash", package = "vk-sync-fork" }
 #vk-sync = { version = "0.4.0", package = "vk-sync-fork" }
 gpu-allocator = { git = "https://github.com/DoeringChristian/gpu-allocator.git", branch = "custom-ash" }
