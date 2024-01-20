@@ -4,7 +4,7 @@ use super::CompileInfo;
 use crate::ir::{VarId, IR};
 use crate::vartype::{self, AsVarType, VarType};
 use std::collections::{HashMap, HashSet};
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec<u32>> {
     let mut s = String::new();
@@ -683,9 +683,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let src = Reg(deps[0]);
                 let src_ty = ir.var(deps[0]).ty;
                 match op {
-                    crate::op::Uop::Cast => {
-                        writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}({src});")
-                    }
+                    crate::op::Uop::Cast => assemble_cast(s, id, deps[0], ty, src_ty),
                     crate::op::Uop::BitCast => match (ty, src_ty) {
                         (VarType::F16, VarType::I16) => {
                             writeln!(s, "\t{glsl_ty} {dst} = int16BitsToHalf({src});")
@@ -758,5 +756,114 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
             _ => {}
         }
     }
+    Ok(())
+}
+fn assemble_cast_inline(
+    s: &mut String,
+    src: impl Display,
+    dst_ty: &'static VarType,
+    src_ty: &VarType,
+) -> std::fmt::Result {
+    match (dst_ty, src_ty) {
+        (dst_ty, src_ty) if dst_ty == src_ty => {
+            // Trivial Cast
+            write!(s, "{src}")
+        }
+        (
+            VarType::U8
+            | VarType::I8
+            | VarType::U16
+            | VarType::I16
+            | VarType::U32
+            | VarType::I32
+            | VarType::U64
+            | VarType::I64
+            | VarType::F16
+            | VarType::F32
+            | VarType::F64,
+            VarType::U8
+            | VarType::I8
+            | VarType::U16
+            | VarType::I16
+            | VarType::U32
+            | VarType::I32
+            | VarType::U64
+            | VarType::I64
+            | VarType::F16
+            | VarType::F32
+            | VarType::F64,
+        ) => {
+            // Primary Type Casting
+            write!(s, "{dst_ty}({src})", dst_ty = GlslTypeName(dst_ty))
+        }
+        (
+            VarType::Vec {
+                ty: vec_ty,
+                num: vec_num,
+            },
+            VarType::Array {
+                ty: arr_ty,
+                num: arr_num,
+            },
+        ) => {
+            write!(s, "{dst_ty}(", dst_ty = GlslTypeName(dst_ty))?;
+            assert_eq!(vec_num, arr_num);
+            assert!(*vec_num <= 4);
+            // let swizzles = ["x", "y", "z", "w"];
+            for i in 0..*vec_num {
+                write!(s, "{src}[{i}]")?;
+                if i < vec_num - 1 {
+                    write!(s, ",")?;
+                }
+            }
+            write!(s, ")")?;
+            Ok(())
+        }
+        (
+            VarType::Array {
+                ty: arr_ty,
+                num: arr_num,
+            },
+            VarType::Vec {
+                ty: vec_ty,
+                num: vec_num,
+            },
+        ) => {
+            write!(s, "{dst_ty}(", dst_ty = GlslTypeName(dst_ty))?;
+            assert_eq!(vec_num, arr_num);
+            assert!(*vec_num <= 4);
+            let swizzles = ["x", "y", "z", "w"];
+            for i in 0..*vec_num {
+                assemble_cast_inline(
+                    s,
+                    format!("{src}.{swizzle}", swizzle = swizzles[i]),
+                    arr_ty,
+                    vec_ty,
+                )?;
+                if i < vec_num - 1 {
+                    write!(s, ",")?;
+                }
+            }
+            write!(s, ")")?;
+            Ok(())
+        }
+        _ => todo!("Cast between {src_ty:?} -> {dst_ty:?} has not been implemented for the GLSL codegen backend."),
+    }
+}
+fn assemble_cast(
+    s: &mut String,
+    dst: VarId,
+    src: VarId,
+    dst_ty: &'static VarType,
+    src_ty: &VarType,
+) -> std::fmt::Result {
+    write!(
+        s,
+        "\t{dst_ty} {dst} = ",
+        dst = Reg(dst),
+        dst_ty = GlslTypeName(dst_ty)
+    )?;
+    assemble_cast_inline(s, Reg(src), dst_ty, src_ty)?;
+    writeln!(s, ";")?;
     Ok(())
 }

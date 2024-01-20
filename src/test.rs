@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use approx::assert_abs_diff_eq;
 
 use crate::tr::VarRef;
-use crate::vartype::{AsVarType, Instance, Intersection};
+use crate::vartype::{self, AsVarType, Instance, Intersection};
 use crate::{backend, tr, vulkan};
 
 #[test]
@@ -71,7 +71,7 @@ fn simple_f16() {
 
     c.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     let reference = (0..10).map(|i| f16::from_f32(i as _)).collect::<Vec<_>>();
@@ -1076,4 +1076,27 @@ fn cooperative_matrix() {
     let pdevice = &device.as_vulkan().unwrap().physical_device;
     dbg!(&pdevice.cooperative_matrix_properties);
     dbg!(&pdevice.cooperative_matrix_features);
+}
+#[test]
+fn cast_array_vec() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let arr = tr::arr(&[
+        &tr::sized_literal(1f32, 2),
+        &tr::literal(2f32),
+        &tr::literal(3f32),
+    ]);
+    let vec = arr.cast(vartype::vector(f32::var_ty(), 3));
+    let arr = vec.cast(vartype::array(i32::var_ty(), 3));
+
+    vec.schedule();
+    arr.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    // assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
+    assert_eq!(arr.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
 }
