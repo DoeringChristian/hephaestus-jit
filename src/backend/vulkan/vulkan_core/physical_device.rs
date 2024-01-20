@@ -76,8 +76,8 @@ impl PhysicalDevice {
             .push_next(&mut features_v1_1)
             .push_next(&mut features_v1_2)
             .push_next(&mut acceleration_structure_features)
-            .push_next(&mut ray_query_features)
-            .push_next(&mut cooperative_matrix_features);
+            .push_next(&mut ray_query_features);
+        // .push_next(&mut cooperative_matrix_features);
 
         unsafe { instance.get_physical_device_features2(physical_device, &mut features2) };
 
@@ -95,8 +95,8 @@ impl PhysicalDevice {
             .push_next(&mut properties_v1_1)
             .push_next(&mut properties_v1_2)
             .push_next(&mut acceleration_structure_properties)
-            .push_next(&mut subgroup_properties)
-            .push_next(&mut cooperative_matrix_properties);
+            .push_next(&mut subgroup_properties);
+        // .push_next(&mut cooperative_matrix_properties);
 
         unsafe { instance.get_physical_device_properties2(physical_device, &mut properties2) };
 
