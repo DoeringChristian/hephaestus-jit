@@ -71,7 +71,7 @@ pub fn assemble_entry_point(
 
 
 // Cooperative Matrix
-#extension GL_KHR_cooperative_matrix: enable
+// #extension GL_KHR_cooperative_matrix: enable
         
 "#
     )?;
