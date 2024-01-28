@@ -429,6 +429,9 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     writeln!(s, "\t}}")?;
                 }
             }
+            crate::op::KernelOp::AtomicInc => {
+                todo!();
+            }
             crate::op::KernelOp::Gather => {
                 let src = deps[0];
                 let idx = deps[1];
@@ -436,7 +439,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let buffer_idx = ir.var(src).data + 1;
 
                 let dst = Reg(id);
-                let idx = Reg(deps[1]);
+                let idx = Reg(idx);
 
                 if let Some(cond) = cond {
                     let cond = Reg(*cond);

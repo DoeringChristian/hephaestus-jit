@@ -49,6 +49,7 @@ pub enum KernelOp {
     Scatter,
     ScatterReduce(ReduceOp),
     ScatterAtomic(ReduceOp),
+    AtomicInc,
     Gather,
     Index,
     Literal,

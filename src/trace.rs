@@ -861,6 +861,27 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
+    pub fn atomic_inc(&self, dst: &Self, idx: &Self, op: ReduceOp) -> Self {
+        dst.schedule();
+        schedule_eval();
+        let ty = self.ty();
+        let extent = resulting_extent([self, idx].into_iter());
+        assert!(extent.size() <= 1);
+        
+        let dst_ref = dst.get_mut();
+        let res = push_var(
+            Var {
+                op: Op::KernelOp(KernelOp::AtomicInc),
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [&dst_ref, self, idx],
+        );
+        dst.mark_dirty();
+        // NOTE: do not schedule result of scatter_atomic
+        res
+    }
     pub fn mat_fma(&self, b: &Self, c: &Self) -> Self{
         let extent = resulting_extent([self, b, c]);
         let ty = self.ty();
