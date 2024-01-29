@@ -69,6 +69,9 @@ pub fn assemble_entry_point(
 // Scalar Block layout 
 #extension GL_EXT_scalar_block_layout: require
 
+// Subgroup
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_basic: enable
 
 // Cooperative Matrix
 // #extension GL_KHR_cooperative_matrix: enable
@@ -430,7 +433,34 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 }
             }
             crate::op::KernelOp::AtomicInc => {
-                todo!();
+                let dst = deps[0];
+                let idx = deps[1];
+                let cond = deps[2];
+                let buffer_idx = ir.var(dst).data + 1;
+
+                let dst = Reg(id);
+                let idx = Reg(idx);
+
+                let cond = Reg(cond);
+                writeln!(s, "\t{glsl_ty} {dst};")?;
+                writeln!(s, "\t{{")?;
+                writeln!(s, "\t\tuvec4 activemask = subgroupBallot({cond});")?;
+                writeln!(
+                    s,
+                    "\t\tuint activelanes = subgroupBallotBitCount(activemask);"
+                )?;
+                writeln!(s, "\t\tuint laneid = gl_SubgroupInvocationID;")?;
+                writeln!(s, "\t\tuvec4 ltmask = gl_SubgroupLtMask;")?;
+                writeln!(s, "\t\tuint32_t warpid;")?;
+                writeln!(s, "\t\tif (laneid == 0){{")?;
+                writeln!(s, "\t\t\twarpid = atomicAdd(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], activelanes);")?;
+                writeln!(s, "\t\t}}")?;
+                writeln!(s, "\t\twarpid = subgroupBroadcast(warpid, 0);")?;
+                writeln!(
+                    s,
+                    "\t\t{dst} = warpid + subgroupBallotBitCount(activemask & ltmask);"
+                )?;
+                writeln!(s, "\t}}")?;
             }
             crate::op::KernelOp::Gather => {
                 let src = deps[0];

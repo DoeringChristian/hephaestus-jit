@@ -1,4 +1,5 @@
 use half::f16;
+use rand::Rng;
 use std::collections::HashSet;
 
 use approx::assert_abs_diff_eq;
@@ -1111,4 +1112,63 @@ fn cast_array_vec() {
 
     // assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
     assert_eq!(arr.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
+}
+#[test]
+fn atomic_inc() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let atomics = tr::array(&[0u32, 0, 0], &device);
+
+    let active = tr::sized_literal(true, 1000);
+    let ids = atomics.atomic_inc(&tr::literal(1u32), &active);
+
+    ids.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    // dbg!(ids.to_vec::<u32>(..));
+
+    let mut uniq = HashSet::new();
+    assert!(
+        ids.to_vec::<u32>(..)
+            .into_iter()
+            .all(move |x| uniq.insert(x)),
+        "Atomic Operations should return the previous index which is unique!"
+    );
+}
+#[test]
+fn atomic_inc_rand() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let atomics = tr::array(&[0u32, 0, 0], &device);
+
+    let mut rng = rand::thread_rng();
+    let active_vec = (0..1000).map(|_| rng.gen_bool(0.5)).collect::<Vec<_>>();
+    let active = tr::array(&active_vec, &device);
+
+    let ids = atomics.atomic_inc(&tr::literal(1u32), &active);
+
+    let (idxs, len) = active.compress();
+
+    let uids = ids.gather(&idxs);
+
+    uids.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    // dbg!(ids.to_vec::<u32>(..));
+
+    let mut uniq = HashSet::new();
+    assert!(
+        uids.to_vec::<u32>(..)
+            .into_iter()
+            .all(move |x| uniq.insert(x)),
+        "Atomic Operations should return the previous index which is unique!"
+    );
 }
