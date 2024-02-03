@@ -215,7 +215,7 @@ pub enum PassOp {
 /// TODO: should we compile for a device?
 pub fn compile(
     trace: &mut trace::Trace,
-    schedule: &trace::Schedule,
+    ts: &trace::ThreadState,
     params: &[&trace::VarRef],
 ) -> Graph {
     let params = params
@@ -224,8 +224,9 @@ pub fn compile(
         .map(|(i, r)| (r.id(), i))
         .collect::<HashMap<_, _>>();
 
-    let mut vars = schedule.vars.iter().map(|r| r.id()).collect::<Vec<_>>();
-    let groups = schedule.groups.clone();
+    // Get scheduled variables from thread state in order
+    let mut vars = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
+    let groups = ts.groups.clone();
 
     // Subdivide groups by extent
     let groups = groups

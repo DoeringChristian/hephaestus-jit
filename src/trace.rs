@@ -11,6 +11,7 @@ use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::Resource;
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, utils};
+use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
 
@@ -27,11 +28,10 @@ pub use crate::record::record;
 /// The equivalent struct in Dr.Jit would be `ThreadState`
 ///
 #[derive(Debug)]
-pub struct Schedule {
-    // Used for deduplication
-    pub var_set: HashSet<VarId>, 
+pub struct ThreadState {
     // Scheduled variables
-    pub vars: Vec<VarRef>,
+    // TODO: maybe use IndexSet
+    pub scheduled: IndexMap<VarId, VarRef>,
     // Groups of scheduled variables, that can be compiled into the same kernel
     pub groups: Vec<Range<usize>>, 
     // Start of the next group
@@ -40,14 +40,14 @@ pub struct Schedule {
     // Represents the current scope
     pub scope: usize,
 }
-impl Schedule {
+impl ThreadState {
     pub fn new_group(&mut self) {
         // Clear `dirty` mark on variables
         for i in self.groups.last().unwrap_or(&(0..0)).clone() {
-            self.vars[i].clear_dirty();
+            self.scheduled[i].clear_dirty();
         }
         let start = self.start;
-        let end = self.vars.len();
+        let end = self.scheduled.len();
         if start != end {
             self.groups.push(start..end);
             self.start = end;
@@ -61,11 +61,10 @@ impl Schedule {
         self.scope()
     }
 }
-impl Default for Schedule {
+impl Default for ThreadState {
     fn default() -> Self {
         Self {
-            var_set: Default::default(),
-            vars: Default::default(),
+            scheduled: Default::default(),
             groups: Default::default(),
             start: Default::default(),
             scope: with_trace(|trace| trace.new_scope()).0,
@@ -77,7 +76,7 @@ pub static TRACE: Lazy<Mutex<Trace>> = Lazy::new(|| Mutex::new(Trace::default())
 
 thread_local! {
     // pub static TRACE: RefCell<Trace> = RefCell::new(Default::default());
-    pub static SCHEDULE: RefCell<Schedule> = RefCell::new(Default::default());
+    pub static TS: RefCell<ThreadState> = RefCell::new(Default::default());
 }
 
 ///
@@ -140,7 +139,6 @@ impl Trace {
         self.inc_rc(id);
         VarRef {
             id,
-            _thread_id: std::thread::current().id(),
         }
     }
     pub fn is_empty(&self) -> bool {
@@ -169,6 +167,7 @@ impl Drop for Trace {
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VarId(DefaultKey);
 
+/// TODO: maybe make non-null
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ScopeId(usize);
 
@@ -178,7 +177,6 @@ pub struct ScopeId(usize);
 ///
 pub struct VarRef {
     id: VarId,
-    _thread_id: ThreadId,
 }
 impl Debug for VarRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -197,7 +195,6 @@ impl Clone for VarRef {
         with_trace(|t| t.inc_rc(self.id()));
         Self {
             id: self.id,
-            _thread_id: self._thread_id,
         }
     }
 }
@@ -218,6 +215,8 @@ pub struct Var {
     pub ty: &'static VarType,
     pub extent: Extent, // Extent of the variable
 
+    pub scope: ScopeId,
+
     pub dirty: bool,
 
     pub data: Resource,
@@ -231,6 +230,7 @@ impl Default for Var {
             op: Default::default(),
             ty: vartype::void(),
             extent: Default::default(),
+            scope: Default::default(),
             dirty: Default::default(),
             data: Default::default(),
             deps: Default::default(),
@@ -278,9 +278,11 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
 
     // Push actual variable
     v.deps = deps;
+    v.scope = TS.with(|s|{
+        s.borrow().scope()
+    });
     let res = with_trace(|t| VarRef {
         id: t.push_var(v),
-        _thread_id: std::thread::current().id(),
     });
     // Auto schedule and schedule evaluation if device op
     if is_device_op {
@@ -298,7 +300,7 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
 ///
 pub fn compile() -> graph::Graph {
     schedule_eval();
-    SCHEDULE.with(|s| {
+    TS.with(|s| {
         let mut s = s.borrow_mut();
         let schedule = std::mem::take(&mut (*s));
         let graph = with_trace(|t| graph::compile(t, &schedule, &[]));
@@ -309,7 +311,7 @@ pub fn compile() -> graph::Graph {
 /// Schedules the current group of scheduled variables for evaluation (see [Schedule]).
 ///
 pub fn schedule_eval() {
-    SCHEDULE.with(|s| {
+    TS.with(|s| {
         let mut s = s.borrow_mut();
         s.new_group();
     })
@@ -583,7 +585,6 @@ impl VarRef {
         });
         Self {
             id,
-            _thread_id: std::thread::current().id(),
         }
     }
     pub fn mark_dirty(&self) {
@@ -599,9 +600,6 @@ impl VarRef {
     pub fn dirty(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).dirty)
     }
-    pub fn same_trace(&self, other: &VarRef) -> bool {
-        self._thread_id == other._thread_id
-    }
     /// Schedule the variable for execution in the current group
     pub fn schedule(&self) {
         // We should not be able to schedule already evaluated variables as well as ones who's
@@ -609,12 +607,9 @@ impl VarRef {
         if self.is_evaluated() || self.is_unsized() {
             return;
         }
-        SCHEDULE.with(|s| {
+        TS.with(|s| {
             let mut s = s.borrow_mut();
-            if !s.var_set.contains(&self.id()) {
-                s.vars.push(self.clone());
-                s.var_set.insert(self.id());
-            }
+            s.scheduled.entry(self.id()).or_insert_with(||self.clone());
         })
     }
     pub fn is_evaluated(&self) -> bool {
@@ -631,8 +626,6 @@ macro_rules! bop {
     ($op:ident $(-> $result_type:expr)?) => {
         paste::paste! {
             pub fn $op(&self, other: &VarRef) -> VarRef {
-                assert_eq!(self._thread_id, std::thread::current().id());
-                assert_eq!(other._thread_id, std::thread::current().id());
 
                 let extent = resulting_extent([self, other]);
 
@@ -657,7 +650,6 @@ macro_rules! uop {
     ($op:ident $(-> $result_type:expr)?) => {
         paste::paste! {
             pub fn $op(&self) -> VarRef {
-                assert_eq!(self._thread_id, std::thread::current().id());
 
                 let extent = resulting_extent([self]);
 
@@ -715,7 +707,6 @@ impl VarRef {
     uop!(log2);
 
     pub fn cast(&self, ty: &'static VarType) -> Self {
-        assert_eq!(self._thread_id, std::thread::current().id());
 
         let extent = resulting_extent([self]);
 
@@ -740,7 +731,6 @@ impl VarRef {
     // }
 
     pub fn bitcast(&self, ty: &'static VarType) -> Self {
-        assert_eq!(self._thread_id, std::thread::current().id());
 
         let extent = resulting_extent([self]);
 
@@ -981,7 +971,6 @@ impl VarRef {
         self.to_vec(0..1)[0]
     }
     pub fn to_vec<T: AsVarType>(&self, range: impl std::ops::RangeBounds<usize>) -> Vec<T> {
-        assert_eq!(self._thread_id, std::thread::current().id());
         let size = match self.extent() {
             Extent::Size(size) => size,
             Extent::DynSize { size: size_dep, .. } => {

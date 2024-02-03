@@ -24,7 +24,7 @@ fn simple1() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    tr::SCHEDULE.with(|s| {
+    tr::TS.with(|s| {
         dbg!(&s);
     });
 
@@ -53,7 +53,7 @@ fn simple_u16() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    tr::SCHEDULE.with(|s| {
+    tr::TS.with(|s| {
         dbg!(&s);
     });
     let mut graph = tr::compile();
@@ -93,7 +93,7 @@ fn scatter_chain1() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    tr::SCHEDULE.with(|s| {
+    tr::TS.with(|s| {
         dbg!(&s);
     });
 
@@ -373,10 +373,10 @@ fn accel() {
     tr::with_trace(|trace| {
         dbg!(&trace);
     });
-    tr::SCHEDULE.with(|s| {
+    tr::TS.with(|s| {
         let s = s.borrow();
         dbg!(&s);
-        for v in s.vars.iter() {
+        for v in s.scheduled.values() {
             tr::with_trace(|trace| {
                 dbg!(trace.var(v.id()));
             })

@@ -2,7 +2,7 @@ use std::array::IntoIter;
 
 use crate::{backend, graph};
 
-use crate::tr::{schedule_eval, with_trace, VarRef, SCHEDULE};
+use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 
 pub trait Traverse {
     // This operation flattens the structure to it's VarRef components
@@ -71,7 +71,7 @@ where
 
         if graph.is_none() {
             // Swap out current schedule
-            let tmp = SCHEDULE.with(|s| {
+            let tmp = TS.with(|s| {
                 let mut s = s.borrow_mut();
                 std::mem::take(&mut *s)
             });
@@ -81,14 +81,14 @@ where
 
             // Compile with params
             schedule_eval();
-            graph = Some(SCHEDULE.with(|s| {
+            graph = Some(TS.with(|s| {
                 let mut s = s.borrow_mut();
                 let schedule = std::mem::take(&mut (*s));
                 with_trace(|t| graph::compile(t, &schedule, &param_vec))
             }));
 
             // Swap in old schedule
-            SCHEDULE.with(|s| {
+            TS.with(|s| {
                 let mut s = s.borrow_mut();
                 *s = tmp;
             });
