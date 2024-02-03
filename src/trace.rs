@@ -24,12 +24,21 @@ pub use crate::record::record;
 /// We also deduplicate scheduled variables using the [Self::var_set] hash set, allowing a variable
 /// to only be scheduled once.
 ///
-#[derive(Debug, Default)]
+/// The equivalent struct in Dr.Jit would be `ThreadState`
+///
+#[derive(Debug)]
 pub struct Schedule {
-    pub var_set: HashSet<VarId>,
+    // Used for deduplication
+    pub var_set: HashSet<VarId>, 
+    // Scheduled variables
     pub vars: Vec<VarRef>,
-    pub groups: Vec<Range<usize>>,
+    // Groups of scheduled variables, that can be compiled into the same kernel
+    pub groups: Vec<Range<usize>>, 
+    // Start of the next group
     pub start: usize,
+
+    // Represents the current scope
+    pub scope: usize,
 }
 impl Schedule {
     pub fn new_group(&mut self) {
@@ -42,6 +51,24 @@ impl Schedule {
         if start != end {
             self.groups.push(start..end);
             self.start = end;
+        }
+    }
+    pub fn scope(&self) -> ScopeId {
+        ScopeId(self.scope)
+    }
+    pub fn new_scope(&mut self) -> ScopeId{
+        self.scope = with_trace(|trace| trace.new_scope()).0;
+        self.scope()
+    }
+}
+impl Default for Schedule {
+    fn default() -> Self {
+        Self {
+            var_set: Default::default(),
+            vars: Default::default(),
+            groups: Default::default(),
+            start: Default::default(),
+            scope: with_trace(|trace| trace.new_scope()).0,
         }
     }
 }
@@ -60,6 +87,7 @@ thread_local! {
 #[derive(Default, Debug)]
 pub struct Trace {
     vars: SlotMap<DefaultKey, Var>,
+    scope_ctr: usize,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
@@ -116,6 +144,11 @@ impl Trace {
     pub fn is_empty(&self) -> bool {
         self.vars.is_empty()
     }
+    pub fn new_scope(&mut self) -> ScopeId {
+        let scope = ScopeId(self.scope_ctr);
+        self.scope_ctr += 1;
+        scope
+    }
 }
 pub fn is_empty() -> bool {
     with_trace(|trace| trace.is_empty())
@@ -133,6 +166,9 @@ impl Drop for Trace {
 ///
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VarId(DefaultKey);
+
+#[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ScopeId(usize);
 
 ///
 /// This is a wrapper over the [VarId] id struct.
@@ -868,7 +904,7 @@ impl VarRef {
         let ty = self.ty();
         let extent = resulting_extent([active].into_iter());
         assert!(matches!(idx.extent(), Extent::None));
-        
+
         let dst_ref = self.get_mut();
         let res = push_var(
             Var {
@@ -883,19 +919,22 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn mat_fma(&self, b: &Self, c: &Self) -> Self{
+    pub fn mat_fma(&self, b: &Self, c: &Self) -> Self {
         let extent = resulting_extent([self, b, c]);
         let ty = self.ty();
-        
-        push_var(Var{
-            op: Op::KernelOp(KernelOp::MatFMA),
-            extent,
-            ty,
-            ..Default::default()
-        }, [self, b, c])
+
+        push_var(
+            Var {
+                op: Op::KernelOp(KernelOp::MatFMA),
+                extent,
+                ty,
+                ..Default::default()
+            },
+            [self, b, c],
+        )
     }
 }
-impl VarRef{
+impl VarRef {
     pub fn get_ref(&self) -> Self {
         // TODO: maybe do scheduling here?
         self._get_ref(false)
