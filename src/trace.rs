@@ -84,6 +84,8 @@ thread_local! {
 /// A Directed Acyclic Graph (DAG), representing the traced computations.
 /// Variables are tracked using reference counters, similar to mitsuba.
 ///
+/// The Dr.Jit equivalent would be the `State` struct
+///
 #[derive(Default, Debug)]
 pub struct Trace {
     vars: SlotMap<DefaultKey, Var>,
