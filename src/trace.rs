@@ -33,7 +33,7 @@ pub struct ThreadState {
     // TODO: maybe use IndexSet
     pub scheduled: IndexMap<VarId, VarRef>,
     // Groups of scheduled variables, that can be compiled into the same kernel
-    pub groups: Vec<Range<usize>>, 
+    pub groups: Vec<Range<usize>>,
     // Start of the next group
     pub start: usize,
 
@@ -56,7 +56,7 @@ impl ThreadState {
     pub fn scope(&self) -> ScopeId {
         ScopeId(self.scope)
     }
-    pub fn new_scope(&mut self) -> ScopeId{
+    pub fn new_scope(&mut self) -> ScopeId {
         self.scope = with_trace(|trace| trace.new_scope()).0;
         self.scope()
     }
@@ -137,9 +137,7 @@ impl Trace {
     }
     pub fn ref_borrow(&mut self, id: VarId) -> VarRef {
         self.inc_rc(id);
-        VarRef {
-            id,
-        }
+        VarRef { id }
     }
     pub fn is_empty(&self) -> bool {
         self.vars.is_empty()
@@ -193,9 +191,7 @@ impl VarRef {
 impl Clone for VarRef {
     fn clone(&self) -> Self {
         with_trace(|t| t.inc_rc(self.id()));
-        Self {
-            id: self.id,
-        }
+        Self { id: self.id }
     }
 }
 impl Drop for VarRef {
@@ -276,14 +272,19 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
         schedule_eval();
     }
 
-    // Push actual variable
+    // Set scope as max between thread state and dependencies
+    v.scope = [TS.with(|s| s.borrow().scope())]
+        .into_iter()
+        .chain(
+            deps.iter()
+                .map(|id| with_trace(|trace| trace.var(*id).scope)),
+        )
+        .max()
+        .unwrap();
     v.deps = deps;
-    v.scope = TS.with(|s|{
-        s.borrow().scope()
-    });
-    let res = with_trace(|t| VarRef {
-        id: t.push_var(v),
-    });
+    
+    // Push actual variable
+    let res = with_trace(|t| VarRef { id: t.push_var(v) });
     // Auto schedule and schedule evaluation if device op
     if is_device_op {
         res.schedule();
@@ -583,9 +584,7 @@ impl VarRef {
         with_trace(|trace| {
             trace.inc_rc(id);
         });
-        Self {
-            id,
-        }
+        Self { id }
     }
     pub fn mark_dirty(&self) {
         with_trace(|trace| {
@@ -609,7 +608,7 @@ impl VarRef {
         }
         TS.with(|s| {
             let mut s = s.borrow_mut();
-            s.scheduled.entry(self.id()).or_insert_with(||self.clone());
+            s.scheduled.entry(self.id()).or_insert_with(|| self.clone());
         })
     }
     pub fn is_evaluated(&self) -> bool {
@@ -707,7 +706,6 @@ impl VarRef {
     uop!(log2);
 
     pub fn cast(&self, ty: &'static VarType) -> Self {
-
         let extent = resulting_extent([self]);
 
         push_var(
@@ -731,7 +729,6 @@ impl VarRef {
     // }
 
     pub fn bitcast(&self, ty: &'static VarType) -> Self {
-
         let extent = resulting_extent([self]);
 
         push_var(
@@ -965,6 +962,9 @@ impl VarRef {
     }
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
+    }
+    pub fn scope(&self) -> ScopeId {
+        with_trace(|t| t.var(self.id()).scope)
     }
     pub fn item<T: AsVarType>(&self) -> T {
         assert_eq!(self.size(), 1);
