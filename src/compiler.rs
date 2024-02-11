@@ -18,16 +18,16 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn collect_vars(&mut self, trace: &Trace, ids: impl IntoIterator<Item = trace::VarId>) {
+    pub fn compile(&mut self, trace: &Trace, ids: &[trace::VarId]) {
         for id in ids {
-            let src = self.collect(trace, id);
+            let src = self.collect(trace, *id);
 
-            let var = trace.var(id);
+            let var = trace.var(*id);
             if var.ty.size() == 0 {
                 continue;
             }
 
-            let buffer_id = self.push_buffer(id);
+            let buffer_id = self.push_buffer(*id);
             let dst = self.ir.push_var(
                 ir::Var {
                     op: KernelOp::BufferRef,

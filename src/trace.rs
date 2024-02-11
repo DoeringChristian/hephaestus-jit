@@ -281,8 +281,11 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
         )
         .max()
         .unwrap();
+
+    // Set dependencies
+
     v.deps = deps;
-    
+
     // Push actual variable
     let res = with_trace(|t| VarRef { id: t.push_var(v) });
     // Auto schedule and schedule evaluation if device op
