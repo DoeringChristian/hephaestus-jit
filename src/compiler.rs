@@ -23,6 +23,7 @@ impl Compiler {
             let src = self.collect(trace, *id);
 
             let var = trace.var(*id);
+            let scope = var.scope;
             if var.ty.size() == 0 {
                 continue;
             }
@@ -33,6 +34,7 @@ impl Compiler {
                     op: KernelOp::BufferRef,
                     ty: var.ty,
                     data: buffer_id as _,
+                    scope,
                     ..Default::default()
                 },
                 [],
@@ -41,6 +43,7 @@ impl Compiler {
                 ir::Var {
                     op: KernelOp::Index,
                     ty: u32::var_ty(),
+                    scope,
                     ..Default::default()
                 },
                 [],
@@ -49,11 +52,13 @@ impl Compiler {
                 ir::Var {
                     op: KernelOp::Scatter,
                     ty: vartype::void(),
+                    scope,
                     ..Default::default()
                 },
                 [dst, src, idx],
             );
         }
+        self.ir.scope_sort();
         self.ir.n_buffers = self.buffers.len();
         self.ir.n_textures = self.textures.len();
         self.ir.n_accels = self.accels.len();
@@ -64,6 +69,7 @@ impl Compiler {
         }
 
         let var = trace.var(id);
+        let scope = var.scope;
 
         let id = match var.op {
             Op::Ref { .. } => {
@@ -77,6 +83,7 @@ impl Compiler {
                     ir::Var {
                         op: KernelOp::Index,
                         ty: u32::var_ty(),
+                        scope,
                         ..Default::default()
                     },
                     [],
@@ -85,6 +92,7 @@ impl Compiler {
                     ir::Var {
                         op: KernelOp::Gather,
                         ty: var.ty,
+                        scope,
                         ..Default::default()
                     },
                     [data, idx],
@@ -96,6 +104,7 @@ impl Compiler {
                         op: KernelOp::Literal,
                         ty: var.ty,
                         data: var.data.literal().unwrap(),
+                        scope,
                         ..Default::default()
                     },
                     [],
@@ -110,6 +119,7 @@ impl Compiler {
                         ir::Var {
                             op: kop,
                             ty: var.ty,
+                            scope,
                             ..Default::default()
                         },
                         deps,
@@ -126,6 +136,7 @@ impl Compiler {
         }
 
         let var = trace.var(id);
+        let scope = var.scope;
 
         match trace.var(id).op.resulting_op() {
             Op::Buffer => {
@@ -135,6 +146,7 @@ impl Compiler {
                         op: KernelOp::BufferRef,
                         ty: var.ty,
                         data: buffer_id as _,
+                        scope,
                         ..Default::default()
                     },
                     [],
@@ -148,6 +160,7 @@ impl Compiler {
                         op: KernelOp::TextureRef { dim },
                         ty: var.ty,
                         data: texture_id as _,
+                        scope,
                         ..Default::default()
                     },
                     [],
@@ -160,6 +173,7 @@ impl Compiler {
                         op: KernelOp::AccelRef,
                         ty: var.ty,
                         data: accel_id as _,
+                        scope,
                         ..Default::default()
                     },
                     [],

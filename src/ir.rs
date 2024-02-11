@@ -1,5 +1,7 @@
 use crate::op::KernelOp;
+use crate::tr::ScopeId;
 use std::collections::hash_map::DefaultHasher;
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
@@ -9,12 +11,13 @@ use crate::vartype::VarType;
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(pub(crate) usize);
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Var {
     pub(crate) ty: &'static VarType,
     pub(crate) op: KernelOp,
     pub(crate) deps: (usize, usize),
     pub(crate) data: u64,
+    pub(crate) scope: ScopeId,
 }
 impl Default for Var {
     fn default() -> Self {
@@ -23,7 +26,26 @@ impl Default for Var {
             op: Default::default(),
             deps: Default::default(),
             data: Default::default(),
+            scope: Default::default(),
         }
+    }
+}
+impl Debug for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Var")
+            .field("ty", &self.ty)
+            .field("op", &self.op)
+            .field("deps", &self.deps)
+            .field("data", &self.data)
+            .finish()
+    }
+}
+impl Hash for Var {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ty.hash(state);
+        self.op.hash(state);
+        self.deps.hash(state);
+        self.data.hash(state);
     }
 }
 
@@ -53,6 +75,29 @@ impl IR {
         var.deps = (start, stop);
         self.vars.push(var);
         id
+    }
+    pub fn scope_sort(&mut self) {
+        self.invalidate();
+
+        // Calculate sorting indices by sorting by scope
+        let mut indices = (0..self.vars.len()).collect::<Vec<_>>();
+        indices.sort_by_key(|&i| self.vars[i].scope);
+
+        // Change dependencies
+        for id in self.deps.iter_mut() {
+            *id = VarId(indices[id.0]);
+        }
+
+        // Scatter variables at their sorted location
+        let mut vars = Vec::with_capacity(self.vars.len());
+
+        // SAFETY: this is safe because [indices] represents a valid permutation
+        // and we initialize the array just after this.
+        unsafe { vars.set_len(self.vars.len()) };
+
+        for (i, var) in indices.into_iter().zip(&self.vars) {
+            vars[i] = *var;
+        }
     }
     pub fn var(&self, id: VarId) -> &Var {
         &self.vars[id.0]
