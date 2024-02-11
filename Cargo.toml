@@ -63,3 +63,7 @@ pre-commit = "cargo test"
 [[bench]]
 name = "vulkan"
 harness = false
+
+[[bench]]
+name = "compile"
+harness = false
