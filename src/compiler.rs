@@ -203,4 +203,14 @@ impl Compiler {
             accel_id
         })
     }
+    pub fn clear(&mut self) {
+        self.ir.clear();
+        self.visited.clear();
+        self.id2buffer.clear();
+        self.buffers.clear();
+        self.id2texture.clear();
+        self.textures.clear();
+        self.id2accel.clear();
+        self.accels.clear();
+    }
 }

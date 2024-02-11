@@ -1,14 +1,7 @@
 use std::fmt::Debug;
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use criterion::{BenchmarkId, Throughput};
-use hephaestus_jit::backend::vulkan;
-use hephaestus_jit::backend::Device;
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use hephaestus_jit::tr;
-
-mod benches {
-    use super::*;
-}
 
 pub fn simple(c: &mut Criterion) {
     c.bench_function("simple", |b| {

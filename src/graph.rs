@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -304,25 +305,31 @@ pub fn compile(
             }
         } else {
             // Handle Kernel Ops (compile)
-            let mut compiler = compiler::Compiler::default();
+            thread_local! {
+                static COMPILER: RefCell<compiler::Compiler> = Default::default();
+            };
+            let (resources, ir) = COMPILER.with(|compiler| {
+                let mut compiler = compiler.borrow_mut();
+                compiler.clear();
 
-            compiler.compile(trace, &vars[group.clone()]);
+                compiler.compile(trace, &vars[group.clone()]);
 
-            let resources = compiler
-                .buffers
-                .into_iter()
-                .chain(compiler.textures.into_iter())
-                .chain(compiler.accels.into_iter())
-                .flat_map(|id| graph_builder.try_push_resource(trace, id))
-                .collect::<Vec<_>>();
+                let resources = compiler
+                    .buffers
+                    .iter()
+                    .chain(compiler.textures.iter())
+                    .chain(compiler.accels.iter())
+                    .flat_map(|&id| graph_builder.try_push_resource(trace, id))
+                    .collect::<Vec<_>>();
+
+                let ir = std::mem::take(&mut compiler.ir);
+                (resources, ir)
+            });
             let size = trace.var(vars[group.start]).extent.capacity();
             Pass {
                 resources,
                 size_buffer,
-                op: PassOp::Kernel {
-                    ir: compiler.ir,
-                    size,
-                },
+                op: PassOp::Kernel { ir, size },
             }
         };
 

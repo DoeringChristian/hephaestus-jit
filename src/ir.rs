@@ -1,5 +1,6 @@
 use crate::op::KernelOp;
 use crate::tr::ScopeId;
+use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -79,25 +80,39 @@ impl IR {
     pub fn scope_sort(&mut self) {
         self.invalidate();
 
-        // Calculate sorting indices by sorting by scope
-        let mut indices = (0..self.vars.len()).collect::<Vec<_>>();
-        indices.sort_by_key(|&i| self.vars[i].scope);
+        thread_local! {
+            static LOCAL: RefCell<(Vec<usize>,  Vec<Var> )> = Default::default();
+        };
 
-        // Change dependencies
-        for id in self.deps.iter_mut() {
-            *id = VarId(indices[id.0]);
-        }
+        LOCAL.with(|local| {
+            let mut local = local.borrow_mut();
+            let (indices, vars) = &mut *local;
 
-        // Scatter variables at their sorted location
-        let mut vars = Vec::with_capacity(self.vars.len());
+            indices.clear();
 
-        // SAFETY: this is safe because [indices] represents a valid permutation
-        // and we initialize the array just after this.
-        unsafe { vars.set_len(self.vars.len()) };
+            // Calculate sorting indices by sorting by scope
+            indices.extend(0..self.vars.len());
+            indices.sort_by_key(|&i| self.vars[i].scope);
 
-        for (i, var) in indices.into_iter().zip(&self.vars) {
-            vars[i] = *var;
-        }
+            // Change dependencies
+            for id in self.deps.iter_mut() {
+                *id = VarId(indices[id.0]);
+            }
+
+            // Scatter variables at their sorted location
+            vars.clear();
+            vars.reserve(self.vars.len());
+
+            // SAFETY: this is safe because [indices] represents a valid permutation
+            // and we initialize the array just after this.
+            unsafe { vars.set_len(self.vars.len()) };
+
+            for (i, var) in indices.into_iter().zip(&self.vars) {
+                vars[*i] = *var;
+            }
+
+            std::mem::swap(&mut self.vars, vars);
+        });
     }
     pub fn var(&self, id: VarId) -> &Var {
         &self.vars[id.0]
@@ -126,5 +141,13 @@ impl IR {
     /// Invalidate Hash
     pub fn invalidate(&mut self) {
         *self.hash.lock().unwrap() = None;
+    }
+    pub fn clear(&mut self) {
+        self.vars.clear();
+        self.deps.clear();
+        self.n_buffers = 0;
+        self.n_textures = 0;
+        self.n_accels = 0;
+        self.hash.lock().unwrap().take();
     }
 }
