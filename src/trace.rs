@@ -167,7 +167,7 @@ pub struct VarId(DefaultKey);
 
 /// TODO: maybe make non-null
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScopeId(usize);
+pub struct ScopeId(pub(crate) usize);
 
 ///
 /// This is a wrapper over the [VarId] id struct.
@@ -295,6 +295,11 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
     }
     // TODO: maybe mark variables dirty that have been referenced with RefMut
     res
+}
+pub fn new_scope() -> ScopeId{
+    TS.with(|ts|{
+        ts.borrow_mut().new_scope()
+    })
 }
 
 ///

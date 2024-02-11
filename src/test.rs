@@ -1,6 +1,8 @@
 use half::f16;
 use rand::Rng;
 use std::collections::HashSet;
+use std::sync::Mutex;
+use std::thread;
 
 use approx::assert_abs_diff_eq;
 
@@ -1171,4 +1173,40 @@ fn atomic_inc_rand() {
             .all(move |x| uniq.insert(x)),
         "Atomic Operations should return the previous index which is unique!"
     );
+}
+
+#[test]
+fn scope() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let x = tr::sized_literal(1, 2);
+
+    let ym = Mutex::new(None);
+    let yr = &ym;
+
+    thread::scope(|s| {
+        let thread = s.spawn(move || {
+            let _scope = tr::new_scope();
+            let y = tr::literal(1);
+            *yr.lock().unwrap() = Some(y);
+        });
+
+        thread.join().unwrap();
+    });
+
+    let y = std::mem::take(&mut (*ym.lock().unwrap())).unwrap();
+
+    let z = x.add(&y);
+
+    z.schedule();
+
+    let graph = tr::compile();
+    insta::assert_debug_snapshot!(graph);
+    graph.launch(&device);
+
+    assert_eq!(y.scope(), z.scope());
+    assert!(x.scope() < y.scope());
+
+    assert_eq!(z.to_vec::<i32>(..), vec![2, 2]);
 }

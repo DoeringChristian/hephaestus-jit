@@ -1,0 +1,115 @@
+---
+source: src/test.rs
+expression: graph
+---
+Graph {
+    passes: [
+        Pass {
+            resources: [
+                ResourceId(
+                    0,
+                ),
+            ],
+            size_buffer: None,
+            op: Kernel {
+                ir: IR {
+                    vars: [
+                        Var {
+                            ty: I32,
+                            op: Literal,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 1,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Literal,
+                            deps: (
+                                0,
+                                0,
+                            ),
+                            data: 1,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Bop(
+                                Add,
+                            ),
+                            deps: (
+                                0,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: BufferRef,
+                            deps: (
+                                2,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: U32,
+                            op: Index,
+                            deps: (
+                                2,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: Void,
+                            op: Scatter,
+                            deps: (
+                                2,
+                                5,
+                            ),
+                            data: 0,
+                        },
+                    ],
+                    deps: [
+                        VarId(
+                            0,
+                        ),
+                        VarId(
+                            1,
+                        ),
+                        VarId(
+                            3,
+                        ),
+                        VarId(
+                            2,
+                        ),
+                        VarId(
+                            4,
+                        ),
+                    ],
+                    n_buffers: 1,
+                    n_textures: 0,
+                    n_accels: 0,
+                    hash: Mutex {
+                        data: None,
+                        poisoned: false,
+                        ..
+                    },
+                },
+                size: 2,
+            },
+        },
+    ],
+    resource_descs: [
+        BufferDesc(
+            BufferDesc {
+                size: 2,
+                ty: I32,
+            },
+        ),
+    ],
+    resources: [
+        Internal,
+    ],
+}
