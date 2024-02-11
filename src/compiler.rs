@@ -1,3 +1,5 @@
+use indexmap::{IndexMap, IndexSet};
+
 use crate::ir::{self, IR};
 use crate::op::{KernelOp, Op};
 use crate::trace::{self, Trace};
@@ -18,16 +20,102 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn collect_vars(&mut self, trace: &Trace, ids: impl IntoIterator<Item = trace::VarId>) {
-        for id in ids {
-            let src = self.collect(trace, id);
+    pub fn compile(&mut self, trace: &Trace, ids: &[trace::VarId]) {
+        let mut vars = IndexSet::new();
 
+        fn collect(vars: &mut IndexSet<trace::VarId>, trace: &Trace, id: trace::VarId) {
+            if vars.contains(&id) {
+                return;
+            }
             let var = trace.var(id);
+            match var.op {
+                Op::KernelOp(_) => {
+                    for dep in var.deps.iter() {
+                        collect(vars, trace, *dep);
+                    }
+                }
+                Op::Buffer | Op::Texture | Op::Accel => {}
+                _ => todo!(),
+            }
+            vars.insert(id);
+        }
+
+        // Collect variables in topological order
+        for id in ids.iter() {
+            collect(&mut vars, trace, *id);
+        }
+        // Sort by scope (should preserve topological order)
+        vars.sort_by(|id0, id1| trace.var(*id0).scope.cmp(&trace.var(*id1).scope));
+
+        let mut idx2id = Vec::with_capacity(vars.len());
+
+        // Generate IR
+        for id in vars.iter() {
+            let var = trace.var(*id);
+
+            // TODO: handle buffer references differentily to direct buffer accesses
+            let id = match var.op {
+                Op::Buffer => {
+                    // When we hit a buffer directly we want to access the elements
+                    let data = self.collect_data(trace, *id);
+                    let idx = self.ir.push_var(
+                        ir::Var {
+                            op: KernelOp::Index,
+                            ty: u32::var_ty(),
+                            ..Default::default()
+                        },
+                        [],
+                    );
+                    self.ir.push_var(
+                        ir::Var {
+                            op: KernelOp::Gather,
+                            ty: var.ty,
+                            ..Default::default()
+                        },
+                        [data, idx],
+                    )
+                }
+                Op::KernelOp(op) => match op {
+                    KernelOp::Literal => self.ir.push_var(
+                        ir::Var {
+                            op: KernelOp::Literal,
+                            ty: var.ty,
+                            data: var.data.literal().unwrap(),
+                            ..Default::default()
+                        },
+                        [],
+                    ),
+                    _ => {
+                        let deps = trace
+                            .deps(*id)
+                            .into_iter()
+                            .map(|id| idx2id[vars.get_index_of(id).unwrap()])
+                            .collect::<Vec<_>>();
+                        self.ir.push_var(
+                            ir::Var {
+                                op,
+                                ty: var.ty,
+                                ..Default::default()
+                            },
+                            deps,
+                        )
+                    }
+                },
+                _ => todo!(),
+            };
+            idx2id.push(id);
+        }
+
+        // Scatter output variables into buffers
+        for id in ids {
+            let var = trace.var(*id);
             if var.ty.size() == 0 {
                 continue;
             }
 
-            let buffer_id = self.push_buffer(id);
+            let src = idx2id[vars.get_index_of(id).unwrap()];
+
+            let buffer_id = self.push_buffer(*id);
             let dst = self.ir.push_var(
                 ir::Var {
                     op: KernelOp::BufferRef,

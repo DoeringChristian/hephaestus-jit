@@ -306,7 +306,7 @@ pub fn compile(
             // Handle Kernel Ops (compile)
             let mut compiler = compiler::Compiler::default();
 
-            compiler.collect_vars(trace, group.clone().map(|i| vars[i]));
+            compiler.compile(trace, &vars[group.clone()]);
 
             let resources = compiler
                 .buffers

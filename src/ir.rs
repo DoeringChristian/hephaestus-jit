@@ -1,4 +1,5 @@
 use crate::op::KernelOp;
+use crate::tr::ScopeId;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
@@ -15,6 +16,7 @@ pub struct Var {
     pub(crate) op: KernelOp,
     pub(crate) deps: (usize, usize),
     pub(crate) data: u64,
+    // pub(crate) scope: ScopeId,
 }
 impl Default for Var {
     fn default() -> Self {
@@ -23,6 +25,7 @@ impl Default for Var {
             op: Default::default(),
             deps: Default::default(),
             data: Default::default(),
+            // scope: Default::default(),
         }
     }
 }

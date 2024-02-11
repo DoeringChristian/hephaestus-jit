@@ -281,6 +281,8 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
         )
         .max()
         .unwrap();
+    
+    // Set dependencies
     v.deps = deps;
     
     // Push actual variable
