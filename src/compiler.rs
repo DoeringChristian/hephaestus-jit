@@ -204,16 +204,13 @@ impl Compiler {
             accel_id
         })
     }
-    pub fn push_var<I>(
-        &mut self,
-        mut var: ir::Var,
-        deps: I,
-        // deps: impl IntoIterator<Item = ir::VarId> + ExactSizeIterator,
-    ) -> ir::VarId
+    pub fn push_var<I>(&mut self, mut var: ir::Var, deps: I) -> ir::VarId
     where
         I: IntoIterator<Item = ir::VarId>,
         I::IntoIter: ExactSizeIterator,
     {
+        // Trivial vars (without dependencies) can be optimized out using a hash map.
+        // Their scope is always zero, as they can be put at the start of the kernel.
         let deps = deps.into_iter();
         let trivial = deps.len() == 0;
 
