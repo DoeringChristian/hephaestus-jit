@@ -30,6 +30,7 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
             entry_point,
             Some(&options),
         )
+        .map_err(|err| anyhow::anyhow!("{err}: {s}"))
         .unwrap();
 
     Some(artefact.as_binary().to_vec())
@@ -292,6 +293,13 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
         let ty = var.ty;
         let glsl_ty = GlslTypeName(ty);
         // let ty = GlslTypeName(var.ty);
+
+        writeln!(
+            s,
+            "\t// var id={id}, scope={scope}",
+            id = id.0,
+            scope = var.scope.0
+        )?;
 
         match var.op {
             crate::op::KernelOp::Nop => {

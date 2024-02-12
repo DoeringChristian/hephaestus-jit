@@ -25,26 +25,6 @@ Graph {
                         },
                         Var {
                             ty: I32,
-                            op: Literal,
-                            deps: (
-                                0,
-                                0,
-                            ),
-                            data: 1,
-                        },
-                        Var {
-                            ty: I32,
-                            op: Bop(
-                                Add,
-                            ),
-                            deps: (
-                                0,
-                                2,
-                            ),
-                            data: 0,
-                        },
-                        Var {
-                            ty: I32,
                             op: BufferRef,
                             deps: (
                                 2,
@@ -57,6 +37,17 @@ Graph {
                             op: Index,
                             deps: (
                                 2,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: Bop(
+                                Add,
+                            ),
+                            deps: (
+                                0,
                                 2,
                             ),
                             data: 0,
@@ -76,6 +67,9 @@ Graph {
                             0,
                         ),
                         VarId(
+                            0,
+                        ),
+                        VarId(
                             1,
                         ),
                         VarId(
@@ -83,9 +77,6 @@ Graph {
                         ),
                         VarId(
                             2,
-                        ),
-                        VarId(
-                            4,
                         ),
                     ],
                     n_buffers: 1,

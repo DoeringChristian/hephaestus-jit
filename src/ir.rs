@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::op::KernelOp;
 use crate::tr::ScopeId;
 use std::cell::RefCell;
@@ -38,6 +40,7 @@ impl Debug for Var {
             .field("op", &self.op)
             .field("deps", &self.deps)
             .field("data", &self.data)
+            // .field("scope", &self.scope)
             .finish()
     }
 }
@@ -81,35 +84,53 @@ impl IR {
         self.invalidate();
 
         thread_local! {
-            static LOCAL: RefCell<(Vec<usize>,  Vec<Var> )> = Default::default();
+            static LOCAL: RefCell<(Vec<usize>, Vec<usize>,  Vec<Var> )> = Default::default();
         };
 
         LOCAL.with(|local| {
             let mut local = local.borrow_mut();
-            let (indices, vars) = &mut *local;
+            let (reverse, forward, vars) = &mut *local;
 
-            indices.clear();
+            // Clear threadlocals
+            reverse.clear();
+            forward.clear();
+            vars.clear();
 
-            // Calculate sorting indices by sorting by scope
-            indices.extend(0..self.vars.len());
-            indices.sort_by_key(|&i| self.vars[i].scope);
+            // Calculate the reverse permutation.
+            // Meaning that the indices indicate where the element comes from.
+            reverse.extend(0..self.vars.len());
+            reverse.sort_by_key(|&i| self.vars[i].scope);
+
+            // Calculate the forward representation of the permutation by scattering the reverse
+            // into a undefined array.
+            //
+            // SAFETY: this is safe because [reverse] represents a valid permutation
+            // and we initialize the array just after this.
+            forward.reserve(reverse.len());
+            unsafe {
+                forward.set_len(reverse.len());
+                for (i, &target) in reverse.iter().enumerate() {
+                    forward[target] = i;
+                }
+            }
 
             // Change dependencies
             for id in self.deps.iter_mut() {
-                *id = VarId(indices[id.0]);
+                *id = VarId(forward[id.0]);
             }
 
-            // Scatter variables at their sorted location
-            vars.clear();
+            // Gather variables from the reverse permutation
             vars.reserve(self.vars.len());
 
-            // SAFETY: this is safe because [indices] represents a valid permutation
-            // and we initialize the array just after this.
-            unsafe { vars.set_len(self.vars.len()) };
+            vars.extend(reverse.iter().map(|&i| self.vars[i]));
 
-            for (i, var) in indices.into_iter().zip(&self.vars) {
-                vars[*i] = *var;
-            }
+            // dbg!(&vars);
+            // let sorted = vars
+            //     .iter()
+            //     .map(|&var| var.scope)
+            //     .tuple_windows()
+            //     .all(|(w0, w1)| w0 <= w1);
+            // assert!(sorted);
 
             std::mem::swap(&mut self.vars, vars);
         });

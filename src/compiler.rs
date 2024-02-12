@@ -9,6 +9,7 @@ use std::ops::Range;
 pub struct Compiler {
     pub ir: IR,
     visited: HashMap<trace::VarId, ir::VarId>,
+    trivial: HashMap<ir::Var, ir::VarId>,
     id2buffer: HashMap<trace::VarId, usize>,
     pub buffers: Vec<trace::VarId>,
     id2texture: HashMap<trace::VarId, usize>,
@@ -29,7 +30,8 @@ impl Compiler {
             }
 
             let buffer_id = self.push_buffer(*id);
-            let dst = self.ir.push_var(
+            // TODO: maybe some optimization regarding trivial vars
+            let dst = self.push_var(
                 ir::Var {
                     op: KernelOp::BufferRef,
                     ty: var.ty,
@@ -39,7 +41,7 @@ impl Compiler {
                 },
                 [],
             );
-            let idx = self.ir.push_var(
+            let idx = self.push_var(
                 ir::Var {
                     op: KernelOp::Index,
                     ty: u32::var_ty(),
@@ -48,7 +50,7 @@ impl Compiler {
                 },
                 [],
             );
-            self.ir.push_var(
+            self.push_var(
                 ir::Var {
                     op: KernelOp::Scatter,
                     ty: vartype::void(),
@@ -79,7 +81,7 @@ impl Compiler {
             Op::Buffer => {
                 // When we hit a buffer directly we want to access the elements directly
                 let data = self.collect_data(trace, id);
-                let idx = self.ir.push_var(
+                let idx = self.push_var(
                     ir::Var {
                         op: KernelOp::Index,
                         ty: u32::var_ty(),
@@ -88,7 +90,7 @@ impl Compiler {
                     },
                     [],
                 );
-                self.ir.push_var(
+                self.push_var(
                     ir::Var {
                         op: KernelOp::Gather,
                         ty: var.ty,
@@ -99,7 +101,7 @@ impl Compiler {
                 )
             }
             Op::KernelOp(kop) => match kop {
-                KernelOp::Literal => self.ir.push_var(
+                KernelOp::Literal => self.push_var(
                     ir::Var {
                         op: KernelOp::Literal,
                         ty: var.ty,
@@ -115,7 +117,7 @@ impl Compiler {
                         .into_iter()
                         .map(|id| self.collect(trace, *id))
                         .collect::<Vec<_>>();
-                    self.ir.push_var(
+                    self.push_var(
                         ir::Var {
                             op: kop,
                             ty: var.ty,
@@ -136,17 +138,18 @@ impl Compiler {
         }
 
         let var = trace.var(id);
-        let scope = var.scope;
+
+        // NOTE: We can leave the scope for references at it's default since they can always be put
+        // in front.
 
         match trace.var(id).op.resulting_op() {
             Op::Buffer => {
                 let buffer_id = self.push_buffer(id);
-                self.ir.push_var(
+                self.push_var(
                     ir::Var {
                         op: KernelOp::BufferRef,
                         ty: var.ty,
                         data: buffer_id as _,
-                        scope,
                         ..Default::default()
                     },
                     [],
@@ -155,12 +158,11 @@ impl Compiler {
             Op::Texture => {
                 let texture_id = self.push_texture(id);
                 let dim = trace.var(id).extent.texture_dim();
-                self.ir.push_var(
+                self.push_var(
                     ir::Var {
                         op: KernelOp::TextureRef { dim },
                         ty: var.ty,
                         data: texture_id as _,
-                        scope,
                         ..Default::default()
                     },
                     [],
@@ -168,12 +170,11 @@ impl Compiler {
             }
             Op::Accel => {
                 let accel_id = self.push_accel(id);
-                self.ir.push_var(
+                self.push_var(
                     ir::Var {
                         op: KernelOp::AccelRef,
                         ty: var.ty,
                         data: accel_id as _,
-                        scope,
                         ..Default::default()
                     },
                     [],
@@ -203,8 +204,37 @@ impl Compiler {
             accel_id
         })
     }
+    pub fn push_var<I>(
+        &mut self,
+        mut var: ir::Var,
+        deps: I,
+        // deps: impl IntoIterator<Item = ir::VarId> + ExactSizeIterator,
+    ) -> ir::VarId
+    where
+        I: IntoIterator<Item = ir::VarId>,
+        I::IntoIter: ExactSizeIterator,
+    {
+        let deps = deps.into_iter();
+        let trivial = deps.len() == 0;
+
+        if trivial {
+            var.scope = Default::default();
+            var.deps = Default::default();
+            if self.trivial.contains_key(&var) {
+                return self.trivial[&var];
+            }
+        }
+        let id = self.ir.push_var(var, deps);
+
+        if trivial {
+            self.trivial.insert(var, id);
+        }
+
+        id
+    }
     pub fn clear(&mut self) {
         self.ir.clear();
+        self.trivial.clear();
         self.visited.clear();
         self.id2buffer.clear();
         self.buffers.clear();
