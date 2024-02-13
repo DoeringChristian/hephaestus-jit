@@ -302,6 +302,46 @@ pub fn new_scope() -> ScopeId{
     })
 }
 
+// Loop stuff
+pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, Vec<VarRef>){
+    let state = composite(state_vars);
+
+    let ty = state.ty();
+    let extent = state.extent();
+
+    let loop_start = push_var(Var{
+        op: Op::KernelOp(KernelOp::LoopStart),
+        ty,
+        extent,
+        ..Default::default()
+    }, [&state]);
+
+    let state = state_vars.iter().enumerate().map(|(i, _)|{
+        loop_start.extract(i)
+    }).collect::<Vec<_>>();
+
+    (loop_start, state)
+}
+pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef>{
+    let state = composite(state_vars);
+
+    let ty = state.ty();
+    let extent = state.extent();
+
+    let loop_end = push_var(Var{
+        op: Op::KernelOp(KernelOp::LoopEnd),
+        ty,
+        extent,
+        ..Default::default()
+    }, [loop_start, &state]);
+
+    let state = state_vars.iter().enumerate().map(|(i, _)|{
+        loop_end.extract(i)
+    }).collect::<Vec<_>>();
+
+    state
+}
+
 ///
 /// Compiles the currently scheduled variables (see [Schedule]) into a [graph::Graph], which can be
 /// launched on any device.

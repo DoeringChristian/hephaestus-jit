@@ -73,7 +73,7 @@ impl Compiler {
         let var = trace.var(id);
         let scope = var.scope;
 
-        let id = match var.op {
+        let internal_id = match var.op {
             Op::Ref { .. } => {
                 // When we hit a ref, we just load it as a ref
                 self.collect_data(trace, trace.deps(id)[0])
@@ -130,7 +130,8 @@ impl Compiler {
             },
             _ => todo!(), // Op::Buffer => self.collect_data(trace, id),
         };
-        id
+        self.visited.insert(id, internal_id);
+        internal_id
     }
     pub fn collect_data(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
         if self.visited.contains_key(&id) {

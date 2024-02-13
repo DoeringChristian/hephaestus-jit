@@ -1188,3 +1188,32 @@ fn scope() {
 
     assert_eq!(z.to_vec::<i32>(..), vec![2, 2]);
 }
+#[test]
+fn loop_record() {
+    // TODO: loops work without scopes -> comment out scopes
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    // Initial state
+    let i = tr::array(&[0, 1], &device);
+    let c = tr::literal(true);
+
+    // Start the loop recording
+    let (loop_start, state) = tr::loop_start(&[&c, &i]);
+    let c = state[0].clone();
+    let i = state[1].clone();
+
+    let i = i.add(&tr::literal(1));
+    let c = c.and(&i.lt(&tr::literal(2)));
+
+    let state = tr::loop_end(&loop_start, &[&c, &i]);
+    let c = state[0].clone();
+    let i = state[1].clone();
+
+    i.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
+}

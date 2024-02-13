@@ -14,44 +14,44 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
 
     let compiler = glslang::Compiler::acquire().unwrap();
 
-    // Compile with glslang
-    let options = glslang::CompilerOptions {
-        source_language: glslang::SourceLanguage::GLSL,
-        target: glslang::Target::Vulkan {
-            version: glslang::VulkanVersion::Vulkan1_3,
-            spirv_version: glslang::SpirvVersion::SPIRV1_6,
-        },
-        ..Default::default()
-    };
-
-    let shader = glslang::ShaderSource::from(s.as_str());
-    let shader =
-        glslang::ShaderInput::new(&shader, glslang::ShaderStage::Compute, &options, None).unwrap();
-    let shader = compiler.create_shader(shader).unwrap();
-    let code = shader.compile().unwrap();
-
-    // // Compile with shaderc
-    // let mut options = shaderc::CompileOptions::new().unwrap();
-    // options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-    // options.set_hlsl_offsets(true);
-    // options.set_target_env(
-    //     shaderc::TargetEnv::Vulkan,
-    //     shaderc::EnvVersion::Vulkan1_3 as _,
-    // );
-    // options.set_target_spirv(shaderc::SpirvVersion::V1_5);
-    // let compiler = shaderc::Compiler::new().unwrap();
+    // // Compile with glslang
+    // let options = glslang::CompilerOptions {
+    //     source_language: glslang::SourceLanguage::GLSL,
+    //     target: glslang::Target::Vulkan {
+    //         version: glslang::VulkanVersion::Vulkan1_3,
+    //         spirv_version: glslang::SpirvVersion::SPIRV1_6,
+    //     },
+    //     ..Default::default()
+    // };
     //
-    // let artefact = compiler
-    //     .compile_into_spirv(
-    //         &s,
-    //         shaderc::ShaderKind::Compute,
-    //         "",
-    //         entry_point,
-    //         Some(&options),
-    //     )
-    //     .map_err(|err| anyhow::anyhow!("{err}: {s}"))
-    //     .unwrap();
-    //     let code = artefact.as_binary().to_vec();
+    // let shader = glslang::ShaderSource::from(s.as_str());
+    // let shader =
+    //     glslang::ShaderInput::new(&shader, glslang::ShaderStage::Compute, &options, None).unwrap();
+    // let shader = compiler.create_shader(shader).unwrap();
+    // let code = shader.compile().unwrap();
+
+    // Compile with shaderc
+    let mut options = shaderc::CompileOptions::new().unwrap();
+    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+    options.set_hlsl_offsets(true);
+    options.set_target_env(
+        shaderc::TargetEnv::Vulkan,
+        shaderc::EnvVersion::Vulkan1_3 as _,
+    );
+    options.set_target_spirv(shaderc::SpirvVersion::V1_5);
+    let compiler = shaderc::Compiler::new().unwrap();
+
+    let artefact = compiler
+        .compile_into_spirv(
+            &s,
+            shaderc::ShaderKind::Compute,
+            "",
+            entry_point,
+            Some(&options),
+        )
+        .map_err(|err| anyhow::anyhow!("{err}: {s}"))
+        .unwrap();
+    let code = artefact.as_binary().to_vec();
 
     Some(code)
 }
@@ -314,6 +314,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
         let glsl_ty = GlslTypeName(ty);
         // let ty = GlslTypeName(var.ty);
 
+        writeln!(s, "")?;
         writeln!(
             s,
             "\t// var id={id}, scope={scope}",
@@ -657,18 +658,20 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let false_val = Reg(deps[2]);
                 writeln!(s, "\t{glsl_ty} {dst} = {cond} ? {true_val} : {false_val};")?;
             }
-            crate::op::KernelOp::LoopInit => {
-                writeln!(s, "\twhile(){{")?;
-                todo!();
+            crate::op::KernelOp::LoopStart => {
+                let loop_state = Reg(id);
+                let init = Reg(deps[0]);
+                writeln!(s, "\t{glsl_ty} {loop_state} = {init};")?;
+                writeln!(s, "\twhile({loop_state}.e0){{")?
             }
             crate::op::KernelOp::LoopEnd => {
+                let dst = Reg(id);
+                let loop_state = Reg(deps[0]);
+                let iresult = Reg(deps[1]);
+
+                writeln!(s, "\t{loop_state} = {iresult};")?;
                 writeln!(s, "\t}}")?;
-                todo!();
-            }
-            crate::op::KernelOp::Phi => {
-                let a = Reg(deps[0]);
-                let b = Reg(deps[1]);
-                todo!();
+                writeln!(s, "\t{glsl_ty} {dst} = {loop_state};")?;
             }
             crate::op::KernelOp::TexLookup => {
                 let sampler_idx = ir.var(deps[0]).data;
