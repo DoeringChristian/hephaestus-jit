@@ -776,6 +776,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
+name = "glslang"
+version = "0.3.1"
+source = "git+https://github.com/DoeringChristian/glslang-rs.git#96f55a221e9cab77ec90459320aafafec23dc279"
+dependencies = [
+ "glslang-sys",
+ "once_cell",
+ "rustc-hash",
+ "thiserror",
+]
+
+[[package]]
+name = "glslang-sys"
+version = "0.3.2"
+source = "git+https://github.com/DoeringChristian/glslang-rs.git#96f55a221e9cab77ec90459320aafafec23dc279"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
 name = "gpu-allocator"
 version = "0.25.0"
 source = "git+https://github.com/DoeringChristian/gpu-allocator.git?branch=custom-ash#6cefe9b90d074bfd5dce44f3f02931410e98069b"
@@ -847,6 +867,7 @@ dependencies = [
  "criterion",
  "cuda-rs",
  "enum_dispatch",
+ "glslang",
  "gpu-allocator",
  "gpu-profiler",
  "half 2.3.1",

@@ -12,28 +12,48 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
 
     log::trace!("\n{s}");
 
-    let mut options = shaderc::CompileOptions::new().unwrap();
-    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-    options.set_hlsl_offsets(true);
-    options.set_target_env(
-        shaderc::TargetEnv::Vulkan,
-        shaderc::EnvVersion::Vulkan1_3 as _,
-    );
-    options.set_target_spirv(shaderc::SpirvVersion::V1_5);
-    let compiler = shaderc::Compiler::new().unwrap();
+    let compiler = glslang::Compiler::acquire().unwrap();
 
-    let artefact = compiler
-        .compile_into_spirv(
-            &s,
-            shaderc::ShaderKind::Compute,
-            "",
-            entry_point,
-            Some(&options),
-        )
-        .map_err(|err| anyhow::anyhow!("{err}: {s}"))
-        .unwrap();
+    // Compile with glslang
+    let options = glslang::CompilerOptions {
+        source_language: glslang::SourceLanguage::GLSL,
+        target: glslang::Target::Vulkan {
+            version: glslang::VulkanVersion::Vulkan1_3,
+            spirv_version: glslang::SpirvVersion::SPIRV1_6,
+        },
+        ..Default::default()
+    };
 
-    Some(artefact.as_binary().to_vec())
+    let shader = glslang::ShaderSource::from(s.as_str());
+    let shader =
+        glslang::ShaderInput::new(&shader, glslang::ShaderStage::Compute, &options, None).unwrap();
+    let shader = compiler.create_shader(shader).unwrap();
+    let code = shader.compile().unwrap();
+
+    // // Compile with shaderc
+    // let mut options = shaderc::CompileOptions::new().unwrap();
+    // options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+    // options.set_hlsl_offsets(true);
+    // options.set_target_env(
+    //     shaderc::TargetEnv::Vulkan,
+    //     shaderc::EnvVersion::Vulkan1_3 as _,
+    // );
+    // options.set_target_spirv(shaderc::SpirvVersion::V1_5);
+    // let compiler = shaderc::Compiler::new().unwrap();
+    //
+    // let artefact = compiler
+    //     .compile_into_spirv(
+    //         &s,
+    //         shaderc::ShaderKind::Compute,
+    //         "",
+    //         entry_point,
+    //         Some(&options),
+    //     )
+    //     .map_err(|err| anyhow::anyhow!("{err}: {s}"))
+    //     .unwrap();
+    //     let code = artefact.as_binary().to_vec();
+
+    Some(code)
 }
 
 pub fn assemble_entry_point(

@@ -32,6 +32,7 @@ itertools = "0.11.0"
 pretty_env_logger = "0.5.0"
 renderdoc = "0.11.0"
 shaderc = "0.8.2"
+glslang = { git = "https://github.com/DoeringChristian/glslang-rs.git" }
 tinytemplate = "1.2.1"
 text_placeholder = "0.5.0"
 rand = "0.8.5"
