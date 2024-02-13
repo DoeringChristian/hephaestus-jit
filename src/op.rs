@@ -60,6 +60,10 @@ pub enum KernelOp {
 
     Select,
 
+    LoopInit,
+    LoopEnd,
+    Phi,
+
     TexLookup,
     TraceRay,
 

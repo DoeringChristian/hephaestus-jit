@@ -657,6 +657,19 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let false_val = Reg(deps[2]);
                 writeln!(s, "\t{glsl_ty} {dst} = {cond} ? {true_val} : {false_val};")?;
             }
+            crate::op::KernelOp::LoopInit => {
+                writeln!(s, "\twhile(){{")?;
+                todo!();
+            }
+            crate::op::KernelOp::LoopEnd => {
+                writeln!(s, "\t}}")?;
+                todo!();
+            }
+            crate::op::KernelOp::Phi => {
+                let a = Reg(deps[0]);
+                let b = Reg(deps[1]);
+                todo!();
+            }
             crate::op::KernelOp::TexLookup => {
                 let sampler_idx = ir.var(deps[0]).data;
                 let coord = Reg(deps[1]);
