@@ -101,6 +101,7 @@ pub enum DeviceOp {
     // Cooperative Matrix Multiply Add
     // multiply a matrix A of size [result_height]x[depth] with B of size [depth]x[result_width]
     // and add C of size [result_height]x[result_width]
+    // TODO: make size variable to allow for dynamic batch sizes
     MatrixMA {
         result_height: usize,
         result_width: usize,
