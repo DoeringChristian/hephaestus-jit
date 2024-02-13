@@ -95,7 +95,7 @@ pub fn assemble_entry_point(
 #extension GL_KHR_shader_subgroup_basic: enable
 
 // Cooperative Matrix
-// #extension GL_KHR_cooperative_matrix: enable
+#extension GL_KHR_cooperative_matrix: enable
         
 "#
     )?;
@@ -818,96 +818,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::Uop::Log2 => writeln!(s, "\t{glsl_ty} {dst} = log2({src});"),
                 }?;
             }
-            crate::op::KernelOp::MatFMA => {
-                let a = deps[0];
-                let b = deps[1];
-                let c = deps[2];
-
-                let a_ty = ir.var(a).ty;
-                let b_ty = ir.var(a).ty;
-                let c_ty = ir.var(a).ty;
-
-                dbg!(a_ty);
-                let (a_cty, a_rows, a_cols) = match a_ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-                let (b_cty, b_rows, b_cols) = match b_ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-                let (c_cty, c_rows, c_cols) = match c_ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-                let (dst_cty, dst_rows, dst_cols) = match ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-
-                writeln!(
-                    s,
-                    "\t{glsl_ty} {dst};",
-                    glsl_ty = GlslTypeName(ty),
-                    dst = Reg(id)
-                )?;
-                writeln!(s, "\t{{")?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{dst_cty}, gl_ScopeSubgroup, {dst_rows}, {dst_cols}, gl_MatrixUseAccumulator> dst;",
-                    dst_cty = GlslTypeName(dst_cty)
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{a_cty}, gl_ScopeSubgroup, {a_rows}, {a_cols}, gl_MatrixUseA> A;",
-                    a_cty = GlslTypeName(a_cty)
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{b_cty}, gl_ScopeSubgroup, {b_rows}, {b_cols}, gl_MatrixUseB> B;",
-                    b_cty = GlslTypeName(b_cty)
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{c_cty}, gl_ScopeSubgroup, {c_rows}, {c_cols}, gl_MatrixUseAccumulator> C;",
-                    c_cty = GlslTypeName(c_cty)
-                )?;
-
-                writeln!(
-                    s,
-                    "\t\tcoopMatLoad(A, {reg}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);",
-                    reg = Reg(a),
-                    stride = a_rows * a_cty.size()
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopMatLoad(B, {reg}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);",
-                    reg = Reg(b),
-                    stride = b_rows * b_cty.size()
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopMatLoad(C, {reg}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);",
-                    reg = Reg(c),
-                    stride = c_rows * c_cty.size()
-                )?;
-                writeln!(s, "\t\tdst = coopMatMulAdd(A, B, C);")?;
-                writeln!(s, "\t\tcoopMatStore(dst, {dst}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);", dst = Reg(id), stride = dst_rows * dst_cty.size())?;
-
-                writeln!(s, "\t}}")?;
-            }
+            crate::op::KernelOp::FMA => {}
             _ => {}
         }
     }

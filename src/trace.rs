@@ -916,13 +916,13 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn mat_fma(&self, b: &Self, c: &Self) -> Self {
+    pub fn fma(&self, b: &Self, c: &Self) -> Self {
         let extent = resulting_extent([self, b, c]);
         let ty = self.ty();
 
         push_var(
             Var {
-                op: Op::KernelOp(KernelOp::MatFMA),
+                op: Op::KernelOp(KernelOp::FMA),
                 extent,
                 ty,
                 ..Default::default()

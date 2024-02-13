@@ -205,6 +205,9 @@ impl InternalDevice {
                 device_extension_names.push(vk::KhrAccelerationStructureFn::NAME.as_ptr());
                 device_extension_names.push(vk::KhrDeferredHostOperationsFn::NAME.as_ptr());
             }
+            if physical_device.supports_cooperative_matrix {
+                device_extension_names.push(vk::KhrCooperativeMatrixFn::NAME.as_ptr());
+            }
 
             let queue_family_index = physical_device.queue_family_index;
             let vk_physical_device = physical_device.physical_device;

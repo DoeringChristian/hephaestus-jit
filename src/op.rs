@@ -66,7 +66,7 @@ pub enum KernelOp {
     Bop(Bop),
     Uop(Uop),
 
-    MatFMA,
+    FMA,
 
     // Operations that are only available in IR
     BufferRef,

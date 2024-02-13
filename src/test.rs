@@ -1070,28 +1070,6 @@ fn vec3_memory_layout() {
 
     assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
 }
-// #[test]
-fn cooperative_matrix() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
-    let pdevice = &device.as_vulkan().unwrap().physical_device;
-    dbg!(&pdevice.cooperative_matrix_properties);
-    dbg!(&pdevice.cooperative_matrix_features);
-
-    let a = tr::array(&[[[1f32, 2f32], [3f32, 4f32]]], &device);
-    let b = tr::array(&[[[1f32, 2f32], [3f32, 4f32]]], &device);
-    let c = tr::array(&[[[1f32, 2f32], [3f32, 4f32]]], &device);
-
-    let dst = a.mat_fma(&b, &c);
-    dst.schedule();
-
-    let graph = tr::compile();
-    graph.launch(&device);
-
-    dbg!(dst.to_vec::<[[f32; 2]; 2]>(..));
-}
 #[test]
 fn cast_array_vec() {
     pretty_env_logger::try_init().ok();
