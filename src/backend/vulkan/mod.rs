@@ -264,6 +264,11 @@ impl backend::BackendDevice for VulkanDevice {
                         let accel_desc = graph.accel_desc(pass.resources[0]);
                         self.build_accel(&mut rgraph, &accel_desc, &accels[0], buffers.iter());
                     }
+                    DeviceOp::MatrixMA {
+                        result_height,
+                        result_width,
+                        depth,
+                    } => todo!(),
                 },
                 _ => todo!(),
             }

@@ -93,8 +93,19 @@ pub enum ReduceOp {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
     ReduceOp(ReduceOp),
-    PrefixSum { inclusive: bool },
+    PrefixSum {
+        inclusive: bool,
+    },
     Compress, // TODO: determine if return or return by ref is better
+
+    // Cooperative Matrix Multiply Add
+    // multiply a matrix A of size [result_height]x[depth] with B of size [depth]x[result_width]
+    // and add C of size [result_height]x[result_width]
+    MatrixMA {
+        result_height: usize,
+        result_width: usize,
+        depth: usize,
+    },
     Buffer2Texture,
     BuildAccel,
 }
@@ -104,6 +115,11 @@ impl DeviceOp {
             DeviceOp::ReduceOp(_) => Op::Buffer,
             DeviceOp::Compress => Op::Nop,
             DeviceOp::PrefixSum { .. } => Op::Buffer,
+            DeviceOp::MatrixMA {
+                result_height,
+                result_width,
+                depth,
+            } => Op::Buffer,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
         }
