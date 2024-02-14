@@ -112,6 +112,8 @@ pub struct InternalDevice {
     pub fence: vk::Fence,
 
     pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
+    pub cooperative_matrix_ext: Option<khr::CooperativeMatrix>,
+    pub cooperative_matrix_properties: Vec<vk::CooperativeMatrixPropertiesKHR<'static>>,
 }
 unsafe impl Send for InternalDevice {}
 unsafe impl Sync for InternalDevice {}
@@ -286,6 +288,24 @@ impl InternalDevice {
                 .supports_accel_struct
                 .then(|| khr::AccelerationStructure::new(&instance, &device));
 
+            let cooperative_matrix_ext = physical_device
+                .supports_cooperative_matrix
+                .then(|| khr::CooperativeMatrix::new(&entry, &instance));
+
+            let cooperative_matrix_properties = cooperative_matrix_ext
+                .as_ref()
+                .into_iter()
+                .flat_map(|ext| {
+                    ext.get_physical_device_cooperative_matrix_properties(
+                        physical_device.physical_device,
+                    )
+                    .unwrap()
+                })
+                .collect::<Vec<_>>();
+            // Cast away livetime constraints
+            let cooperative_matrix_properties = std::mem::transmute(cooperative_matrix_properties);
+            log::trace!("The following cooperative matrices are supported: {cooperative_matrix_properties:#?}");
+
             Ok(Self {
                 entry,
                 instance,
@@ -299,6 +319,8 @@ impl InternalDevice {
                 command_buffer,
                 fence,
                 acceleration_structure_ext,
+                cooperative_matrix_ext,
+                cooperative_matrix_properties,
             })
         }
     }

@@ -22,11 +22,20 @@ pub fn compress(
     device: &VulkanDevice,
     rgraph: &mut RGraph,
     num: usize,
+    size_buffer: Option<Arc<Buffer>>,
     out_count: &Arc<Buffer>,
     src: &Arc<Buffer>,
     index_out: &Arc<Buffer>,
 ) {
-    compress_large(device, rgraph, num as _, out_count, src, index_out)
+    compress_large(
+        device,
+        rgraph,
+        num as _,
+        size_buffer,
+        out_count,
+        src,
+        index_out,
+    )
 }
 
 pub fn compress_small(
@@ -138,6 +147,7 @@ pub fn compress_large(
     device: &VulkanDevice,
     rgraph: &mut RGraph,
     num: usize,
+    size_buffer: Option<Arc<Buffer>>,
     out_count: &Arc<Buffer>,
     src: &Arc<Buffer>,
     dst: &Arc<Buffer>,
@@ -174,22 +184,24 @@ pub fn compress_large(
         }],
     });
 
-    let mut size_buffer = Buffer::create(
-        device,
-        BufferInfo {
-            size: std::mem::size_of::<u32>(),
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::CpuToGpu,
-            ..Default::default()
-        },
-    );
+    let size_buffer = size_buffer.unwrap_or_else(|| {
+        let mut size_buffer = Buffer::create(
+            device,
+            BufferInfo {
+                size: std::mem::size_of::<u32>(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
 
-    size_buffer
-        .mapped_slice_mut()
-        .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
-    let size_buffer = Arc::new(size_buffer);
+        size_buffer
+            .mapped_slice_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
+        Arc::new(size_buffer)
+    });
 
     let scratch_buffer = prefix_sum_scratch_buffer(device, rgraph, scratch_items as _);
 

@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use ash;
+use ash::extensions::khr;
 use ash::vk;
 
 #[derive(thiserror::Error, Debug)]

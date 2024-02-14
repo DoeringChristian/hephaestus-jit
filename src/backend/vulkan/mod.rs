@@ -134,6 +134,18 @@ impl backend::BackendDevice for VulkanDevice {
         let mut rgraph = RGraph::new();
 
         for pass in graph.passes.iter() {
+            let to_buffer = |id: crate::graph::ResourceId| {
+                env.buffer(id)
+                    .and_then(|buffer| Some(buffer.vulkan()?.buffer.clone()))
+            };
+            let to_image = |id: crate::graph::ResourceId| {
+                env.texture(id)
+                    .and_then(|image| Some(image.vulkan()?.image.clone()))
+            };
+            let to_accel = |id: crate::graph::ResourceId| {
+                env.accel(id)
+                    .and_then(|accel| Some(accel.vulkan()?.accel.clone()))
+            };
             let buffers = pass
                 .resources
                 .iter()
@@ -240,9 +252,11 @@ impl backend::BackendDevice for VulkanDevice {
                         );
                     }
                     DeviceOp::Compress => {
-                        let index_out = buffers[0].clone();
-                        let out_count = buffers[1].clone();
-                        let src = buffers[2].clone();
+                        let index_out = to_buffer(pass.resources[0]).unwrap();
+                        let out_count = to_buffer(pass.resources[1]).unwrap();
+                        let src = to_buffer(pass.resources[2]).unwrap();
+
+                        let size_buffer = pass.size_buffer.and_then(to_buffer);
 
                         let num = graph.buffer_desc(pass.resources[2]).size;
 
@@ -250,6 +264,7 @@ impl backend::BackendDevice for VulkanDevice {
                             &self,
                             &mut rgraph,
                             num,
+                            size_buffer,
                             &out_count,
                             &src,
                             &index_out,
