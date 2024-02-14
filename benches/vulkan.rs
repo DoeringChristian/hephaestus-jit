@@ -134,17 +134,19 @@ pub fn cooperative_matrix(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("cooperative_matrix_f16");
     group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
-    for i in 4..11 {
+    for i in 4..=12 {
         let n = usize::pow(2, i);
+        let m = n;
+        let k = n;
 
-        group.throughput(Throughput::Elements((n * n * n) as _));
+        group.throughput(Throughput::Elements((n * m * k) as _));
 
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             b.iter_custom(|iters| {
                 let duration = (0..iters)
                     .map(|_| {
                         assert!(tr::is_empty());
-                        black_box(benches::cooperative_matrix(&device, n, n, n))
+                        black_box(benches::cooperative_matrix(&device, n, m, k))
                     })
                     .reduce(|a, b| a + b)
                     .unwrap();
