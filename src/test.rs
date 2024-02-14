@@ -1235,9 +1235,11 @@ fn loop_record2() {
     });
 
     i.schedule();
+    c.schedule();
 
     let graph = tr::compile();
     graph.launch(&device);
 
     assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
+    assert_eq!(c.to_vec::<bool>(..), vec![false, false]);
 }
