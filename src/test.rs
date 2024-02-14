@@ -1245,7 +1245,7 @@ fn loop_record2() {
 }
 #[test]
 #[allow(non_snake_case)]
-fn matmul_ident() {
+fn matmul_linspace() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
@@ -1257,18 +1257,8 @@ fn matmul_ident() {
         )
     }
 
-    let mut I = vec![f16::ZERO; 16 * 16];
-    for i in 0..16 {
-        let j = i;
-        let idx = i * 16 + j;
-        I[idx] = f16::ONE;
-    }
-
-    let A = tr::array(&I, &device);
-    let B = tr::array(&I, &device);
-
-    // let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
-    // let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
+    let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
+    let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
 
     let C = tr::matmul(&A, &B, 16, 16, 16);
 
@@ -1279,8 +1269,28 @@ fn matmul_ident() {
     let graph = tr::compile();
     graph.launch(&device);
 
-    assert_eq!(C.to_vec::<f16>(..), I);
-    dbg!(A.to_vec::<f16>(..));
-    dbg!(B.to_vec::<f16>(..));
-    dbg!(C.to_vec::<f16>(..));
+    let C_ref = {
+        use ndarray::prelude::*;
+        let A = Array::linspace(0f32, 1f32, 256);
+        let B = Array::linspace(0f32, 1f32, 256);
+        let A = A.into_shape([16, 16]).unwrap();
+        let B = B.into_shape([16, 16]).unwrap();
+
+        let C = A.dot(&B);
+
+        let C = C.into_raw_vec();
+        let C = C.into_iter().map(|e| f16::from_f32(e)).collect::<Vec<_>>();
+        C
+    };
+
+    // dbg!(A.to_vec::<f16>(..));
+    // dbg!(B.to_vec::<f16>(..));
+    // dbg!(C.to_vec::<f16>(..));
+    // dbg!(&C_ref);
+    use num_traits::*;
+    assert!(C
+        .to_vec::<f16>(..)
+        .into_iter()
+        .zip(C_ref)
+        .all(|(C, C_ref)| (C - C_ref).abs() < f16::from_f32(1.0)));
 }
