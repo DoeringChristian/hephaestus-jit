@@ -1246,6 +1246,12 @@ fn loop_record2() {
 #[test]
 #[allow(non_snake_case)]
 fn matmul_linspace() {
+    let N = 16;
+    let M = 16;
+    let K = 16;
+    let N = 32;
+    let M = 32;
+    let K = 32;
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
@@ -1257,10 +1263,10 @@ fn matmul_linspace() {
         )
     }
 
-    let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
-    let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
+    let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), N * K);
+    let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), K * M);
 
-    let C = tr::matmul(&A, &B, 16, 16, 16);
+    let C = tr::matmul(&A, &B, N, M, K);
 
     A.schedule();
     B.schedule();
@@ -1271,10 +1277,10 @@ fn matmul_linspace() {
 
     let C_ref = {
         use ndarray::prelude::*;
-        let A = Array::linspace(0f32, 1f32, 256);
-        let B = Array::linspace(0f32, 1f32, 256);
-        let A = A.into_shape([16, 16]).unwrap();
-        let B = B.into_shape([16, 16]).unwrap();
+        let A = Array::linspace(0f32, 1f32, N * K);
+        let B = Array::linspace(0f32, 1f32, K * M);
+        let A = A.into_shape([N, K]).unwrap();
+        let B = B.into_shape([K, M]).unwrap();
 
         let C = A.dot(&B);
 
@@ -1288,9 +1294,11 @@ fn matmul_linspace() {
     // dbg!(C.to_vec::<f16>(..));
     // dbg!(&C_ref);
     use num_traits::*;
-    assert!(C
-        .to_vec::<f16>(..)
-        .into_iter()
-        .zip(C_ref)
-        .all(|(C, C_ref)| (C - C_ref).abs() < f16::from_f32(1.0)));
+    let C = C.to_vec::<f16>(..);
+    assert!(
+        C.iter()
+            .zip(&C_ref)
+            .all(|(&C, &C_ref)| (C - C_ref).abs() < f16::from_f32(1.0)),
+        "lhs = {C:?}\n is not equal to rhs = {C_ref:?}\n"
+    );
 }

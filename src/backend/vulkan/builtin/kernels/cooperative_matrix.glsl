@@ -71,8 +71,9 @@ void main(){
 
     // Compute row and col of the first element in the tile of the output
     // matrix handled by this subgroup
-    uint m = (gsid / M) * COOP_M;
-    uint n = (gsid % M) * COOP_N;
+    uint tiles_M = M / COOP_M;
+    uint n = (gsid / tiles_M) * COOP_N;
+    uint m = (gsid % tiles_M) * COOP_M;
 
     for (uint k = 0; k < K; k += COOP_K){
         uint start_a = n * K + k;
