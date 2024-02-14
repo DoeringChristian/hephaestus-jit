@@ -627,6 +627,22 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
     )
 }
 
+
+#[allow(non_snake_case)]
+pub fn matmul(mat_a: &VarRef, mat_b: &VarRef, N: usize, M: usize, K: usize) -> VarRef{
+    let ty = mat_a.ty();
+    assert_eq!(ty, mat_b.ty());
+
+    let mat_c = push_var(Var{
+        op: Op::DeviceOp(DeviceOp::MatMul{max_n: N, max_m: M, max_k: K}),
+        ty,
+        extent: Extent::Size(N * M),
+        ..Default::default()
+    }, [mat_a, mat_b]);
+    
+    mat_c
+}
+
 impl VarRef {
     pub fn borrow(id: VarId) -> Self {
         with_trace(|trace| {

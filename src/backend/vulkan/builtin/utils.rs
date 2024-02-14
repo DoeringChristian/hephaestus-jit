@@ -11,6 +11,7 @@ pub fn glsl_ty(ty: &VarType) -> &'static str {
         VarType::U32 => "uint32_t",
         VarType::I64 => "int64_t",
         VarType::U64 => "uint64_t",
+        VarType::F16 => "float16_t",
         VarType::F32 => "float32_t",
         VarType::F64 => "float64_t",
         _ => todo!(),

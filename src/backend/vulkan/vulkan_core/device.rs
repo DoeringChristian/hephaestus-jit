@@ -220,12 +220,15 @@ impl InternalDevice {
             let mut acceleration_structure_features =
                 vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default();
             let mut ray_query_features = vk::PhysicalDeviceRayQueryFeaturesKHR::default();
+            let mut cooperative_matrix_features =
+                vk::PhysicalDeviceCooperativeMatrixFeaturesKHR::default();
 
             let mut features2 = vk::PhysicalDeviceFeatures2::default()
                 .push_next(&mut features_v1_1)
                 .push_next(&mut features_v1_2)
                 .push_next(&mut acceleration_structure_features)
-                .push_next(&mut ray_query_features);
+                .push_next(&mut ray_query_features)
+                .push_next(&mut cooperative_matrix_features);
 
             instance.get_physical_device_features2(physical_device.physical_device, &mut features2);
 

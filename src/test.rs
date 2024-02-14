@@ -1243,3 +1243,44 @@ fn loop_record2() {
     assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
     assert_eq!(c.to_vec::<bool>(..), vec![false, false]);
 }
+#[test]
+#[allow(non_snake_case)]
+fn matmul_ident() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    pub fn linspace(start: f16, end: f16, num: usize) -> VarRef {
+        tr::literal(start).add(
+            &tr::index(num)
+                .cast(f16::var_ty())
+                .mul(&tr::literal((end - start) / (f16::from_f32(num as _)))),
+        )
+    }
+
+    let mut I = vec![f16::ZERO; 16 * 16];
+    for i in 0..16 {
+        let j = i;
+        let idx = i * 16 + j;
+        I[idx] = f16::ONE;
+    }
+
+    let A = tr::array(&I, &device);
+    let B = tr::array(&I, &device);
+
+    // let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
+    // let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), 256);
+
+    let C = tr::matmul(&A, &B, 16, 16, 16);
+
+    A.schedule();
+    B.schedule();
+    C.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(C.to_vec::<f16>(..), I);
+    dbg!(A.to_vec::<f16>(..));
+    dbg!(B.to_vec::<f16>(..));
+    dbg!(C.to_vec::<f16>(..));
+}

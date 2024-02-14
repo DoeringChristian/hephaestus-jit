@@ -14,6 +14,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
+use crate::backend::vulkan::builtin::cooperative_matrix;
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;
@@ -270,6 +271,30 @@ impl backend::BackendDevice for VulkanDevice {
                             &index_out,
                         );
                     }
+                    DeviceOp::MatMul {
+                        max_n,
+                        max_m,
+                        max_k,
+                    } => {
+                        let mat_c = to_buffer(pass.resources[0]).unwrap();
+                        let mat_a = to_buffer(pass.resources[1]).unwrap();
+                        let mat_b = to_buffer(pass.resources[2]).unwrap();
+                        let config = pass.resources.get(3).cloned().and_then(to_buffer);
+                        let ty = &graph.buffer_desc(pass.resources[0]).ty;
+
+                        cooperative_matrix::multiply(
+                            &self,
+                            &mut rgraph,
+                            ty,
+                            *max_n as _,
+                            *max_m as _,
+                            *max_k as _,
+                            config,
+                            mat_a,
+                            mat_b,
+                            mat_c,
+                        );
+                    }
                     DeviceOp::Buffer2Texture => {
                         let src = buffers[0].clone();
                         let dst = images[0].clone();
@@ -279,11 +304,6 @@ impl backend::BackendDevice for VulkanDevice {
                         let accel_desc = graph.accel_desc(pass.resources[0]);
                         self.build_accel(&mut rgraph, &accel_desc, &accels[0], buffers.iter());
                     }
-                    DeviceOp::MatMul {
-                        result_height,
-                        result_width,
-                        depth,
-                    } => todo!(),
                 },
                 _ => todo!(),
             }

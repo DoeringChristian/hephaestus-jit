@@ -50,25 +50,49 @@ impl ShaderCache {
                 for define in defines {
                     options.add_macro_definition(define.0, define.1);
                 }
-
-                // For some reason I have to split this up into two parts.
                 let preprocessed = compiler
                     .preprocess(src, "", "main", Some(&options))
                     .unwrap()
                     .as_text();
                 log::trace! {"Compiling shader: \n{preprocessed}"};
 
-                let mut options = shaderc::CompileOptions::new().unwrap();
-                options.set_target_env(
-                    shaderc::TargetEnv::Vulkan,
-                    shaderc::EnvVersion::Vulkan1_2 as _,
-                );
+                // // For some reason I have to split this up into two parts.
+                //
+                // let mut options = shaderc::CompileOptions::new().unwrap();
+                // options.set_target_env(
+                //     shaderc::TargetEnv::Vulkan,
+                //     shaderc::EnvVersion::Vulkan1_2 as _,
+                // );
+                //
+                // let result = compiler
+                //     .compile_into_spirv(&preprocessed, kind.into(), "", "main", Some(&options))
+                //     .unwrap();
+                // let binary = result.as_binary().to_vec();
+                // Arc::new(binary)
 
-                let result = compiler
-                    .compile_into_spirv(&preprocessed, kind.into(), "", "main", Some(&options))
+                let compiler = glslang::Compiler::acquire().unwrap();
+                let options = glslang::CompilerOptions {
+                    source_language: glslang::SourceLanguage::GLSL,
+                    target: glslang::Target::Vulkan {
+                        version: glslang::VulkanVersion::Vulkan1_3,
+                        spirv_version: glslang::SpirvVersion::SPIRV1_5,
+                    },
+                    ..Default::default()
+                };
+
+                let shader_stage = match kind {
+                    ShaderKind::Compute => glslang::ShaderStage::Compute,
+                };
+
+                let shader = glslang::ShaderSource::from(preprocessed.as_str());
+                let shader =
+                    glslang::ShaderInput::new(&shader, shader_stage, &options, None).unwrap();
+                let shader = compiler
+                    .create_shader(shader)
+                    .map_err(|err| anyhow::anyhow!("{err} {preprocessed}"))
                     .unwrap();
-                let binary = result.as_binary().to_vec();
-                Arc::new(binary)
+                let code = shader.compile().unwrap();
+                Arc::new(code)
             })
             .clone()
     }

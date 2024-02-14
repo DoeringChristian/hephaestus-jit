@@ -12,9 +12,8 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
 
     log::trace!("\n{s}");
 
-    let compiler = glslang::Compiler::acquire().unwrap();
-
     // // Compile with glslang
+    // let compiler = glslang::Compiler::acquire().unwrap();
     // let options = glslang::CompilerOptions {
     //     source_language: glslang::SourceLanguage::GLSL,
     //     target: glslang::Target::Vulkan {
@@ -95,7 +94,7 @@ pub fn assemble_entry_point(
 #extension GL_KHR_shader_subgroup_basic: enable
 
 // Cooperative Matrix
-#extension GL_KHR_cooperative_matrix: enable
+// #extension GL_KHR_cooperative_matrix: enable
         
 "#
     )?;

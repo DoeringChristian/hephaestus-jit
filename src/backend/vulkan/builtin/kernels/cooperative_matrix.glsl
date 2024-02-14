@@ -60,21 +60,21 @@ layout(set = 0, binding = 3) buffer MatC{
     T data_c[];
 };
 
-layout(local_size_x = WORK_GROUP_SIZE, local_size_y = 1, local_size_z = 1)in;
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1)in;
 void main(){
     // Get a global id of the current subgroup
     uint gsid = gl_SubgroupID + gl_WorkGroupID.x * gl_NumSubgroups;
 
     coopmat<T, gl_ScopeSubgroup, COOP_N, COOP_K, gl_MatrixUseA> coop_a;
-    coopmat<T, gl_ScopeSubgroup, COOP_K, COOP_M, gl_MatrixUseA> coop_b;
-    coopmat<T, gl_ScopeSubgroup, COOP_K, COOP_K, gl_MatrixUseAccumulator> coop_c(0.0);
+    coopmat<T, gl_ScopeSubgroup, COOP_K, COOP_M, gl_MatrixUseB> coop_b;
+    coopmat<T, gl_ScopeSubgroup, COOP_K, COOP_K, gl_MatrixUseAccumulator> coop_c = coopmat<T, gl_ScopeSubgroup, COOP_K, COOP_K, gl_MatrixUseAccumulator>(0.0);
 
     // Compute row and col of the first element in the tile of the output
     // matrix handled by this subgroup
     uint m = (gsid / M) * COOP_M;
     uint n = (gsid % M) * COOP_N;
 
-    for (uint k = 0; i < K; i += COOP_K){
+    for (uint k = 0; k < K; k += COOP_K){
         uint start_a = n * K + k;
         coopMatLoad(coop_a, data_a, start_a,  K,  gl_CooperativeMatrixLayoutRowMajor);
         

@@ -106,9 +106,9 @@ pub enum DeviceOp {
     // and add C of size [result_height]x[result_width]
     // TODO: make size variable to allow for dynamic batch sizes
     MatMul {
-        result_height: usize,
-        result_width: usize,
-        depth: usize,
+        max_n: usize,
+        max_m: usize,
+        max_k: usize,
     },
     Buffer2Texture,
     BuildAccel,
@@ -119,11 +119,7 @@ impl DeviceOp {
             DeviceOp::ReduceOp(_) => Op::Buffer,
             DeviceOp::Compress => Op::Nop,
             DeviceOp::PrefixSum { .. } => Op::Buffer,
-            DeviceOp::MatMul {
-                result_height,
-                result_width,
-                depth,
-            } => Op::Buffer,
+            DeviceOp::MatMul { .. } => Op::Buffer,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
         }
