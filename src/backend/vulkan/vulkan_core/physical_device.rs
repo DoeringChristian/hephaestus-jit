@@ -140,7 +140,8 @@ impl PhysicalDevice {
                 .iter()
                 .enumerate()
                 .find_map(|(index, info)| {
-                    let valid = info.queue_flags.contains(vk::QueueFlags::COMPUTE);
+                    let valid = info.queue_flags.contains(vk::QueueFlags::COMPUTE)
+                        && info.timestamp_valid_bits != 0;
                     if valid {
                         Some(index as u32)
                     } else {
