@@ -105,7 +105,7 @@ pub enum DeviceOp {
     // multiply a matrix A of size [result_height]x[depth] with B of size [depth]x[result_width]
     // and add C of size [result_height]x[result_width]
     // TODO: make size variable to allow for dynamic batch sizes
-    MatrixMA {
+    MatMul {
         result_height: usize,
         result_width: usize,
         depth: usize,
@@ -119,7 +119,7 @@ impl DeviceOp {
             DeviceOp::ReduceOp(_) => Op::Buffer,
             DeviceOp::Compress => Op::Nop,
             DeviceOp::PrefixSum { .. } => Op::Buffer,
-            DeviceOp::MatrixMA {
+            DeviceOp::MatMul {
                 result_height,
                 result_width,
                 depth,
