@@ -96,3 +96,24 @@ where
         graph.as_ref().unwrap().launch_with(device, &param_vec);
     }
 }
+
+#[macro_export]
+macro_rules! loop_record {
+    ([$($vars:ident),*] while $cond:ident $content:block) => {
+        let cond_vars = [&$cond, $(&$vars),*];
+        let (loop_start, state) = $crate::tr::loop_start(cond_vars.as_slice());
+
+        let mut itr = state.into_iter();
+        $cond = itr.next().unwrap();
+        $($vars = itr.next().unwrap())*;
+
+        $content
+
+        let cond_vars = [&$cond, $(&$vars),*];
+        let state = $crate::tr::loop_end(&loop_start, cond_vars.as_slice());
+
+        let mut itr = state.into_iter();
+        $cond = itr.next().unwrap();
+        $($vars = itr.next().unwrap())*;
+    };
+}

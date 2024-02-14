@@ -6,6 +6,7 @@ use std::thread;
 
 use approx::assert_abs_diff_eq;
 
+use crate::record::{self, *};
 use crate::tr::VarRef;
 use crate::vartype::{self, AsVarType, Instance, Intersection};
 use crate::{backend, tr, vulkan};
@@ -1189,7 +1190,7 @@ fn scope() {
     assert_eq!(z.to_vec::<i32>(..), vec![2, 2]);
 }
 #[test]
-fn loop_record() {
+fn loop_record1() {
     // TODO: loops work without scopes -> comment out scopes
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
@@ -1209,6 +1210,29 @@ fn loop_record() {
     let state = tr::loop_end(&loop_start, &[&c, &i]);
     let c = state[0].clone();
     let i = state[1].clone();
+
+    i.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
+}
+
+#[test]
+fn loop_record2() {
+    // TODO: loops work without scopes -> comment out scopes
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    // Initial state
+    let mut i = tr::array(&[0, 1], &device);
+    let mut c = tr::literal(true);
+
+    loop_record!([i] while c {
+        i = i.add(&tr::literal(1));
+        c = c.and(&i.lt(&tr::literal(2)));
+    });
 
     i.schedule();
 
