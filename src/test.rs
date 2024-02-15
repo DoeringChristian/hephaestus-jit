@@ -1264,7 +1264,7 @@ fn matmul_linspace() {
     let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), K * N);
     let C = tr::sized_literal(f16::ZERO, M * N);
 
-    let D = tr::matmul(&A, &B, &C, M, N, K);
+    let D = tr::matfma(&A, &B, &C, M, N, K);
 
     A.schedule();
     B.schedule();

@@ -629,7 +629,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
 
 
 #[allow(non_snake_case)]
-pub fn matmul(mat_a: &VarRef, mat_b: &VarRef, mat_c: &VarRef, M: usize, N: usize, K: usize) -> VarRef{
+pub fn matfma(mat_a: &VarRef, mat_b: &VarRef, mat_c: &VarRef, M: usize, N: usize, K: usize) -> VarRef{
     assert_eq!(mat_a.ty(), mat_b.ty());
     let c_type = mat_c.ty();
 
