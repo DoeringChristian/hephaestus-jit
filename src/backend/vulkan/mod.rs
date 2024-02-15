@@ -280,7 +280,7 @@ impl backend::BackendDevice for VulkanDevice {
                         let mat_a = to_buffer(pass.resources[1]).unwrap();
                         let mat_b = to_buffer(pass.resources[2]).unwrap();
                         let mat_c = to_buffer(pass.resources[3]).unwrap();
-                        let config = pass.resources.get(3).cloned().and_then(to_buffer);
+                        let config = pass.resources.get(4).cloned().and_then(to_buffer);
 
                         let a_type = &graph.buffer_desc(pass.resources[1]).ty;
                         let c_type = &graph.buffer_desc(pass.resources[3]).ty;
