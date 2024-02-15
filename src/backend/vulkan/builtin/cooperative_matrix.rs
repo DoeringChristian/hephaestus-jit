@@ -78,6 +78,7 @@ pub fn multiply(
 
     log::trace!("Cooperative Matrix Multiply Add: ");
     log::trace!("M={M}, N={N}, K={K}, lM={lM}, lN={lN}, lK={lK}, TILE_M={TILE_M}, TILE_N={TILE_N}, TILE_K={TILE_K}");
+    log::trace!("Using cooperative matrix type: {coopmat_type:#?}");
     log::trace!("Dispatch: ( {dispatch_x}, {dispatch_y}, 1 )");
 
     let code = device.get_shader_glsl(

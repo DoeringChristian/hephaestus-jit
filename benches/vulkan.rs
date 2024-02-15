@@ -135,7 +135,7 @@ pub fn cooperative_matrix(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("cooperative_matrix_f16");
     group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
-    for i in 4..=12 {
+    for i in 7..=12 {
         let m = usize::pow(2, i);
         let n = m;
         let k = m;
