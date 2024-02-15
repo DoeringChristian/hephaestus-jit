@@ -1246,12 +1246,9 @@ fn loop_record2() {
 #[test]
 #[allow(non_snake_case)]
 fn matmul_linspace() {
-    let N = 16;
-    let M = 16;
-    let K = 16;
-    let N = 32;
-    let M = 32;
-    let K = 32;
+    let N = 128;
+    let M = 128;
+    let K = 128;
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
@@ -1263,24 +1260,25 @@ fn matmul_linspace() {
         )
     }
 
-    let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), N * K);
-    let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), K * M);
+    let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), M * K);
+    let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), K * N);
+    let C = tr::sized_literal(f16::ZERO, M * N);
 
-    let C = tr::matmul(&A, &B, N, M, K);
+    let D = tr::matmul(&A, &B, &C, M, N, K);
 
     A.schedule();
     B.schedule();
-    C.schedule();
+    D.schedule();
 
     let graph = tr::compile();
     graph.launch(&device);
 
-    let C_ref = {
+    let D_ref = {
         use ndarray::prelude::*;
-        let A = Array::linspace(0f32, 1f32, N * K);
-        let B = Array::linspace(0f32, 1f32, K * M);
-        let A = A.into_shape([N, K]).unwrap();
-        let B = B.into_shape([K, M]).unwrap();
+        let A = Array::linspace(0f32, 1f32, M * K);
+        let B = Array::linspace(0f32, 1f32, K * N);
+        let A = A.into_shape([M, K]).unwrap();
+        let B = B.into_shape([K, N]).unwrap();
 
         let C = A.dot(&B);
 
@@ -1294,11 +1292,11 @@ fn matmul_linspace() {
     // dbg!(C.to_vec::<f16>(..));
     // dbg!(&C_ref);
     use num_traits::*;
-    let C = C.to_vec::<f16>(..);
+    let D = D.to_vec::<f16>(..);
     assert!(
-        C.iter()
-            .zip(&C_ref)
-            .all(|(&C, &C_ref)| (C - C_ref).abs() < f16::from_f32(1.0)),
-        "lhs = {C:?}\n is not equal to rhs = {C_ref:?}\n"
+        D.iter()
+            .zip(&D_ref)
+            .all(|(&D, &D_ref)| (D - D_ref).abs() < f16::from_f32(1.0)),
+        "lhs = {D:?}\n is not equal to rhs = {D_ref:?}\n"
     );
 }

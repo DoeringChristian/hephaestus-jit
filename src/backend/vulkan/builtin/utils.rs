@@ -1,3 +1,5 @@
+use ash::vk;
+
 use crate::vartype::VarType;
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {
@@ -31,6 +33,22 @@ pub fn glsl_short_ty(ty: &VarType) -> &'static str {
         VarType::F16 => "f16",
         VarType::F32 => "f32",
         VarType::F64 => "f64",
+        _ => todo!(),
+    }
+}
+pub fn component_type(ty: &VarType) -> vk::ComponentTypeKHR {
+    match ty {
+        VarType::I8 => vk::ComponentTypeKHR::SINT8,
+        VarType::U8 => vk::ComponentTypeKHR::UINT8,
+        VarType::I16 => vk::ComponentTypeKHR::SINT16,
+        VarType::U16 => vk::ComponentTypeKHR::UINT16,
+        VarType::I32 => vk::ComponentTypeKHR::SINT32,
+        VarType::U32 => vk::ComponentTypeKHR::UINT32,
+        VarType::I64 => vk::ComponentTypeKHR::SINT64,
+        VarType::U64 => vk::ComponentTypeKHR::UINT64,
+        VarType::F16 => vk::ComponentTypeKHR::FLOAT16,
+        VarType::F32 => vk::ComponentTypeKHR::FLOAT32,
+        VarType::F64 => vk::ComponentTypeKHR::FLOAT64,
         _ => todo!(),
     }
 }

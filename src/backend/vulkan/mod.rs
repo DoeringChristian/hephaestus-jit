@@ -276,16 +276,20 @@ impl backend::BackendDevice for VulkanDevice {
                         max_m,
                         max_k,
                     } => {
-                        let mat_c = to_buffer(pass.resources[0]).unwrap();
+                        let mat_d = to_buffer(pass.resources[0]).unwrap();
                         let mat_a = to_buffer(pass.resources[1]).unwrap();
                         let mat_b = to_buffer(pass.resources[2]).unwrap();
+                        let mat_c = to_buffer(pass.resources[3]).unwrap();
                         let config = pass.resources.get(3).cloned().and_then(to_buffer);
-                        let ty = &graph.buffer_desc(pass.resources[0]).ty;
+
+                        let a_type = &graph.buffer_desc(pass.resources[1]).ty;
+                        let c_type = &graph.buffer_desc(pass.resources[3]).ty;
 
                         cooperative_matrix::multiply(
                             &self,
                             &mut rgraph,
-                            ty,
+                            a_type,
+                            c_type,
                             *max_n as _,
                             *max_m as _,
                             *max_k as _,
@@ -293,6 +297,7 @@ impl backend::BackendDevice for VulkanDevice {
                             mat_a,
                             mat_b,
                             mat_c,
+                            mat_d,
                         );
                     }
                     DeviceOp::Buffer2Texture => {

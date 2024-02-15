@@ -305,8 +305,8 @@ impl AsVarType for Intersection {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MatMulConfig {
-    pub N: u32,
     pub M: u32,
+    pub N: u32,
     pub K: u32,
 }
 impl AsVarType for MatMulConfig {

@@ -4,6 +4,7 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 use vk_sync::AccessType;
 
+use crate::backend::vulkan::builtin::utils::component_type;
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
 };
@@ -20,59 +21,86 @@ use crate::{
 
 use super::utils::glsl_ty;
 
+#[allow(non_snake_case)]
 pub fn multiply(
     device: &VulkanDevice,
     rgraph: &mut RGraph,
-    ty: &'static VarType,
-    max_n: u32,
-    max_m: u32,
-    max_k: u32,
+    a_type: &'static VarType,
+    c_type: &'static VarType,
+    M: u32,
+    N: u32,
+    K: u32,
     config: Option<Arc<Buffer>>,
     mat_a: Arc<Buffer>,
     mat_b: Arc<Buffer>,
     mat_c: Arc<Buffer>,
+    mat_d: Arc<Buffer>,
 ) {
-    log::trace!("Cooperative Matrix");
     let subgroup_size = device
         .device
         .physical_device
         .subgroup_properties
         .subgroup_size;
 
-    let subgroups_per_workgroup = 1;
+    let coopmat_type = device
+        .device
+        .cooperative_matrix_properties
+        .iter()
+        .find(|p| {
+            p.a_type == p.b_type
+                && p.c_type == p.result_type
+                && component_type(a_type) == p.a_type
+                && component_type(c_type) == p.c_type
+                && p.scope == vk::ScopeKHR::SUBGROUP
+        })
+        .unwrap();
 
-    let workgroup_size = subgroup_size * subgroups_per_workgroup;
+    let lM = coopmat_type.m_size;
+    let lN = coopmat_type.n_size;
+    let lK = coopmat_type.k_size;
 
-    let coop_n = 16;
-    let coop_m = 16;
-    let coop_k = 16;
+    let COOP_PER_TILE_M = 8;
+    let COOP_PER_TILE_N = 8;
+    let COOP_PER_TILE_K = 2;
 
-    // let num_tiles = max_n * max_m;
+    let TILE_M = lM * COOP_PER_TILE_M;
+    let TILE_N = lN * COOP_PER_TILE_N;
+    let TILE_K = lK * COOP_PER_TILE_K;
 
-    let tiles_n = max_n / coop_n;
-    let tiles_m = max_m / coop_m;
-    let num_tiles = tiles_n * tiles_m;
+    let a_bits = a_type.size() * 8;
+    let c_bits = c_type.size() * 8;
 
-    let num_workgroups = num_tiles / subgroups_per_workgroup;
+    let a_type = glsl_ty(a_type);
+    let c_type = glsl_ty(c_type);
 
-    log::trace!("Workgroups: {num_workgroups}");
+    let dispatch_x = N / TILE_N;
+    let dispatch_y = M / TILE_M;
 
-    let glsl_ty = glsl_ty(ty);
+    log::trace!("Cooperative Matrix Multiply Add: ");
+    log::trace!("M={M}, N={N}, K={K}, lM={lM}, lN={lN}, lK={lK}, TILE_M={TILE_M}, TILE_N={TILE_N}, TILE_K={TILE_K}");
+    log::trace!("Dispatch: ( {dispatch_x}, {dispatch_y}, 1 )");
+
     let code = device.get_shader_glsl(
-        include_str!("kernels/cooperative_matrix.glsl"),
+        include_str!("kernels/cooperative_matrix_sh.glsl"),
         ShaderKind::Compute,
         &[
-            ("WORKGROUP_SIZE", Some(&format!("{workgroup_size}"))),
-            ("T", Some(&glsl_ty)),
-            ("COOP_N", Some(&format!("{coop_n}"))),
-            ("COOP_M", Some(&format!("{coop_m}"))),
-            ("COOP_K", Some(&format!("{coop_k}"))),
+            ("lM", Some(&format!("{lM}"))),
+            ("lN", Some(&format!("{lN}"))),
+            ("lK", Some(&format!("{lK}"))),
+            ("TILE_M", Some(&format!("{TILE_M}"))),
+            ("TILE_N", Some(&format!("{TILE_N}"))),
+            ("TILE_K", Some(&format!("{TILE_K}"))),
+            ("A_TYPE", Some(&format!("{a_type}"))),
+            ("A_BITS", Some(&format!("{a_bits}"))),
+            ("C_TYPE", Some(&format!("{c_type}"))),
+            ("C_BITS", Some(&format!("{c_bits}"))),
+            ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
         ],
     );
     let pipeline = device.get_pipeline(&PipelineDesc {
         code: &code,
         desc_set_layouts: &[DescSetLayout {
-            bindings: &(0..4)
+            bindings: &(0..5)
                 .map(|i| Binding {
                     binding: i,
                     count: 1,
@@ -95,11 +123,7 @@ pub fn multiply(
         );
         config_buffer
             .mapped_slice_mut()
-            .copy_from_slice(bytemuck::cast_slice(&[MatMulConfig {
-                N: max_n,
-                M: max_m,
-                K: max_k,
-            }]));
+            .copy_from_slice(bytemuck::cast_slice(&[MatMulConfig { N, M, K }]));
 
         Arc::new(config_buffer)
     });
@@ -140,8 +164,13 @@ pub fn multiply(
                             binding: 3,
                             buffers: &[BufferWriteInfo { buffer: &mat_c }],
                         },
+                        WriteSet {
+                            set: 0,
+                            binding: 4,
+                            buffers: &[BufferWriteInfo { buffer: &mat_d }],
+                        },
                     ],
-                    (num_workgroups, 1, 1),
+                    (dispatch_x, dispatch_y, 1),
                 );
             });
     }
