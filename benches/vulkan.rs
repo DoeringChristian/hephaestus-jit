@@ -42,9 +42,7 @@ mod benches {
         let graph = tr::compile();
         graph.launch(&device);
 
-        let start = Instant::now();
         let C = tr::matfma(&A, &B, &C, m, n, k);
-        let duration = Instant::now() - start;
 
         C.schedule();
 
