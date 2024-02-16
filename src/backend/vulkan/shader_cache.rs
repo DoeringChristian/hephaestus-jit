@@ -1,9 +1,12 @@
+use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use text_placeholder::Template;
+
+use super::codegen;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShaderKind {
@@ -21,6 +24,17 @@ impl From<ShaderKind> for shaderc::ShaderKind {
 pub struct ShaderCache(HashMap<u64, Arc<Vec<u32>>>);
 
 impl ShaderCache {
+    pub fn get<I: codegen::CodegenDef + 'static>(&mut self, input: &I) -> Arc<Vec<u32>> {
+        let mut hasher = DefaultHasher::new();
+        TypeId::of::<I>().hash(&mut hasher);
+        input.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        self.0
+            .entry(hash)
+            .or_insert_with(|| Arc::new(input.generate()))
+            .clone()
+    }
     pub fn lease_glsl(
         &mut self,
         src: &str,

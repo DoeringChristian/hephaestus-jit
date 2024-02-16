@@ -1,5 +1,7 @@
 use ash::vk;
 
+use crate::backend::vulkan::codegen;
+use crate::backend::vulkan::shader_cache::ShaderKind;
 use crate::vartype::VarType;
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {
@@ -50,5 +52,55 @@ pub fn component_type(ty: &VarType) -> vk::ComponentTypeKHR {
         VarType::F32 => vk::ComponentTypeKHR::FLOAT32,
         VarType::F64 => vk::ComponentTypeKHR::FLOAT64,
         _ => todo!(),
+    }
+}
+
+#[derive(Hash)]
+pub struct GlslShaderDef<'a> {
+    pub code: &'a str,
+    pub kind: ShaderKind,
+    pub defines: &'a [(&'a str, Option<&'a str>)],
+}
+impl<'a> codegen::CodegenDef for GlslShaderDef<'a> {
+    fn generate(&self) -> Vec<u32> {
+        let compiler = shaderc::Compiler::new().unwrap();
+        let mut options = shaderc::CompileOptions::new().unwrap();
+
+        options.set_target_env(
+            shaderc::TargetEnv::Vulkan,
+            shaderc::EnvVersion::Vulkan1_2 as _,
+        );
+
+        for define in self.defines {
+            options.add_macro_definition(define.0, define.1);
+        }
+        let preprocessed = compiler
+            .preprocess(self.code, "", "main", Some(&options))
+            .unwrap()
+            .as_text();
+        log::trace! {"Compiling shader: \n{preprocessed}"};
+
+        let compiler = glslang::Compiler::acquire().unwrap();
+        let options = glslang::CompilerOptions {
+            source_language: glslang::SourceLanguage::GLSL,
+            target: glslang::Target::Vulkan {
+                version: glslang::VulkanVersion::Vulkan1_3,
+                spirv_version: glslang::SpirvVersion::SPIRV1_5,
+            },
+            ..Default::default()
+        };
+
+        let shader_stage = match self.kind {
+            ShaderKind::Compute => glslang::ShaderStage::Compute,
+        };
+
+        let shader = glslang::ShaderSource::from(preprocessed.as_str());
+        let shader = glslang::ShaderInput::new(&shader, shader_stage, &options, None).unwrap();
+        let shader = compiler
+            .create_shader(shader)
+            .map_err(|err| anyhow::anyhow!("{err} {preprocessed}"))
+            .unwrap();
+        let code = shader.compile().unwrap();
+        code
     }
 }

@@ -1,12 +1,12 @@
 use half::f16;
 
-use super::CompileInfo;
+use super::DeviceInfo;
 use crate::ir::{VarId, IR};
 use crate::vartype::{self, AsVarType, VarType};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Write};
 
-pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec<u32>> {
+pub fn assemble_ir(ir: &IR, info: &DeviceInfo, entry_point: &str) -> Option<Vec<u32>> {
     let mut s = String::new();
     assemble_entry_point(&mut s, ir, info, entry_point).unwrap();
 
@@ -58,7 +58,7 @@ pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec
 pub fn assemble_entry_point(
     s: &mut String,
     ir: &IR,
-    info: &CompileInfo,
+    info: &DeviceInfo,
     entry_point: &str,
 ) -> std::fmt::Result {
     let mut b = GlslBuilder::new(ir);

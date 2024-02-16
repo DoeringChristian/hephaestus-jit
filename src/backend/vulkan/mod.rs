@@ -27,7 +27,7 @@ use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
 
-use self::codegen::CompileInfo;
+use self::codegen::DeviceInfo;
 use self::pipeline::PipelineDesc;
 use self::shader_cache::{ShaderCache, ShaderKind};
 
@@ -39,7 +39,7 @@ pub struct InternalVkDevice {
     shader_cache: Mutex<ShaderCache>,
 }
 impl InternalVkDevice {
-    fn compile_ir(&self, ir: &IR, info: &CompileInfo) -> Arc<pipeline::Pipeline> {
+    fn compile_ir(&self, ir: &IR, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
         let mut hasher = DefaultHasher::new();
         ir.internal_hash().hash(&mut hasher);
         info.hash(&mut hasher);
@@ -59,6 +59,9 @@ impl InternalVkDevice {
             .entry(desc.hash())
             .or_insert_with(|| Arc::new(pipeline::Pipeline::create(&self.device, desc)))
             .clone()
+    }
+    fn get_shader<I: codegen::CodegenDef + 'static>(&self, input: &I) -> Arc<Vec<u32>> {
+        self.shader_cache.lock().unwrap().get(input)
     }
     fn get_shader_glsl(
         &self,
@@ -168,7 +171,7 @@ impl backend::BackendDevice for VulkanDevice {
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
                     let size = *size;
-                    let compile_info = CompileInfo {
+                    let compile_info = DeviceInfo {
                         work_group_size: 128,
                     };
                     let pipeline = self.compile_ir(ir, &compile_info);

@@ -62,6 +62,13 @@ pub struct IR {
     pub(crate) n_accels: usize,
     pub(crate) hash: Mutex<Option<u64>>,
 }
+// Implement hash for IR using it's cached internal hash
+impl Hash for IR {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let hash = self.internal_hash();
+        hash.hash(state);
+    }
+}
 
 impl IR {
     // pub fn push_var(&mut self, mut var: Var, size: usize, deps: &[VarId]) -> VarId {

@@ -4,12 +4,12 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 use vk_sync::AccessType;
 
-use crate::backend::vulkan::builtin::utils::component_type;
+use crate::backend::vulkan::builtin::utils::{component_type, GlslShaderDef};
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
 };
 use crate::backend::vulkan::shader_cache::ShaderKind;
-use crate::backend::vulkan::VulkanDevice;
+use crate::backend::vulkan::{codegen, VulkanDevice};
 use crate::vartype::VarType;
 use crate::{
     backend::vulkan::vulkan_core::{
@@ -20,6 +20,57 @@ use crate::{
 };
 
 use super::utils::glsl_ty;
+
+#[allow(non_snake_case)]
+#[derive(Hash)]
+struct CoopMMADef<'a> {
+    lM: u32,
+    lN: u32,
+    lK: u32,
+    TILE_M: u32,
+    TILE_N: u32,
+    TILE_K: u32,
+    a_bits: usize,
+    a_type: &'a str,
+    c_bits: usize,
+    c_type: &'a str,
+    subgroup_size: u32,
+}
+impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
+    fn generate(&self) -> Vec<u32> {
+        let CoopMMADef {
+            lM,
+            lN,
+            lK,
+            TILE_M,
+            TILE_N,
+            TILE_K,
+            a_bits,
+            a_type,
+            c_bits,
+            c_type,
+            subgroup_size,
+        } = self;
+        GlslShaderDef {
+            code: include_str!("kernels/cooperative_matrix_sh.glsl"),
+            kind: ShaderKind::Compute,
+            defines: &[
+                ("lM", Some(&format!("{lM}"))),
+                ("lN", Some(&format!("{lN}"))),
+                ("lK", Some(&format!("{lK}"))),
+                ("TILE_M", Some(&format!("{TILE_M}"))),
+                ("TILE_N", Some(&format!("{TILE_N}"))),
+                ("TILE_K", Some(&format!("{TILE_K}"))),
+                ("A_TYPE", Some(&format!("{a_type}"))),
+                ("A_BITS", Some(&format!("{a_bits}"))),
+                ("C_TYPE", Some(&format!("{c_type}"))),
+                ("C_BITS", Some(&format!("{c_bits}"))),
+                ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
+            ],
+        }
+        .generate()
+    }
+}
 
 #[allow(non_snake_case)]
 pub fn multiply(
@@ -78,23 +129,20 @@ pub fn multiply(
     log::trace!("Using cooperative matrix type: {coopmat_type:#?}");
     log::trace!("Dispatch: ( {dispatch_x}, {dispatch_y}, 1 )");
 
-    let code = device.get_shader_glsl(
-        include_str!("kernels/cooperative_matrix_sh.glsl"),
-        ShaderKind::Compute,
-        &[
-            ("lM", Some(&format!("{lM}"))),
-            ("lN", Some(&format!("{lN}"))),
-            ("lK", Some(&format!("{lK}"))),
-            ("TILE_M", Some(&format!("{TILE_M}"))),
-            ("TILE_N", Some(&format!("{TILE_N}"))),
-            ("TILE_K", Some(&format!("{TILE_K}"))),
-            ("A_TYPE", Some(&format!("{a_type}"))),
-            ("A_BITS", Some(&format!("{a_bits}"))),
-            ("C_TYPE", Some(&format!("{c_type}"))),
-            ("C_BITS", Some(&format!("{c_bits}"))),
-            ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
-        ],
-    );
+    let code = device.get_shader(&CoopMMADef {
+        lM,
+        lN,
+        lK,
+        TILE_M,
+        TILE_N,
+        TILE_K,
+        a_bits,
+        a_type,
+        c_bits,
+        c_type,
+        subgroup_size,
+    });
+
     let pipeline = device.get_pipeline(&PipelineDesc {
         code: &code,
         desc_set_layouts: &[DescSetLayout {
@@ -121,7 +169,7 @@ pub fn multiply(
         );
         config_buffer
             .mapped_slice_mut()
-            .copy_from_slice(bytemuck::cast_slice(&[MatMulConfig { N, M, K }]));
+            .copy_from_slice(bytemuck::cast_slice(&[MatMulConfig { M, N, K }]));
 
         Arc::new(config_buffer)
     });

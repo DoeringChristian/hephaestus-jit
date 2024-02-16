@@ -1,7 +1,7 @@
 mod bop;
 mod glslext;
 
-use super::CompileInfo;
+use super::DeviceInfo;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -42,7 +42,7 @@ macro_rules! glsl_ext {
 
 pub fn assemble_trace(
     trace: &IR,
-    info: &CompileInfo,
+    info: &DeviceInfo,
     entry_point: &str,
 ) -> Result<Vec<u32>, dr::Error> {
     let mut b = SpirvBuilder::default();
@@ -162,7 +162,7 @@ impl SpirvBuilder {
     pub fn assemble(
         &mut self,
         ir: &IR,
-        info: &CompileInfo,
+        info: &DeviceInfo,
         entry_point: &str,
     ) -> Result<(), dr::Error> {
         self.n_buffers = 1 + ir.n_buffers; // [size_buffer, ir buffers]

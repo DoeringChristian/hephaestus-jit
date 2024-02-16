@@ -8,7 +8,7 @@ use crate::backend::vulkan::codegen;
 use crate::ir::IR;
 
 use super::accel::Accel;
-use super::codegen::CompileInfo;
+use super::codegen::DeviceInfo;
 use super::vulkan_core::buffer::Buffer;
 use super::vulkan_core::device::Device;
 use super::vulkan_core::graph::RGraphPool;
@@ -124,7 +124,7 @@ impl Pipeline {
             }
         }
     }
-    pub fn from_ir(device: &Device, ir: &IR, info: &CompileInfo) -> Self {
+    pub fn from_ir(device: &Device, ir: &IR, info: &DeviceInfo) -> Self {
         let spirv = codegen::assemble_trace(ir, info, "main");
 
         let num_buffers = 1 + ir.n_buffers; // Add one for size buffer
