@@ -146,10 +146,10 @@ pub fn multiply(
     let pipeline = device.get_pipeline(&PipelineDesc {
         code: &code,
         desc_set_layouts: &[DescSetLayout {
-            bindings: &(0..5)
+            bindings: &(0..1)
                 .map(|i| Binding {
                     binding: i,
-                    count: 1,
+                    count: 5,
                 })
                 .collect::<Vec<_>>(),
         }],
@@ -191,30 +191,36 @@ pub fn multiply(
                         WriteSet {
                             set: 0,
                             binding: 0,
-                            buffers: &[BufferWriteInfo {
-                                buffer: &config_buffer,
-                            }],
+                            buffers: &[
+                                BufferWriteInfo {
+                                    buffer: &config_buffer,
+                                },
+                                BufferWriteInfo { buffer: &mat_a },
+                                BufferWriteInfo { buffer: &mat_b },
+                                BufferWriteInfo { buffer: &mat_c },
+                                BufferWriteInfo { buffer: &mat_d },
+                            ],
                         },
-                        WriteSet {
-                            set: 0,
-                            binding: 1,
-                            buffers: &[BufferWriteInfo { buffer: &mat_a }],
-                        },
-                        WriteSet {
-                            set: 0,
-                            binding: 2,
-                            buffers: &[BufferWriteInfo { buffer: &mat_b }],
-                        },
-                        WriteSet {
-                            set: 0,
-                            binding: 3,
-                            buffers: &[BufferWriteInfo { buffer: &mat_c }],
-                        },
-                        WriteSet {
-                            set: 0,
-                            binding: 4,
-                            buffers: &[BufferWriteInfo { buffer: &mat_d }],
-                        },
+                        // WriteSet {
+                        //     set: 0,
+                        //     binding: 1,
+                        //     buffers: &[BufferWriteInfo { buffer: &mat_a }],
+                        // },
+                        // WriteSet {
+                        //     set: 0,
+                        //     binding: 2,
+                        //     buffers: &[BufferWriteInfo { buffer: &mat_b }],
+                        // },
+                        // WriteSet {
+                        //     set: 0,
+                        //     binding: 3,
+                        //     buffers: &[BufferWriteInfo { buffer: &mat_c }],
+                        // },
+                        // WriteSet {
+                        //     set: 0,
+                        //     binding: 4,
+                        //     buffers: &[BufferWriteInfo { buffer: &mat_d }],
+                        // },
                     ],
                     (dispatch_x, dispatch_y, 1),
                 );

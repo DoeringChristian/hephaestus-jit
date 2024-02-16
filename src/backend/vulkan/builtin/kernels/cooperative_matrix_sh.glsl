@@ -121,19 +121,25 @@ layout(set = 0, binding = 0) buffer Config{
     uint32_t M;
     uint32_t N;
     uint32_t K;
-};
-layout(set = 0, binding = 1) buffer InputAV4{
+}config_[5];
+layout(set = 0, binding = 0) buffer InputAV4{
     uvec4 x[];
-}inputAV4;
-layout(set = 0, binding = 2) buffer InputBV4{
+}inputAV4_[5];
+layout(set = 0, binding = 0) buffer InputBV4{
     uvec4 x[];
-}inputBV4;
-layout(set = 0, binding = 3) buffer InputC{
+}inputBV4_[5];
+layout(set = 0, binding = 0) buffer InputC{
     C_TYPE x[];
-}inputC;
-layout(set = 0, binding = 4) buffer OutputO{
+}inputC_[5];
+layout(set = 0, binding = 0) buffer OutputO{
     C_TYPE x[];
-}outputO;
+}outputO_[5];
+
+#define config config_[0]
+#define inputAV4 inputAV4_[1]
+#define inputBV4 inputBV4_[2]
+#define inputC inputC_[3]
+#define outputO outputO_[4]
 
 const int ELEMENTS_PER_VEC4 = 16/(A_BITS / 8); // 16 bytes, A_BITS bits per element
 const int ROW_PAD_SH = ELEMENTS_PER_VEC4;
@@ -159,6 +165,10 @@ layout(local_size_x = INVOCATIONS_PER_WORKGROUP, local_size_y = 1, local_size_z 
 void main()
 {
     // C is of size MxN
+
+    uint M = config.M;
+    uint N = config.N;
+    uint K = config.K;
 
     uint strideA = K;
     uint strideB = B_COL_MAJOR ? K : N;
