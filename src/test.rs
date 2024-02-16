@@ -1246,22 +1246,22 @@ fn loop_record2() {
 #[test]
 #[allow(non_snake_case)]
 fn matmul_linspace() {
-    let N = 128;
-    let M = 128;
-    let K = 128;
+    let N = 256;
+    let M = 256;
+    let K = 256;
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    pub fn linspace(start: f16, end: f16, num: usize) -> VarRef {
+    pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
         tr::literal(start).add(
             &tr::index(num)
-                .cast(f16::var_ty())
-                .mul(&tr::literal((end - start) / (f16::from_f32(num as _)))),
+                .cast(f32::var_ty())
+                .mul(&tr::literal((end - start) / (num as f32))),
         )
     }
 
-    let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), M * K);
-    let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), K * N);
+    let A = linspace(0f32, 1f32, M * K).cast(f16::var_ty());
+    let B = linspace(0f32, 1f32, K * N).cast(f16::var_ty());
     let C = tr::sized_literal(f16::ZERO, M * N);
 
     let D = tr::matfma(&A, &B, &C, M, N, K);

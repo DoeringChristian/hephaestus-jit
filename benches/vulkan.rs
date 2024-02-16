@@ -21,15 +21,16 @@ mod benches {
         n: usize,
         k: usize,
     ) -> std::time::Duration {
-        pub fn linspace(start: f16, end: f16, num: usize) -> VarRef {
+        pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
             tr::literal(start).add(
                 &tr::index(num)
-                    .cast(f16::var_ty())
-                    .mul(&tr::literal((end - start) / (f16::from_f32(num as _)))),
+                    .cast(f32::var_ty())
+                    .mul(&tr::literal((end - start) / (num as f32))),
             )
         }
-        let A = linspace(f16::from_f32(0f32), f16::from_f32(1f32), m * k);
-        let B = linspace(f16::from_f32(0f32), f16::from_f32(1f32), k * n);
+
+        let A = linspace(0f32, 1f32, m * k).cast(f16::var_ty());
+        let B = linspace(0f32, 1f32, k * n).cast(f16::var_ty());
         let C = tr::sized_literal(f16::from_f32(0f32), n * m);
 
         let C = tr::matfma(&A, &B, &C, m, n, k);
