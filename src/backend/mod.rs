@@ -216,6 +216,7 @@ pub struct PassReport {
 }
 
 pub struct Report {
+    pub cpu_time: std::time::Duration,
     pub passes: Vec<PassReport>,
 }
 impl std::fmt::Display for Report {

@@ -59,7 +59,10 @@ impl Device {
     pub fn create(index: usize) -> Self {
         Self(Arc::new(InternalDevice::create(index).unwrap()))
     }
-    pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(&'a self, f: F) {
+    pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(
+        &'a self,
+        f: F,
+    ) -> std::time::Duration {
         unsafe {
             // Record command buffer
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
@@ -75,10 +78,12 @@ impl Device {
             let command_buffers = [self.command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
 
+            let start = std::time::Instant::now();
             self.queue_submit(self.queue, &[submit_info], self.fence)
                 .unwrap();
 
             self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
+            return std::time::Instant::now() - start;
         }
     }
 }

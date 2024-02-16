@@ -345,7 +345,7 @@ impl RGraph {
             write: vec![],
         }
     }
-    pub fn submit(self, device: &Device) -> Vec<PassReport> {
+    pub fn submit(self, device: &Device) -> (std::time::Duration, Vec<PassReport>) {
         let mut resource_accesses = self
             .resources
             .iter()
@@ -363,7 +363,7 @@ impl RGraph {
         let mut profiler = Profiler::new(device, self.passes.len());
         let mut pass_names = vec![];
 
-        device.submit_global(|device, cb| {
+        let cpu_time = device.submit_global(|device, cb| {
             profiler.begin_frame(cb);
             for pass in self.passes {
                 let scope = profiler.begin_scope(cb);
@@ -411,6 +411,6 @@ impl RGraph {
 
         drop(tmp_resource_pool);
 
-        report
+        (cpu_time, report)
     }
 }

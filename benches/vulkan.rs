@@ -9,6 +9,8 @@ use hephaestus_jit::backend::Device;
 use hephaestus_jit::tr;
 
 mod benches {
+    use std::time::{Duration, Instant};
+
     use half::f16;
     use hephaestus_jit::tr::VarRef;
     use hephaestus_jit::vartype::AsVarType;
@@ -33,7 +35,16 @@ mod benches {
         let B = linspace(0f32, 1f32, k * n).cast(f16::var_ty());
         let C = tr::sized_literal(f16::from_f32(0f32), n * m);
 
+        A.schedule();
+        B.schedule();
+        C.schedule();
+
+        let graph = tr::compile();
+        graph.launch(&device);
+
+        let start = Instant::now();
         let C = tr::matfma(&A, &B, &C, m, n, k);
+        let duration = Instant::now() - start;
 
         C.schedule();
 
@@ -46,6 +57,7 @@ mod benches {
             .find(|pass| pass.name == "Cooperative Matrix Multiply")
             .unwrap();
 
+        // report.cpu_time
         pass.duration
     }
     pub fn compress_large(device: &Device, n: usize) -> std::time::Duration {

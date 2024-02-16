@@ -111,8 +111,8 @@ pub fn multiply(
     let lK = coopmat_type.k_size;
 
     // TODO: Dynamically get TILE size
-    let TILE_M = 128;
-    let TILE_N = 128;
+    let TILE_M = 256;
+    let TILE_N = 256;
     let TILE_K = 32;
 
     let a_bits = a_type.size() * 8;

@@ -316,10 +316,11 @@ impl backend::BackendDevice for VulkanDevice {
                 _ => todo!(),
             }
         }
-        let pass_report = rgraph.submit(self);
+        let (cpu_time, pass_report) = rgraph.submit(self);
 
         Ok(backend::Report {
             passes: pass_report,
+            cpu_time,
         })
     }
 
