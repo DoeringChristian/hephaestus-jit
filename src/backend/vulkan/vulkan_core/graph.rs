@@ -369,6 +369,7 @@ impl RGraph {
                 let scope = profiler.begin_scope(cb);
 
                 // Transition resources
+                // TODO: remove redundant barriers
                 log::trace!("Recording {pass:?} to command buffer");
 
                 let mut barriers = Barriers::default();

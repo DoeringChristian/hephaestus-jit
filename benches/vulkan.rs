@@ -151,7 +151,8 @@ pub fn cooperative_matrix(c: &mut Criterion) {
         let n = m;
         let k = m;
 
-        group.throughput(Throughput::Elements((m * n * k) as _));
+        // NOTE: A matrix-matrix multiplication costs m * n * k * 2 flops
+        group.throughput(Throughput::Elements((m * n * k * 2) as _));
 
         group.bench_with_input(BenchmarkId::from_parameter(m), &n, |b, &n| {
             b.iter_custom(|iters| {
