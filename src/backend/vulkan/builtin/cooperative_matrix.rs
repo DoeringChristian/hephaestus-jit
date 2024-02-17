@@ -181,7 +181,8 @@ pub fn multiply(
             .read(&mat_a, AccessType::ComputeShaderReadOther)
             .read(&mat_b, AccessType::ComputeShaderReadOther)
             .read(&mat_c, AccessType::ComputeShaderReadOther)
-            .write(&mat_c, AccessType::ComputeShaderWrite)
+            .read(&mat_d, AccessType::ComputeShaderReadOther)
+            .write(&mat_d, AccessType::ComputeShaderWrite)
             .record(move |device, cb, pool| {
                 pipeline.submit(
                     cb,

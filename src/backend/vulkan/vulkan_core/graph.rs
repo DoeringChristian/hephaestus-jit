@@ -74,12 +74,12 @@ impl Barriers {
             })
             .collect::<Vec<_>>();
 
-        let global_barrier = vk_sync::GlobalBarrier {
-            previous_accesses: &self.prev,
-            next_accesses: &self.next,
-        };
+        let global_barrier =
+            (self.prev.is_empty() && self.next.is_empty()).then(|| vk_sync::GlobalBarrier {
+                previous_accesses: &self.prev,
+                next_accesses: &self.next,
+            });
         log::trace!("Barrier with Global {global_barrier:?}, Buffer {buffer_barriers:?}, and Image {image_barriers:?}");
-        let global_barrier = Some(global_barrier);
 
         pipeline_barrier(
             device,
@@ -369,20 +369,22 @@ impl RGraph {
                 let scope = profiler.begin_scope(cb);
 
                 // Transition resources
-                // TODO: remove redundant barriers
+                // TODO: Improved barrier placement
+                // Also verify correcness especially for write after write
                 log::trace!("Recording {pass:?} to command buffer");
 
                 let mut barriers = Barriers::default();
 
                 for (id, access) in pass.read.iter().chain(pass.write.iter()) {
-                    let prev = resource_accesses[id.0];
-                    if prev != *access {
-                        resources[id.0].transition(&mut barriers, prev, *access);
+                    let prev = &mut resource_accesses[id.0];
+                    if *prev != *access {
+                        resources[id.0].transition(&mut barriers, *prev, *access);
                         log::trace!(
                             "\tTransition Resource {resource:?} {prev:?} -> {read:?}",
                             resource = id.0,
                             read = access
                         );
+                        *prev = *access;
                     }
                 }
                 barriers.record(device, cb);
@@ -392,11 +394,6 @@ impl RGraph {
                 render_fn(device, cb, &mut tmp_resource_pool);
 
                 profiler.end_scope(cb, scope);
-
-                // Modify resource_accesses when writing
-                for (id, access) in pass.write.iter() {
-                    resource_accesses[id.0] = *access;
-                }
 
                 pass_names.push(pass.name);
             }

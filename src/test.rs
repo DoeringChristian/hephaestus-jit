@@ -1265,6 +1265,8 @@ fn matmul_linspace() {
     let C = tr::sized_literal(f16::ZERO, M * N);
 
     let D = tr::matfma(&A, &B, &C, M, N, K);
+    D.schedule();
+    let D = tr::matfma(&A, &B, &C, M, N, K);
 
     A.schedule();
     B.schedule();
