@@ -396,12 +396,12 @@ impl RGraph {
                     self.passes[group.clone()]
                         .iter()
                         .map(|pass| pass.name.as_str()),
-                    " + ",
+                    ", ",
                 )
                 .collect::<String>();
 
                 log::trace!(
-                    "Recording group {group_name}, containing passes {passes:?}",
+                    "Recording passes {passes:?} in group \"{group_name}\"",
                     passes = group.clone()
                 );
 
