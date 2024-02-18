@@ -892,6 +892,7 @@ dependencies = [
  "rspirv",
  "rusty-hook",
  "shaderc",
+ "slice-group-by",
  "slotmap",
  "spirv-tools",
  "text_placeholder",
@@ -1836,6 +1837,12 @@ name = "similar"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32fea41aca09ee824cc9724996433064c89f7777e60762749a4170a14abbfa21"
+
+[[package]]
+name = "slice-group-by"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "826167069c09b99d56f31e9ae5c99049e932a98c9dc2dac47645b08dbbf76ba7"
 
 [[package]]
 name = "slotmap"

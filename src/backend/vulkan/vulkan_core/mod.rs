@@ -6,3 +6,4 @@ pub mod image;
 pub mod physical_device;
 pub mod pool;
 pub mod profiler;
+pub mod utils;

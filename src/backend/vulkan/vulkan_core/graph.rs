@@ -1,5 +1,8 @@
+use super::utils::RangeGroupBy;
 use ash::vk;
 use indexmap::IndexMap;
+use itertools::Itertools;
+use slice_group_by::GroupBy;
 
 use crate::backend::PassReport;
 
@@ -201,7 +204,7 @@ impl RGraph {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceId(usize);
 #[derive(Debug, Clone, Copy)]
 pub struct PassId(usize);
@@ -345,7 +348,7 @@ impl RGraph {
             write: vec![],
         }
     }
-    pub fn submit(self, device: &Device) -> (std::time::Duration, Vec<PassReport>) {
+    pub fn submit(mut self, device: &Device) -> (std::time::Duration, Vec<PassReport>) {
         let mut resource_accesses = self
             .resources
             .iter()
@@ -363,19 +366,63 @@ impl RGraph {
         let mut profiler = Profiler::new(device, self.passes.len());
         let mut pass_names = vec![];
 
+        let dependent = |id0: usize, id1: usize| -> bool {
+            let pass0 = &self.passes[id0];
+            let pass1 = &self.passes[id1];
+            for (w, _) in &pass0.write {
+                if pass1.read.iter().find(|(r, _)| r == w).is_some() {
+                    return true;
+                }
+            }
+            for (w, _) in pass0.read.iter().chain(pass0.write.iter()) {
+                if pass1.write.iter().find(|(r, _)| r == w).is_some() {
+                    return true;
+                }
+            }
+            false
+        };
+
+        let groups = (0..self.passes.len())
+            .range_group_by(|&id0, &id1| !dependent(id0, id1))
+            .collect::<Vec<_>>();
+
         let cpu_time = device.submit_global(|device, cb| {
             profiler.begin_frame(cb);
-            for pass in self.passes {
+
+            for group in groups {
                 let scope = profiler.begin_scope(cb);
+
+                let group_name = Itertools::intersperse(
+                    self.passes[group.clone()]
+                        .iter()
+                        .map(|pass| pass.name.as_str()),
+                    " + ",
+                )
+                .collect::<String>();
+
+                log::trace!(
+                    "Recording group {group_name}, containing passes {passes:?}",
+                    passes = group.clone()
+                );
 
                 // Transition resources
                 // TODO: Improved barrier placement
                 // Also verify correcness especially for write after write
-                log::trace!("Recording {pass:?} to command buffer");
+                // Could also make the rg use ssa to optimize?
+                // log::trace!("Recording {pass:?} to command buffer");
 
                 let mut barriers = Barriers::default();
 
-                for (id, access) in pass.read.iter().chain(pass.write.iter()) {
+                // Record barriers for all the passes in a group by transitioning their states
+                for (id, access) in self.passes[group.clone()]
+                    .iter()
+                    .flat_map(|pass| pass.read.iter())
+                    .chain(
+                        self.passes[group.clone()]
+                            .iter()
+                            .flat_map(|pass| pass.write.iter()),
+                    )
+                {
                     let prev = &mut resource_accesses[id.0];
                     if *prev != *access {
                         resources[id.0].transition(&mut barriers, *prev, *access);
@@ -390,13 +437,16 @@ impl RGraph {
                 barriers.record(device, cb);
 
                 // Record content of pass
-                let render_fn = pass.render_fn.unwrap();
-                render_fn(device, cb, &mut tmp_resource_pool);
+                for pass in self.passes[group.clone()].iter_mut() {
+                    let render_fn = pass.render_fn.take().unwrap();
+                    render_fn(device, cb, &mut tmp_resource_pool);
+                }
 
                 profiler.end_scope(cb, scope);
 
-                pass_names.push(pass.name);
+                pass_names.push(group_name);
             }
+
             profiler.end_frame(cb);
         });
 

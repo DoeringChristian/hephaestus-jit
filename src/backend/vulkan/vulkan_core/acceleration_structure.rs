@@ -232,6 +232,7 @@ impl AccelerationStructure {
         info: &AccelerationStructureInfo,
         // TODO: not shure if I should handle dependencies like this:
         dependencies: &[Arc<AccelerationStructure>],
+        buffer_dependencies: &[Arc<Buffer>],
     ) {
         log::trace!("Building AccelerationStructure with {info:#?}");
         // TODO: pool
@@ -277,6 +278,9 @@ impl AccelerationStructure {
             .read(&scratch_buffer, AccessType::AccelerationStructureBuildRead)
             .write(&scratch_buffer, AccessType::AccelerationStructureBuildWrite);
         for dep in dependencies {
+            pass = pass.read(dep, AccessType::AccelerationStructureBuildRead);
+        }
+        for dep in buffer_dependencies {
             pass = pass.read(dep, AccessType::AccelerationStructureBuildRead);
         }
         pass.write(self, AccessType::AccelerationStructureBuildWrite)

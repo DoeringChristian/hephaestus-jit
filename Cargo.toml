@@ -54,6 +54,7 @@ ash-window = { git = "https://github.com/DoeringChristian/ash.git", version = "0
 vk-sync = { git = "https://github.com/DoeringChristian/vk-sync-rs.git", branch = "custom-ash", package = "vk-sync-fork" }
 #vk-sync = { version = "0.4.0", package = "vk-sync-fork" }
 gpu-allocator = { git = "https://github.com/DoeringChristian/gpu-allocator.git", branch = "custom-ash" }
+slice-group-by = { version = "0.3.1", features = ["nightly"]}
 
 [dev-dependencies]
 rusty-hook = "^0.11.2"
