@@ -232,6 +232,8 @@ impl AccelerationStructure {
     /// * `info`: AccelerationStructureInfo
     /// * `dependencies`: dependencies of this acceleration structure, used to resolve render graph
     /// * `buffer_dependencies`: dependencies of this acceleration structure, used to resolve render graph
+    /// TODO: somehow remove dependencies and buffer dependencies by submitting them through the
+    /// info struct
     pub fn build(
         self: &Arc<Self>,
         rgraph: &mut RGraph,
