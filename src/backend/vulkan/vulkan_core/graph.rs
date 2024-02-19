@@ -355,10 +355,15 @@ impl RGraph {
         //
         log::trace!("Passes: {passes:#?}", passes = self.passes);
 
+        // Compute inter-pass dependencies and dependant count
         let mut deps: Vec<PassId> = vec![];
+        // Index into [deps], listing dependencies for each pass
         let mut pass_deps = vec![];
-        let mut last_writes = vec![None; self.resources.len()];
+        // The number of passes, directly depending on a pass
         let mut dep_counts = vec![0u32; self.passes.len()];
+
+        // PassId of the last pass, that has written to this resource
+        let mut last_writes = vec![None; self.resources.len()];
 
         for id in (0..self.passes.len()).map(|i| PassId(i)) {
             let pass = &self.passes[id.0];
@@ -385,28 +390,20 @@ impl RGraph {
             for (r, _) in &pass.write {
                 last_writes[r.0] = Some(id);
             }
-            dbg!(&id);
-            dbg!(&deps);
-            dbg!(&pass_deps);
-            dbg!(&last_writes);
-            dbg!(&dep_counts);
         }
 
+        // The passes, which have no dependant passes
         let mut frontier = dep_counts
             .iter()
             .enumerate()
             .filter(|(i, count)| **count == 0)
             .map(|(i, _)| PassId(i))
             .collect::<Vec<_>>();
-        dbg!(&frontier);
         let mut new_frontier: Vec<PassId> = vec![];
 
-        // let mut prev_passes = self
-        //     .passes
-        //     .into_iter()
-        //     .map(|pass| Some(pass))
-        //     .collect::<Vec<_>>();
+        // Passes
         let mut passes = vec![];
+        // groups of passes, that can be executed in parallel
         let mut groups = vec![];
 
         while passes.len() < self.passes.len() {
@@ -426,7 +423,6 @@ impl RGraph {
                     .filter(|id| dep_counts[id.0] == 0)
                     .unique(),
             );
-            dbg!(&new_frontier);
 
             let start = passes.len();
             passes.extend(frontier.drain(..));
@@ -437,8 +433,6 @@ impl RGraph {
             assert!(new_frontier.is_empty());
         }
 
-        dbg!(&passes);
-        dbg!(&groups);
         let tmp = groups
             .iter()
             .map(|group| {
@@ -448,7 +442,6 @@ impl RGraph {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        dbg!(&tmp);
 
         let mut prev_passes = self
             .passes
