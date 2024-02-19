@@ -369,7 +369,7 @@ impl RGraph {
             let pass = &self.passes[id.0];
             let start = deps.len();
 
-            // Get the passes this pass is dependent on.
+            // Get the passes this pass is depending on.
             deps.extend(
                 pass.read
                     .iter()
@@ -416,6 +416,7 @@ impl RGraph {
             }
             // Collect the new frontier by searching for all 0 dependant variables
             // These have to be among the dependencies of the current frontier
+            // TODO: the call to unique allocates memory, and could maybe be optimized
             new_frontier.extend(
                 frontier
                     .iter()
@@ -433,22 +434,12 @@ impl RGraph {
             assert!(new_frontier.is_empty());
         }
 
-        let tmp = groups
-            .iter()
-            .map(|group| {
-                passes[group.clone()]
-                    .iter()
-                    .map(|id| self.passes[id.0].name.clone())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-
+        // Use pass ids to gather passes from graph
         let mut prev_passes = self
             .passes
             .into_iter()
             .map(|pass| Some(pass))
             .collect::<Vec<_>>();
-
         let mut passes = passes
             .into_iter()
             .map(|id| prev_passes[id.0].take().unwrap())
