@@ -226,6 +226,12 @@ impl AccelerationStructure {
             info,
         }
     }
+    /// Build the acceleration structure
+    ///
+    /// * `rgraph`: The current render graph
+    /// * `info`: AccelerationStructureInfo
+    /// * `dependencies`: dependencies of this acceleration structure, used to resolve render graph
+    /// * `buffer_dependencies`: dependencies of this acceleration structure, used to resolve render graph
     pub fn build(
         self: &Arc<Self>,
         rgraph: &mut RGraph,
