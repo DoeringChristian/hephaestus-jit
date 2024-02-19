@@ -40,6 +40,8 @@ pub struct ThreadState {
     // Represents the current scope
     pub scope: usize,
 
+    // Keeps a stack of side effect variables for recording loops.
+    // These will be made dependencies of the loop.
     pub recorded_se_start: Vec<usize>,
     pub recorded_se: Vec<VarRef>,
 }
