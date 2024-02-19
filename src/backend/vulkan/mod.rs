@@ -137,7 +137,7 @@ impl backend::BackendDevice for VulkanDevice {
         use crate::graph::PassOp;
         let mut rgraph = RGraph::new();
 
-        for pass in graph.passes.iter() {
+        for (i, pass) in graph.passes.iter().enumerate() {
             let to_buffer = |id: crate::graph::ResourceId| {
                 env.buffer(id)
                     .and_then(|buffer| Some(buffer.vulkan()?.buffer.clone()))
@@ -207,7 +207,7 @@ impl backend::BackendDevice for VulkanDevice {
                         .collect::<Vec<_>>();
 
                     // Create a render pass on the graph, pushing all it's resource accesses
-                    let mut rpass = rgraph.pass("JIT Kernel");
+                    let mut rpass = rgraph.pass(format!("JIT Kernel {i}"));
                     for buffer in &buffers {
                         rpass = rpass.read(&buffer, AccessType::ComputeShaderReadOther);
                         rpass = rpass.write(&buffer, AccessType::ComputeShaderWrite);

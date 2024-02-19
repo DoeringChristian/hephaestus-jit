@@ -222,6 +222,7 @@ pub struct Pass {
 impl Debug for Pass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pass")
+            .field("name", &self.name)
             .field("read", &self.read)
             .field("write", &self.write)
             .finish()
@@ -234,7 +235,7 @@ impl Debug for Pass {
 /// * `read`: Read accesses
 /// * `write`: Write accesses
 pub struct PassBuilder<'a> {
-    name: &'a str,
+    name: String,
     graph: &'a mut RGraph,
     read: Vec<(ResourceId, AccessType)>,
     write: Vec<(ResourceId, AccessType)>,
@@ -265,7 +266,7 @@ impl<'a> PassBuilder<'a> {
     ) -> PassId {
         let id = PassId(self.graph.passes.len());
         self.graph.passes.push(Pass {
-            name: self.name.into(),
+            name: self.name,
             read: self.read,
             write: self.write,
             render_fn: Some(Box::new(f)),
@@ -341,9 +342,9 @@ impl Drop for RGraphPool {
 }
 
 impl RGraph {
-    pub fn pass<'a>(&'a mut self, name: &'a str) -> PassBuilder<'a> {
+    pub fn pass<'a>(&'a mut self, name: impl Into<String>) -> PassBuilder<'a> {
         PassBuilder {
-            name,
+            name: name.into(),
             graph: self,
             read: vec![],
             write: vec![],
@@ -384,12 +385,12 @@ impl RGraph {
             for (r, _) in &pass.write {
                 last_writes[r.0] = Some(id);
             }
+            dbg!(&id);
+            dbg!(&deps);
+            dbg!(&pass_deps);
+            dbg!(&last_writes);
+            dbg!(&dep_counts);
         }
-
-        dbg!(&deps);
-        dbg!(&pass_deps);
-        dbg!(&last_writes);
-        dbg!(&dep_counts);
 
         let mut frontier = dep_counts
             .iter()
@@ -400,6 +401,11 @@ impl RGraph {
         dbg!(&frontier);
         let mut new_frontier: Vec<PassId> = vec![];
 
+        // let mut prev_passes = self
+        //     .passes
+        //     .into_iter()
+        //     .map(|pass| Some(pass))
+        //     .collect::<Vec<_>>();
         let mut passes = vec![];
         let mut groups = vec![];
 
@@ -420,6 +426,7 @@ impl RGraph {
                     .filter(|id| dep_counts[id.0] == 0)
                     .unique(),
             );
+            dbg!(&new_frontier);
 
             let start = passes.len();
             passes.extend(frontier.drain(..));
@@ -430,19 +437,29 @@ impl RGraph {
             assert!(new_frontier.is_empty());
         }
 
-        // let mut prev_passes = self
-        //     .passes
-        //     .into_iter()
-        //     .map(|pass| Some(pass))
-        //     .collect::<Vec<_>>();
-        // let passes = passes
-        //     .iter()
-        //     .map(|id| prev_passes[id.0].take().unwrap())
-        //     .collect::<Vec<_>>();
+        dbg!(&passes);
+        dbg!(&groups);
+        let tmp = groups
+            .iter()
+            .map(|group| {
+                passes[group.clone()]
+                    .iter()
+                    .map(|id| self.passes[id.0].name.clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        dbg!(&tmp);
 
-        // NOTE: groups and passes are now in reverse order
-        // We could flip both, but since the order of passes in a group are per definition
-        // interchangable, we are able to only flip groups
+        let mut prev_passes = self
+            .passes
+            .into_iter()
+            .map(|pass| Some(pass))
+            .collect::<Vec<_>>();
+
+        let mut passes = passes
+            .into_iter()
+            .map(|id| prev_passes[id.0].take().unwrap())
+            .collect::<Vec<_>>();
 
         let mut resource_accesses = self
             .resources
@@ -464,7 +481,11 @@ impl RGraph {
         let cpu_time = device.submit_global(|device, cb| {
             profiler.begin_frame(cb);
 
-            for group in groups {
+            // NOTE: that, since we did BFS in from the top down, groups and passes are in reverse
+            // order.
+            // We could flip both, but since passes within a group are per definition
+            // interchangable, we only have to reverse the group order.
+            for group in groups.into_iter().rev() {
                 let scope = profiler.begin_scope(cb);
 
                 let group_name = Itertools::intersperse(

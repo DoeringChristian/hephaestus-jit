@@ -106,6 +106,8 @@ impl Accel {
             let mut info = blas.info.clone();
             assert_eq!(info.geometries.len(), 1);
 
+            let mut deps = vec![];
+
             match &mut info.geometries[0].data {
                 AccelerationStructureGeometryData::Triangles {
                     index_data,
@@ -120,12 +122,14 @@ impl Accel {
                             DeviceOrHostAddress::DeviceAddress(triangles.device_address());
                         *vertex_data =
                             DeviceOrHostAddress::DeviceAddress(vertices.device_address());
+                        deps.push(triangles.clone());
+                        deps.push(vertices.clone());
                     }
                 },
                 _ => todo!(),
             }
 
-            blas.build(rgraph, &info, &[], &[]);
+            blas.build(rgraph, &info, &[], &deps);
         }
         // let memory_barriers = [vk::MemoryBarrier::builder()
         //     .src_access_mask(vk::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR)
