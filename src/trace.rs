@@ -39,6 +39,9 @@ pub struct ThreadState {
 
     // Represents the current scope
     pub scope: usize,
+
+    pub recorded_se_start: Vec<usize>,
+    pub recorded_se: Vec<VarRef>,
 }
 impl ThreadState {
     pub fn new_group(&mut self) {
@@ -68,6 +71,8 @@ impl Default for ThreadState {
             groups: Default::default(),
             start: Default::default(),
             scope: with_trace(|trace| trace.new_scope()).0,
+            recorded_se_start: Default::default(),
+            recorded_se: Default::default(),
         }
     }
 }
@@ -296,48 +301,79 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
     // TODO: maybe mark variables dirty that have been referenced with RefMut
     res
 }
-pub fn new_scope() -> ScopeId{
-    TS.with(|ts|{
-        ts.borrow_mut().new_scope()
-    })
+pub fn new_scope() -> ScopeId {
+    TS.with(|ts| ts.borrow_mut().new_scope())
 }
 
 // Loop stuff
-pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, Vec<VarRef>){
+///
+/// Constructs the start of a recorded loop.
+/// The state of the loop is handled through a construct.
+/// We could introduce a 'namespace' cosntruct type, that would allow us to not actually use spir-v
+/// variables.
+///
+pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, Vec<VarRef>) {
     let state = composite(state_vars);
 
     let ty = state.ty();
     let extent = state.extent();
 
-    let loop_start = push_var(Var{
-        op: Op::KernelOp(KernelOp::LoopStart),
-        ty,
-        extent,
-        ..Default::default()
-    }, [&state]);
+    // Start a new group of recorded side effects, to be used by loop_end
+    TS.with(|ts| {
+        let mut ts = ts.borrow_mut();
+        let start = ts.recorded_se.len();
+        ts.recorded_se_start.push(start);
+    });
 
-    let state = state_vars.iter().enumerate().map(|(i, _)|{
-        loop_start.extract(i)
-    }).collect::<Vec<_>>();
+    let loop_start = push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::LoopStart),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        [&state],
+    );
+
+    let state = state_vars
+        .iter()
+        .enumerate()
+        .map(|(i, _)| loop_start.extract(i))
+        .collect::<Vec<_>>();
 
     (loop_start, state)
 }
-pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef>{
+pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef> {
     let state = composite(state_vars);
 
     let ty = state.ty();
     let extent = state.extent();
 
-    let loop_end = push_var(Var{
-        op: Op::KernelOp(KernelOp::LoopEnd),
-        ty,
-        extent,
-        ..Default::default()
-    }, [loop_start, &state]);
+    // Get side effects of this loop
+    let side_effects = TS.with(|ts| {
+        let mut ts = ts.borrow_mut();
+        let start = ts.recorded_se_start.pop().unwrap();
+        dbg!(start);
+        ts.recorded_se.drain(start..).collect::<Vec<_>>()
+    });
 
-    let state = state_vars.iter().enumerate().map(|(i, _)|{
-        loop_end.extract(i)
-    }).collect::<Vec<_>>();
+    let deps = [loop_start, &state].into_iter().chain(side_effects.iter());
+
+    let loop_end = push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::LoopEnd),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        deps,
+    );
+
+    let state = state_vars
+        .iter()
+        .enumerate()
+        .map(|(i, _)| loop_end.extract(i))
+        .collect::<Vec<_>>();
 
     state
 }
@@ -627,19 +663,32 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
     )
 }
 
-
 #[allow(non_snake_case)]
-pub fn matfma(mat_a: &VarRef, mat_b: &VarRef, mat_c: &VarRef, M: usize, N: usize, K: usize) -> VarRef{
+pub fn matfma(
+    mat_a: &VarRef,
+    mat_b: &VarRef,
+    mat_c: &VarRef,
+    M: usize,
+    N: usize,
+    K: usize,
+) -> VarRef {
     assert_eq!(mat_a.ty(), mat_b.ty());
     let c_type = mat_c.ty();
 
-    let mat_c = push_var(Var{
-        op: Op::DeviceOp(DeviceOp::MatMul{max_n: N, max_m: M, max_k: K}),
-        ty: c_type,
-        extent: Extent::Size(N * M),
-        ..Default::default()
-    }, [mat_a, mat_b, mat_c]);
-    
+    let mat_c = push_var(
+        Var {
+            op: Op::DeviceOp(DeviceOp::MatMul {
+                max_n: N,
+                max_m: M,
+                max_k: K,
+            }),
+            ty: c_type,
+            extent: Extent::Size(N * M),
+            ..Default::default()
+        },
+        [mat_a, mat_b, mat_c],
+    );
+
     mat_c
 }
 
@@ -664,6 +713,17 @@ impl VarRef {
         with_trace(|trace| trace.var(self.id()).dirty)
     }
     /// Schedule the variable for execution in the current group
+    // pub fn schedule(&self) {
+    //     // We should not be able to schedule already evaluated variables as well as ones who's
+    //     // extent is unsized
+    //     if self.is_evaluated() || self.is_unsized() {
+    //         return;
+    //     }
+    //     TS.with(|s| {
+    //         let mut s = s.borrow_mut();
+    //         s.scheduled.entry(self.id()).or_insert_with(|| self.clone());
+    //     })
+    // }
     pub fn schedule(&self) {
         // We should not be able to schedule already evaluated variables as well as ones who's
         // extent is unsized
@@ -671,8 +731,14 @@ impl VarRef {
             return;
         }
         TS.with(|s| {
-            let mut s = s.borrow_mut();
-            s.scheduled.entry(self.id()).or_insert_with(|| self.clone());
+            let mut ts = s.borrow_mut();
+            if !ts.recorded_se_start.is_empty() && self.ty() == vartype::void() {
+                ts.recorded_se.push(self.clone());
+            } else {
+                ts.scheduled
+                    .entry(self.id())
+                    .or_insert_with(|| self.clone());
+            }
         })
     }
     pub fn is_evaluated(&self) -> bool {

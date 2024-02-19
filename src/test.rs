@@ -1244,6 +1244,29 @@ fn loop_record2() {
     assert_eq!(c.to_vec::<bool>(..), vec![false, false]);
 }
 #[test]
+fn loop_record_side_effect() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let mut i = tr::sized_literal(0, 1);
+    let mut c = tr::literal(true);
+    let dst = tr::sized_literal(0, 10);
+
+    loop_record!([i] while c {
+        tr::literal(1).scatter(&dst, &i);
+
+        i = i.add(&tr::literal(1));
+        c = c.and(&i.lt(&tr::literal(4)));
+    });
+
+    i.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
+}
+#[test]
 #[allow(non_snake_case)]
 fn matmul_linspace() {
     let N = 256;
