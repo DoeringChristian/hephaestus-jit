@@ -11,6 +11,7 @@ use super::buffer::Buffer;
 use super::device::Device;
 use super::image::Image;
 use super::profiler::Profiler;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use vk_sync::cmd::pipeline_barrier;
@@ -206,7 +207,7 @@ impl RGraph {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceId(usize);
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct PassId(usize);
 
 ///
@@ -349,6 +350,100 @@ impl RGraph {
         }
     }
     pub fn submit(mut self, device: &Device) -> (std::time::Duration, Vec<PassReport>) {
+        // Passes are already in topological order
+        //
+        log::trace!("Passes: {passes:#?}", passes = self.passes);
+
+        let mut deps: Vec<PassId> = vec![];
+        let mut pass_deps = vec![];
+        let mut last_writes = vec![None; self.resources.len()];
+        let mut dep_counts = vec![0u32; self.passes.len()];
+
+        for id in (0..self.passes.len()).map(|i| PassId(i)) {
+            let pass = &self.passes[id.0];
+            let start = deps.len();
+
+            // Get the passes this pass is dependent on.
+            deps.extend(
+                pass.read
+                    .iter()
+                    .map(|(id, _)| *id)
+                    .chain(pass.write.iter().map(|(id, _)| *id))
+                    .unique()
+                    .flat_map(|r| last_writes[r.0]),
+            );
+            let range = start..deps.len();
+            pass_deps.push(range.clone());
+
+            // Increment dependant count for this pass
+            for dep in &deps[range] {
+                dep_counts[dep.0] += 1;
+            }
+
+            // Update the last_writes field
+            for (r, _) in &pass.write {
+                last_writes[r.0] = Some(id);
+            }
+        }
+
+        dbg!(&deps);
+        dbg!(&pass_deps);
+        dbg!(&last_writes);
+        dbg!(&dep_counts);
+
+        let mut frontier = dep_counts
+            .iter()
+            .enumerate()
+            .filter(|(i, count)| **count == 0)
+            .map(|(i, _)| PassId(i))
+            .collect::<Vec<_>>();
+        dbg!(&frontier);
+        let mut new_frontier: Vec<PassId> = vec![];
+
+        let mut passes = vec![];
+        let mut groups = vec![];
+
+        while passes.len() < self.passes.len() {
+            // Iterate through all dependencies of all variables in the frontier
+            for &id in frontier
+                .iter()
+                .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
+            {
+                dep_counts[id.0] -= 1;
+            }
+            // Collect the new frontier by searching for all 0 dependant variables
+            // These have to be among the dependencies of the current frontier
+            new_frontier.extend(
+                frontier
+                    .iter()
+                    .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
+                    .filter(|id| dep_counts[id.0] == 0)
+                    .unique(),
+            );
+
+            let start = passes.len();
+            passes.extend(frontier.drain(..));
+            groups.push(start..passes.len());
+
+            // Swap out the now empty frontier with the new frontier
+            std::mem::swap(&mut frontier, &mut new_frontier);
+            assert!(new_frontier.is_empty());
+        }
+
+        // let mut prev_passes = self
+        //     .passes
+        //     .into_iter()
+        //     .map(|pass| Some(pass))
+        //     .collect::<Vec<_>>();
+        // let passes = passes
+        //     .iter()
+        //     .map(|id| prev_passes[id.0].take().unwrap())
+        //     .collect::<Vec<_>>();
+
+        // NOTE: groups and passes are now in reverse order
+        // We could flip both, but since the order of passes in a group are per definition
+        // interchangable, we are able to only flip groups
+
         let mut resource_accesses = self
             .resources
             .iter()
@@ -363,28 +458,8 @@ impl RGraph {
 
         let mut tmp_resource_pool = RGraphPool::new(device);
 
-        let mut profiler = Profiler::new(device, self.passes.len());
+        let mut profiler = Profiler::new(device, passes.len());
         let mut pass_names = vec![];
-
-        let dependent = |id0: usize, id1: usize| -> bool {
-            let pass0 = &self.passes[id0];
-            let pass1 = &self.passes[id1];
-            for (w, _) in &pass0.write {
-                if pass1.read.iter().find(|(r, _)| r == w).is_some() {
-                    return true;
-                }
-            }
-            for (w, _) in pass0.read.iter().chain(pass0.write.iter()) {
-                if pass1.write.iter().find(|(r, _)| r == w).is_some() {
-                    return true;
-                }
-            }
-            false
-        };
-
-        let groups = (0..self.passes.len())
-            .range_group_by(|&id0, &id1| !dependent(id0, id1))
-            .collect::<Vec<_>>();
 
         let cpu_time = device.submit_global(|device, cb| {
             profiler.begin_frame(cb);
@@ -393,8 +468,8 @@ impl RGraph {
                 let scope = profiler.begin_scope(cb);
 
                 let group_name = Itertools::intersperse(
-                    self.passes[group.clone()]
-                        .iter()
+                    passes[group.clone()]
+                        .into_iter()
                         .map(|pass| pass.name.as_str()),
                     ", ",
                 )
@@ -414,11 +489,11 @@ impl RGraph {
                 let mut barriers = Barriers::default();
 
                 // Record barriers for all the passes in a group by transitioning their states
-                for (id, access) in self.passes[group.clone()]
+                for (id, access) in passes[group.clone()]
                     .iter()
                     .flat_map(|pass| pass.read.iter())
                     .chain(
-                        self.passes[group.clone()]
+                        passes[group.clone()]
                             .iter()
                             .flat_map(|pass| pass.write.iter()),
                     )
@@ -437,7 +512,7 @@ impl RGraph {
                 barriers.record(device, cb);
 
                 // Record content of pass
-                for pass in self.passes[group.clone()].iter_mut() {
+                for pass in &mut passes[group] {
                     let render_fn = pass.render_fn.take().unwrap();
                     render_fn(device, cb, &mut tmp_resource_pool);
                 }
