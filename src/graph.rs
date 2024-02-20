@@ -139,13 +139,13 @@ impl Graph {
         self.passes.len()
     }
     pub fn launch(&self, device: &backend::Device) -> backend::Report {
-        self.launch_with(device, &[])
+        self.launch_with(device, &[]).0
     }
     pub fn launch_with(
         &self,
         device: &backend::Device,
         inputs: &[&trace::VarRef],
-    ) -> backend::Report {
+    ) -> (backend::Report, Vec<trace::VarRef>) {
         // Capture Environment
         let mut env = Env::default();
         trace::with_trace(|trace| {
@@ -215,7 +215,9 @@ impl Graph {
                 });
         });
 
-        report
+        let output = output.into_iter().collect::<Option<Vec<_>>>().unwrap();
+
+        (report, output)
     }
 }
 

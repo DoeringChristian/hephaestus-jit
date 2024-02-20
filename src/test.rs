@@ -991,6 +991,27 @@ fn record() {
     assert_eq!(b.to_vec::<i32>(..), vec![5, 6, 7]);
 }
 #[test]
+fn record_output() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let mut f = tr::record(|a: VarRef| {
+        let a = a.add(&tr::literal(1));
+        a
+    });
+
+    let a = tr::array(&[1, 2, 3], &device);
+
+    let a1 = f(&device, a.clone());
+
+    let a2 = f(&device, a.clone());
+
+    assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
+    assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4]);
+    assert_ne!(a1.id(), a2.id());
+}
+#[test]
 fn matrix_times_matrix() {
     pretty_env_logger::try_init().ok();
 

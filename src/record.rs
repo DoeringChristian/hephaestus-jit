@@ -11,10 +11,18 @@ pub trait Traverse {
         None.into_iter()
     }
 }
+pub trait Construct {
+    fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self;
+}
 
 impl Traverse for VarRef {
     fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
         [self].into_iter()
+    }
+}
+impl Construct for VarRef {
+    fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self {
+        iter.next().unwrap()
     }
 }
 impl<const N: usize, T: Traverse> Traverse for [T; N] {
@@ -58,16 +66,50 @@ impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_traverse_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-pub fn record<'a, Input, F>(f: F) -> impl FnMut(&backend::Device, Input) + 'a
+macro_rules! impl_construct_for_tuple {
+    ($($param:ident),*) => {
+        #[allow(non_snake_case)]
+        impl<$($param: Construct),*> Construct for ($($param,)*){
+            fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self{
+                ($($param::construct(iter),)*)
+            }
+            // fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef>{
+            //     let ($($param,)*) = self;
+            //     [].into_iter()
+            //     $(.chain($param.traverse()))*
+            // }
+        }
+    };
+}
+impl_construct_for_tuple!();
+impl_construct_for_tuple!(A);
+impl_construct_for_tuple!(A, B);
+impl_construct_for_tuple!(A, B, C);
+impl_construct_for_tuple!(A, B, C, D);
+impl_construct_for_tuple!(A, B, C, D, E);
+impl_construct_for_tuple!(A, B, C, D, E, F);
+impl_construct_for_tuple!(A, B, C, D, E, F, G);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+
+pub fn record<'a, Input, Output, F>(f: F) -> impl FnMut(&backend::Device, Input) -> Output + 'a
 where
     Input: Traverse + Clone,
-    F: FnOnce(Input) + 'a,
+    Output: Traverse + Construct + Clone,
+    F: FnOnce(Input) -> Output + 'a,
 {
     let mut graph = None;
     let mut f = Some(f);
 
-    move |device, params: Input| {
-        let param_vec = params.traverse().collect::<Vec<_>>();
+    move |device, input: Input| {
+        let input_vec = input.traverse().collect::<Vec<_>>();
 
         if graph.is_none() {
             // Swap out current schedule
@@ -77,14 +119,20 @@ where
             });
 
             let f = f.take().unwrap();
-            f(params.clone());
+            let output = f(input.clone());
+
+            let output_vec = output.traverse().collect::<Vec<_>>();
+
+            for v in &output_vec {
+                v.schedule();
+            }
 
             // Compile with params
             schedule_eval();
             graph = Some(TS.with(|s| {
                 let mut s = s.borrow_mut();
                 let schedule = std::mem::take(&mut (*s));
-                with_trace(|t| graph::compile(t, &schedule, &param_vec, &[]))
+                with_trace(|t| graph::compile(t, &schedule, &input_vec, &output_vec))
             }));
 
             // Swap in old schedule
@@ -93,7 +141,9 @@ where
                 *s = tmp;
             });
         }
-        graph.as_ref().unwrap().launch_with(device, &param_vec);
+        let (report, output) = graph.as_ref().unwrap().launch_with(device, &input_vec);
+        let mut output = output.into_iter();
+        Output::construct(&mut output)
     }
 }
 
