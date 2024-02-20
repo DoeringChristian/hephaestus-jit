@@ -201,4 +201,5 @@ Graph {
             ),
         },
     ],
+    n_outputs: 0,
 }

@@ -36,6 +36,15 @@ Graph {
                             data: 0,
                         },
                         Var {
+                            ty: Bool,
+                            op: Gather,
+                            deps: (
+                                0,
+                                2,
+                            ),
+                            data: 0,
+                        },
+                        Var {
                             ty: I32,
                             op: Literal,
                             deps: (
@@ -55,30 +64,21 @@ Graph {
                         },
                         Var {
                             ty: I32,
-                            op: BufferRef,
-                            deps: (
-                                5,
-                                5,
-                            ),
-                            data: 1,
-                        },
-                        Var {
-                            ty: Bool,
-                            op: Gather,
-                            deps: (
-                                0,
-                                2,
-                            ),
-                            data: 0,
-                        },
-                        Var {
-                            ty: I32,
                             op: Select,
                             deps: (
                                 2,
                                 5,
                             ),
                             data: 0,
+                        },
+                        Var {
+                            ty: I32,
+                            op: BufferRef,
+                            deps: (
+                                5,
+                                5,
+                            ),
+                            data: 1,
                         },
                         Var {
                             ty: Void,
@@ -98,9 +98,6 @@ Graph {
                             1,
                         ),
                         VarId(
-                            5,
-                        ),
-                        VarId(
                             2,
                         ),
                         VarId(
@@ -111,6 +108,9 @@ Graph {
                         ),
                         VarId(
                             6,
+                        ),
+                        VarId(
+                            5,
                         ),
                         VarId(
                             1,
@@ -155,4 +155,5 @@ Graph {
         },
         Internal,
     ],
+    n_outputs: 0,
 }

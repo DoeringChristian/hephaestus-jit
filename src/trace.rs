@@ -113,13 +113,13 @@ impl Trace {
     pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
         self.vars.get_mut(id.0)
     }
-    pub fn push_var(&mut self, mut var: Var) -> VarId {
+    pub fn push_var(&mut self, mut var: Var) -> VarRef {
         for id in var.deps.iter().chain(var.extent.get_dynamic().as_ref()) {
             self.inc_rc(*id);
         }
         var.rc = 1;
         let id = VarId(self.vars.insert(var));
-        id
+        VarRef{id}
     }
     pub fn inc_rc(&mut self, id: VarId) {
         self.vars[id.0].rc += 1;
@@ -218,7 +218,7 @@ pub struct Var {
     pub ty: &'static VarType,
     pub extent: Extent, // Extent of the variable
 
-    pub scope: ScopeId,
+    // pub scope: ScopeId,
 
     pub dirty: bool,
 
@@ -233,7 +233,7 @@ impl Default for Var {
             op: Default::default(),
             ty: vartype::void(),
             extent: Default::default(),
-            scope: Default::default(),
+            // scope: Default::default(),
             dirty: Default::default(),
             data: Default::default(),
             deps: Default::default(),
@@ -257,7 +257,7 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
 /// - scheduling evaluation of the previous group if the variable depends on 'dirty' variables
 /// - scheduling evaluation of the current group if the variable represents a device wide operation
 ///
-fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
+pub(crate) fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
     let deps = deps
@@ -279,22 +279,22 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
         schedule_eval();
     }
 
-    // Set scope as max between thread state and dependencies
-    v.scope = [TS.with(|s| s.borrow().scope())]
-        .into_iter()
-        .chain(
-            deps.iter()
-                .map(|id| with_trace(|trace| trace.var(*id).scope)),
-        )
-        .max()
-        .unwrap();
+    // // Set scope as max between thread state and dependencies
+    // v.scope = [TS.with(|s| s.borrow().scope())]
+    //     .into_iter()
+    //     .chain(
+    //         deps.iter()
+    //             .map(|id| with_trace(|trace| trace.var(*id).scope)),
+    //     )
+    //     .max()
+    //     .unwrap();
 
     // Set dependencies
 
     v.deps = deps;
 
     // Push actual variable
-    let res = with_trace(|t| VarRef { id: t.push_var(v) });
+    let res = with_trace(|t| t.push_var(v));
     // Auto schedule and schedule evaluation if device op
     if is_device_op {
         res.schedule();
@@ -390,7 +390,7 @@ pub fn compile() -> graph::Graph {
     TS.with(|s| {
         let mut s = s.borrow_mut();
         let schedule = std::mem::take(&mut (*s));
-        let graph = with_trace(|t| graph::compile(t, &schedule, &[]));
+        let graph = with_trace(|t| graph::compile(t, &schedule, &[], &[]));
         graph
     })
 }
@@ -1095,9 +1095,9 @@ impl VarRef {
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
     }
-    pub fn scope(&self) -> ScopeId {
-        with_trace(|t| t.var(self.id()).scope)
-    }
+    // pub fn scope(&self) -> ScopeId {
+    //     with_trace(|t| t.var(self.id()).scope)
+    // }
     pub fn item<T: AsVarType>(&self) -> T {
         assert_eq!(self.size(), 1);
         self.to_vec(0..1)[0]

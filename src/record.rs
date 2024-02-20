@@ -84,7 +84,7 @@ where
             graph = Some(TS.with(|s| {
                 let mut s = s.borrow_mut();
                 let schedule = std::mem::take(&mut (*s));
-                with_trace(|t| graph::compile(t, &schedule, &param_vec))
+                with_trace(|t| graph::compile(t, &schedule, &param_vec, &[]))
             }));
 
             // Swap in old schedule

@@ -314,13 +314,14 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
         // let ty = GlslTypeName(var.ty);
 
         writeln!(s, "")?;
-        writeln!(
-            s,
-            "\t// var id={id}, scope={scope} op={op:?}",
-            id = id.0,
-            scope = var.scope.0,
-            op = var.op,
-        )?;
+        // writeln!(
+        //     s,
+        //     "\t// var id={id}, scope={scope} op={op:?}",
+        //     id = id.0,
+        //     scope = var.scope.0,
+        //     op = var.op,
+        // )?;
+        writeln!(s, "\t// var id={id}, op={op:?}", id = id.0, op = var.op,)?;
 
         match var.op {
             crate::op::KernelOp::Nop => {

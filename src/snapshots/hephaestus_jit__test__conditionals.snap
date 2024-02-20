@@ -86,4 +86,5 @@ Graph {
     resources: [
         Internal,
     ],
+    n_outputs: 0,
 }

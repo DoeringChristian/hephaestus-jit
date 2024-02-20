@@ -24,7 +24,7 @@ impl Compiler {
             let src = self.collect(trace, *id);
 
             let var = trace.var(*id);
-            let scope = var.scope;
+            // let scope = var.scope;
             if var.ty.size() == 0 {
                 continue;
             }
@@ -36,7 +36,7 @@ impl Compiler {
                     op: KernelOp::BufferRef,
                     ty: var.ty,
                     data: buffer_id as _,
-                    scope,
+                    // scope,
                     ..Default::default()
                 },
                 [],
@@ -45,7 +45,7 @@ impl Compiler {
                 ir::Var {
                     op: KernelOp::Index,
                     ty: u32::var_ty(),
-                    scope,
+                    // scope,
                     ..Default::default()
                 },
                 [],
@@ -54,13 +54,13 @@ impl Compiler {
                 ir::Var {
                     op: KernelOp::Scatter,
                     ty: vartype::void(),
-                    scope,
+                    // scope,
                     ..Default::default()
                 },
                 [dst, src, idx],
             );
         }
-        self.ir.scope_sort();
+        // self.ir.scope_sort();
         self.ir.n_buffers = self.buffers.len();
         self.ir.n_textures = self.textures.len();
         self.ir.n_accels = self.accels.len();
@@ -71,7 +71,7 @@ impl Compiler {
         }
 
         let var = trace.var(id);
-        let scope = var.scope;
+        // let scope = var.scope;
 
         let internal_id = match var.op {
             Op::Ref { .. } => {
@@ -85,7 +85,7 @@ impl Compiler {
                     ir::Var {
                         op: KernelOp::Index,
                         ty: u32::var_ty(),
-                        scope,
+                        // scope,
                         ..Default::default()
                     },
                     [],
@@ -94,7 +94,7 @@ impl Compiler {
                     ir::Var {
                         op: KernelOp::Gather,
                         ty: var.ty,
-                        scope,
+                        // scope,
                         ..Default::default()
                     },
                     [data, idx],
@@ -106,7 +106,7 @@ impl Compiler {
                         op: KernelOp::Literal,
                         ty: var.ty,
                         data: var.data.literal().unwrap(),
-                        scope,
+                        // scope,
                         ..Default::default()
                     },
                     [],
@@ -121,7 +121,7 @@ impl Compiler {
                         ir::Var {
                             op: kop,
                             ty: var.ty,
-                            scope,
+                            // scope,
                             ..Default::default()
                         },
                         deps,
@@ -216,7 +216,7 @@ impl Compiler {
         let trivial = deps.len() == 0;
 
         if trivial {
-            var.scope = Default::default();
+            // var.scope = Default::default();
             var.deps = Default::default();
             if self.trivial.contains_key(&var) {
                 return self.trivial[&var];

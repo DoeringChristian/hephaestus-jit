@@ -2,9 +2,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use crate::backend;
 use crate::extent::Extent;
 use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
+use crate::vartype::AsVarType;
+use crate::{backend, vartype};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
 
@@ -18,7 +19,8 @@ use indexmap::IndexMap;
 /// they get overriden by the internal resource.
 ///
 pub enum GraphResource {
-    Param { param: usize },
+    Input { idx: usize },
+    Output { idx: usize },
     Captured { resource: Resource },
     Internal { id: trace::VarId },
 }
@@ -26,12 +28,13 @@ pub enum GraphResource {
 impl Debug for GraphResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Param { param } => f.debug_struct("Param").field("param", param).finish(),
+            Self::Input { idx } => f.debug_struct("Param").field("idx", idx).finish(),
             Self::Captured { resource } => f
                 .debug_struct("Captured")
                 .field("resource", resource)
                 .finish(),
             Self::Internal { .. } => f.debug_struct("Internal").finish(),
+            Self::Output { idx } => f.debug_struct("Output").field("idx", idx).finish(),
         }
     }
 }
@@ -109,6 +112,7 @@ pub struct Graph {
     pub passes: Vec<Pass>,
     pub resource_descs: Vec<ResourceDesc>,
     pub resources: Vec<GraphResource>,
+    pub n_outputs: usize,
 }
 
 impl Graph {
@@ -140,7 +144,7 @@ impl Graph {
     pub fn launch_with(
         &self,
         device: &backend::Device,
-        params: &[&trace::VarRef],
+        inputs: &[&trace::VarRef],
     ) -> backend::Report {
         // Capture Environment
         let mut env = Env::default();
@@ -150,10 +154,11 @@ impl Graph {
                 .iter()
                 .zip(self.resource_descs.iter())
                 .map(|(res, desc)| match res {
-                    GraphResource::Param { param } => {
-                        let var = trace.var(params[*param].id());
+                    GraphResource::Input { idx } => {
+                        let var = trace.var(inputs[*idx].id());
                         var.data.match_and_get(desc).unwrap()
                     }
+                    GraphResource::Output { .. } => Resource::create(device, desc),
                     GraphResource::Captured { resource } => resource.clone(),
                     GraphResource::Internal { .. } => Resource::create(device, desc),
                 })
@@ -164,16 +169,47 @@ impl Graph {
         let report = device.execute_graph(self, &env).unwrap();
         log::trace!("Report:\n {report}");
 
+        let mut output = vec![None; self.n_outputs];
+
         // Update resources of variables in the trace.
         trace::with_trace(|trace| {
             env.resources
                 .into_iter()
                 .zip(self.resources.iter())
-                .for_each(|(res, gres)| match gres {
+                .zip(self.resource_descs.iter())
+                .for_each(|((res, gres), desc)| match gres {
                     GraphResource::Internal { id } => {
                         if let Some(var) = trace.get_var_mut(*id) {
                             var.data = res;
                         }
+                    }
+                    GraphResource::Output { idx } => {
+                        let op = match res {
+                            Resource::Buffer(_) => op::Op::Buffer,
+                            Resource::Texture(_) => op::Op::Texture,
+                            Resource::Accel(_) => op::Op::Accel,
+                            _ => todo!(),
+                        };
+                        let (ty, extent) = match desc {
+                            ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
+                            ResourceDesc::TextureDesc(desc) => (
+                                f32::var_ty(),
+                                Extent::Texture {
+                                    shape: desc.shape,
+                                    channels: desc.channels,
+                                },
+                            ),
+                            ResourceDesc::AccelDesc(desc) => {
+                                (vartype::void(), Extent::Accel(desc.clone()))
+                            }
+                        };
+                        output[*idx] = Some(trace.push_var(trace::Var {
+                            op,
+                            ty,
+                            extent,
+                            data: res,
+                            ..Default::default()
+                        }))
                     }
                     _ => {}
                 });
@@ -217,13 +253,20 @@ pub enum PassOp {
 pub fn compile(
     trace: &mut trace::Trace,
     ts: &trace::ThreadState,
-    params: &[&trace::VarRef],
+    input: &[&trace::VarRef],
+    output: &[&trace::VarRef],
 ) -> Graph {
-    let params = params
+    let input = input
         .into_iter()
         .enumerate()
         .map(|(i, r)| (r.id(), i))
         .collect::<HashMap<_, _>>();
+    let output = output
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (r.id(), i))
+        .collect::<HashMap<_, _>>();
+    let n_outputs = output.len();
 
     // Get scheduled variables from thread state in order
     let mut vars = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
@@ -353,8 +396,10 @@ pub fn compile(
         .resources
         .iter()
         .map(|(id, desc)| {
-            if params.contains_key(&id) {
-                GraphResource::Param { param: params[&id] }
+            if input.contains_key(&id) {
+                GraphResource::Input { idx: input[&id] }
+            } else if output.contains_key(&id) {
+                GraphResource::Output { idx: output[&id] }
             } else {
                 let var = trace.var(*id);
                 var.data
@@ -395,6 +440,7 @@ pub fn compile(
         passes: graph_builder.passes,
         resource_descs,
         resources,
+        n_outputs,
     };
     graph
 }
