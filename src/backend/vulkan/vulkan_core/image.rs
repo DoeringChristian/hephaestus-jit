@@ -156,6 +156,9 @@ impl Drop for Image {
     fn drop(&mut self) {
         if let Some(allocation) = self.allocation.take() {
             unsafe {
+                for view in self.image_view_cache.lock().unwrap().values() {
+                    self.device.destroy_image_view(*view, None);
+                }
                 self.device.destroy_image(self.image, None);
                 self.device.destroy_sampler(self.sampler, None);
             }

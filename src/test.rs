@@ -188,7 +188,7 @@ fn test_struct() {
 }
 
 #[test]
-fn texture2d() {
+fn texture2df32() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -212,7 +212,7 @@ fn texture2d() {
     assert_eq!(v.to_vec::<f32>(..), vec![1.0; 8]);
 }
 #[test]
-fn texture3d() {
+fn texture3df32() {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -236,6 +236,46 @@ fn texture3d() {
     dbg!(v.to_vec::<f32>(..));
     assert_eq!(v.to_vec::<f32>(..), vec![1.0; 8]);
 }
+#[test]
+fn texture2di32() {
+    pretty_env_logger::try_init().ok();
+    let device = backend::Device::vulkan(0).unwrap();
+
+    let b = tr::sized_literal(1i32, 10 * 10 * 4);
+
+    let tex = b.texture(&[10, 10], 4);
+
+    let x = tr::sized_literal(0.5f32, 2);
+    let y = tr::sized_literal(0.5f32, 2);
+    // let z = tr::sized_literal(0.5f32, 2);
+
+    let v = tex.tex_lookup(&[&x, &y]);
+
+    v.schedule();
+    tr::compile().launch(&device);
+
+    assert_eq!(v.to_vec::<i32>(..), vec![1; 8]);
+}
+// #[test]
+// fn texture2di8() {
+//     pretty_env_logger::try_init().ok();
+//     let device = backend::Device::vulkan(0).unwrap();
+//
+//     let b = tr::sized_literal(1i8, 10 * 10 * 4);
+//
+//     let tex = b.texture(&[10, 10], 4);
+//
+//     let x = tr::sized_literal(0.5f32, 2);
+//     let y = tr::sized_literal(0.5f32, 2);
+//     // let z = tr::sized_literal(0.5f32, 2);
+//
+//     let v = tex.tex_lookup(&[&x, &y]);
+//
+//     v.schedule();
+//     tr::compile().launch(&device);
+//
+//     assert_eq!(v.to_vec::<i8>(..), vec![1; 8]);
+// }
 #[test]
 fn conditionals() {
     pretty_env_logger::try_init().ok();

@@ -139,7 +139,7 @@ pub fn assemble_entry_point(
 pub struct GlslBuilder {
     n_buffers: usize,
     buffer_types: HashSet<&'static VarType>,
-    samplers: HashSet<usize>,
+    samplers: HashSet<(usize, &'static VarType)>,
     composite_types: HashSet<&'static VarType>,
     ray_query: bool,
 }
@@ -192,14 +192,31 @@ impl GlslBuilder {
         }
         Ok(())
     }
-    pub fn sampler_binding(&mut self, s: &mut String, ir: &IR, dim: usize) -> std::fmt::Result {
+    pub fn sampler_binding(
+        &mut self,
+        s: &mut String,
+        ir: &IR,
+        dim: usize,
+        ty: &'static VarType,
+    ) -> std::fmt::Result {
         let n_samplers = ir.n_textures;
-        if !self.samplers.contains(&dim) {
+        if !self.samplers.contains(&(dim, ty)) {
+            let type_prefix = match ty {
+                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => "i",
+                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => "u",
+                VarType::F16 | VarType::F32 | VarType::F64 => "",
+                _ => todo!(),
+            };
+            let glsl_type = GlslTypeName(ty);
             writeln!(
                 s,
-                "layout(set = 0, binding = 1) uniform sampler{dim}D samplers[{n_samplers}];"
+                "layout(set = 0, binding = 1) uniform {type_prefix}sampler{dim}D samplers{dim}D{glsl_type}[{n_samplers}];"
             )?;
-            self.samplers.insert(dim);
+            // writeln!(
+            //     s,
+            //     "layout(set = 0, binding = 1, rgba32f) uniform readonly {type_prefix}image{dim}D images[{n_samplers}];"
+            // )?;
+            self.samplers.insert((dim, ty));
         }
         Ok(())
     }
@@ -212,7 +229,7 @@ impl GlslBuilder {
                     self.buffer_binding(s, memory_type)?;
                 }
                 crate::op::KernelOp::TextureRef { dim } => {
-                    self.sampler_binding(s, ir, dim)?;
+                    self.sampler_binding(s, ir, dim, var.ty)?;
                 }
                 crate::op::KernelOp::AccelRef => {
                     let n_accels = ir.n_accels;
@@ -675,14 +692,21 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 writeln!(s, "\t{glsl_ty} {dst} = {loop_state};")?;
             }
             crate::op::KernelOp::TexLookup => {
-                let sampler_idx = ir.var(deps[0]).data;
+                let tex_ref = ir.var(deps[0]);
+                let dim = match tex_ref.op {
+                    crate::op::KernelOp::TextureRef { dim } => dim,
+                    _ => todo!(),
+                };
+                let tex_type = GlslTypeName(tex_ref.ty);
+
+                let sampler_idx = tex_ref.data;
                 let coord = Reg(deps[1]);
 
                 let dst = Reg(id);
 
                 writeln!(
                     s,
-                    "\t{glsl_ty} {dst} = texture(samplers[{sampler_idx}], {coord});"
+                    "\t{glsl_ty} {dst} = texture(samplers{dim}D{tex_type}[{sampler_idx}], {coord});"
                 )?;
             }
             crate::op::KernelOp::TraceRay => {

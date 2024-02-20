@@ -1229,7 +1229,7 @@ impl VarRef {
 
         let size = self.size();
         assert_eq!(shape.iter().fold(1, |a, b| a * b) * channels, size);
-        assert_eq!(self.ty(), f32::var_ty());
+        // assert_eq!(self.ty(), f32::var_ty());
 
         let shape = [
             *shape.get(0).unwrap_or(&0),
@@ -1238,10 +1238,12 @@ impl VarRef {
         ];
         log::trace!("Recording Texture with {shape:?}");
 
+        let ty = self.ty();
+
         push_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::Buffer2Texture),
-                ty: f32::var_ty(),
+                ty,
                 extent: Extent::Texture { shape, channels },
                 ..Default::default()
             },
