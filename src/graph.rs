@@ -21,6 +21,8 @@ use indexmap::IndexMap;
 pub enum GraphResource {
     Input { idx: usize },
     Output { idx: usize },
+    // TODO: descide if I should keep resources or VarRefs here.
+    // There are some issues with using VarRefs though
     Captured { resource: Resource },
     Internal { id: trace::VarId },
 }
