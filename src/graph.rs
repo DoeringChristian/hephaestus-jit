@@ -173,7 +173,8 @@ impl Graph {
 
         let mut output = vec![None; self.n_outputs];
 
-        // Update resources of variables in the trace.
+        // In case, internal variables are kept, update those.
+        // Also construct new Output variables.
         trace::with_trace(|trace| {
             env.resources
                 .into_iter()
