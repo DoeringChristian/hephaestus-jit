@@ -191,15 +191,7 @@ Graph {
     ],
     resources: [
         Internal,
-        Captured {
-            resource: Buffer(
-                VulkanBuffer(
-                    VulkanBuffer {
-                        size: 16,
-                    },
-                ),
-            ),
-        },
+        Captured,
     ],
     n_outputs: 0,
 }

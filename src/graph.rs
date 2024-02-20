@@ -23,7 +23,7 @@ pub enum GraphResource {
     Output { idx: usize },
     // TODO: descide if I should keep resources or VarRefs here.
     // There are some issues with using VarRefs though
-    Captured { resource: Resource },
+    Captured { r: trace::VarRef },
     Internal { id: trace::VarId },
 }
 // Have to implement debug for snapshot tests to work
@@ -31,10 +31,7 @@ impl Debug for GraphResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Input { idx } => f.debug_struct("Param").field("idx", idx).finish(),
-            Self::Captured { resource } => f
-                .debug_struct("Captured")
-                .field("resource", resource)
-                .finish(),
+            Self::Captured { r } => f.debug_struct("Captured").finish(),
             Self::Internal { .. } => f.debug_struct("Internal").finish(),
             Self::Output { idx } => f.debug_struct("Output").field("idx", idx).finish(),
         }
@@ -161,7 +158,7 @@ impl Graph {
                         var.data.match_and_get(desc).unwrap()
                     }
                     GraphResource::Output { .. } => Resource::create(device, desc),
-                    GraphResource::Captured { resource } => resource.clone(),
+                    GraphResource::Captured { r } => trace.var(r.id()).data.clone(),
                     GraphResource::Internal { .. } => Resource::create(device, desc),
                 })
                 .collect::<Vec<_>>();
@@ -409,7 +406,9 @@ pub fn compile(
                 let var = trace.var(*id);
                 var.data
                     .match_and_get(desc)
-                    .map(|resource| GraphResource::Captured { resource })
+                    .map(|resource| GraphResource::Captured {
+                        r: trace.ref_borrow(*id),
+                    })
                     .unwrap_or_else(|| GraphResource::Internal { id: *id })
             }
         })
