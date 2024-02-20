@@ -21,9 +21,9 @@ use indexmap::IndexMap;
 pub enum GraphResource {
     Input { idx: usize },
     Output { idx: usize },
-    // TODO: descide if I should keep resources or VarRefs here.
-    // There are some issues with using VarRefs though
+    // Using strong reference for captured variables
     Captured { r: trace::VarRef },
+    // Using weak reference for internal variables
     Internal { id: trace::VarId },
 }
 // Have to implement debug for snapshot tests to work
@@ -31,7 +31,7 @@ impl Debug for GraphResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Input { idx } => f.debug_struct("Param").field("idx", idx).finish(),
-            Self::Captured { r } => f.debug_struct("Captured").finish(),
+            Self::Captured { .. } => f.debug_struct("Captured").finish(),
             Self::Internal { .. } => f.debug_struct("Internal").finish(),
             Self::Output { idx } => f.debug_struct("Output").field("idx", idx).finish(),
         }
@@ -146,6 +146,8 @@ impl Graph {
         inputs: &[&trace::VarRef],
     ) -> (backend::Report, Vec<trace::VarRef>) {
         // Capture Environment
+        // TODO: at some point we could forward "virtual" resources to the backend, so that it can
+        // perform resource aliasing
         let mut env = Env::default();
         trace::with_trace(|trace| {
             env.resources = self
@@ -184,6 +186,7 @@ impl Graph {
                         }
                     }
                     GraphResource::Output { idx } => {
+                        // Create a new variable for all output variables
                         let op = match res {
                             Resource::Buffer(_) => op::Op::Buffer,
                             Resource::Texture(_) => op::Op::Texture,
@@ -404,12 +407,14 @@ pub fn compile(
                 GraphResource::Output { idx: output[&id] }
             } else {
                 let var = trace.var(*id);
-                var.data
-                    .match_and_get(desc)
-                    .map(|resource| GraphResource::Captured {
-                        r: trace.ref_borrow(*id),
-                    })
-                    .unwrap_or_else(|| GraphResource::Internal { id: *id })
+                match var.data {
+                    Resource::Buffer(_) | Resource::Texture(_) | Resource::Accel(_) => {
+                        GraphResource::Captured {
+                            r: trace.ref_borrow(*id),
+                        }
+                    }
+                    _ => GraphResource::Internal { id: *id },
+                }
             }
         })
         .collect::<Vec<_>>();
