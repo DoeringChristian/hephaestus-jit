@@ -5,6 +5,7 @@ mod pipeline;
 mod shader_cache;
 #[cfg(test)]
 mod test;
+mod utils;
 mod vkdevice;
 mod vulkan_core;
 
@@ -14,12 +15,12 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
+use crate::backend;
 use crate::backend::vulkan::builtin::cooperative_matrix;
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::AsVarType;
-use crate::{backend, utils};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use vk_sync::AccessType;
@@ -111,7 +112,7 @@ impl backend::BackendDevice for VulkanDevice {
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
         // WARN: compress and prefix_sum rely on the buffer being divisible by 16
         // Therefore we allocate with powers of 2
-        let size = utils::u64::round_pow2(size as _);
+        let size = crate::utils::u64::round_pow2(size as _);
         let info = BufferInfo {
             size: size as usize,
             alignment: 0,
@@ -324,32 +325,26 @@ impl backend::BackendDevice for VulkanDevice {
         })
     }
 
-    fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {
-        let dim = shape.iter().take_while(|d| **d > 0).count();
+    fn create_texture(&self, desc: &backend::TextureDesc) -> backend::Result<Self::Texture> {
+        let dim = desc.shape.iter().take_while(|d| **d > 0).count();
         assert!(
             dim >= 1 && dim <= 3,
             "{dim} dimensional textures are not supported.
                 Only 1, 2 and 3 dimensional textures are supported!",
-            dim = shape.len()
+            dim = desc.shape.len()
         );
-        assert!(channels <= 4);
+        assert!(desc.channels <= 4);
 
-        let width = shape[0].max(1) as _;
-        let height = shape[1].max(1) as _;
-        let depth = shape[2].max(1) as _;
+        let width = desc.shape[0].max(1) as _;
+        let height = desc.shape[1].max(1) as _;
+        let depth = desc.shape[2].max(1) as _;
         let ty = match dim {
             1 => vk::ImageType::TYPE_1D,
             2 => vk::ImageType::TYPE_2D,
             3 => vk::ImageType::TYPE_3D,
             _ => todo!(),
         };
-        let format = match channels {
-            1 => vk::Format::R32_SFLOAT,
-            2 => vk::Format::R32G32_SFLOAT,
-            3 => vk::Format::R32G32B32_SFLOAT,
-            4 => vk::Format::R32G32B32A32_SFLOAT,
-            _ => todo!(),
-        };
+        let format = utils::channels_ty_to_format(desc.channels, desc.format);
 
         let image = Arc::new(Image::create(
             self,

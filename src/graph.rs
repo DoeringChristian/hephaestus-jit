@@ -66,7 +66,11 @@ impl GraphBuilder {
                 op::Op::Texture => {
                     let (shape, channels) = var.extent.shape_and_channles();
 
-                    ResourceDesc::TextureDesc(TextureDesc { shape, channels })
+                    ResourceDesc::TextureDesc(TextureDesc {
+                        shape,
+                        channels,
+                        format: var.ty,
+                    })
                 }
                 op::Op::Accel => ResourceDesc::AccelDesc(var.extent.accel_desc().clone()),
                 _ => return None,
@@ -196,7 +200,7 @@ impl Graph {
                         let (ty, extent) = match desc {
                             ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
                             ResourceDesc::TextureDesc(desc) => (
-                                f32::var_ty(),
+                                desc.format,
                                 Extent::Texture {
                                     shape: desc.shape,
                                     channels: desc.channels,

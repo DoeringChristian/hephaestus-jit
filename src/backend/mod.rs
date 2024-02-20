@@ -10,6 +10,7 @@ use crate::graph::Graph;
 use crate::ir::IR;
 use crate::trace;
 use crate::vartype::AsVarType;
+use crate::vartype::VarType;
 
 use self::vulkan::VulkanAccel;
 
@@ -62,12 +63,12 @@ impl Device {
             }
         })
     }
-    pub fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Texture> {
+    pub fn create_texture(&self, desc: &TextureDesc) -> Result<Texture> {
         match self {
             Device::CudaDevice(_) => todo!(),
-            Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(
-                device.create_texture(shape, channels)?,
-            )),
+            Device::VulkanDevice(device) => {
+                Ok(Texture::VulkanTexture(device.create_texture(desc)?))
+            }
         }
     }
     pub fn create_accel(&self, desc: &AccelDesc) -> Result<Accel> {
@@ -156,7 +157,7 @@ pub trait BackendDevice: Clone + Send + Sync {
     type Accel: BackendAccel;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
     fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Self::Buffer>;
-    fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
+    fn create_texture(&self, desc: &TextureDesc) -> Result<Self::Texture>;
     fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
     fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<Report> {
         todo!()
@@ -208,6 +209,18 @@ pub enum GeometryDesc {
 pub struct AccelDesc {
     pub geometries: Vec<GeometryDesc>,
     pub instances: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct BufferDesc {
+    pub size: usize,
+    pub ty: &'static VarType,
+}
+#[derive(Debug, Clone)]
+pub struct TextureDesc {
+    pub shape: [usize; 3],
+    pub channels: usize,
+    pub format: &'static VarType,
 }
 
 pub struct PassReport {
