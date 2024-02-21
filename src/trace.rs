@@ -8,7 +8,7 @@ use std::thread::ThreadId;
 use crate::extent::Extent;
 use crate::graph;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
-use crate::resource::Resource;
+use crate::resource::{Resource, ResourceDesc};
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, utils};
 use indexmap::IndexMap;
@@ -104,6 +104,12 @@ impl Trace {
     pub fn var_mut(&mut self, id: VarId) -> &mut Var {
         &mut self.vars[id.0]
     }
+    pub fn mark_dirty(&mut self, id: VarId){
+        self.vars[id.0].dirty = true;
+    }
+    pub fn clear_dirty(&mut self, id: VarId){
+        self.vars[id.0].dirty = false;
+    }
     pub fn deps(&self, id: VarId) -> &[VarId] {
         &self.vars[id.0].deps
     }
@@ -119,7 +125,7 @@ impl Trace {
         }
         var.rc = 1;
         let id = VarId(self.vars.insert(var));
-        VarRef{id}
+        VarRef { id }
     }
     pub fn inc_rc(&mut self, id: VarId) {
         self.vars[id.0].rc += 1;
@@ -219,13 +225,26 @@ pub struct Var {
     pub extent: Extent, // Extent of the variable
 
     // pub scope: ScopeId,
-
     pub dirty: bool,
 
     pub data: Resource,
 
     pub(crate) deps: Vec<VarId>,
     pub(crate) rc: usize,
+}
+impl Var {
+    pub fn match_resource_desc(&self, desc: &ResourceDesc) -> bool {
+        match (&self.extent, desc) {
+            (
+                Extent::Size(capacity) | Extent::DynSize { capacity, .. },
+                ResourceDesc::BufferDesc(backend::BufferDesc {
+                    size: buffer_size,
+                    ty: buffer_ty,
+                }),
+            ) if *buffer_ty == self.ty && capacity == buffer_size => true,
+            _ => false,
+        }
+    }
 }
 impl Default for Var {
     fn default() -> Self {
@@ -703,12 +722,12 @@ impl VarRef {
     }
     pub fn mark_dirty(&self) {
         with_trace(|trace| {
-            trace.var_mut(self.id()).dirty = true;
+            trace.mark_dirty(self.id());
         })
     }
     fn clear_dirty(&self) {
         with_trace(|trace| {
-            trace.var_mut(self.id()).dirty = false;
+            trace.clear_dirty(self.id());
         })
     }
     pub fn dirty(&self) -> bool {

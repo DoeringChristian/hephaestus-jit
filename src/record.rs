@@ -105,6 +105,7 @@ where
     Output: Traverse + Construct + Clone,
     F: FnOnce(Input) -> Output + 'a,
 {
+    // TODO: make this a cache
     let mut graph = None;
     let mut f = Some(f);
 
