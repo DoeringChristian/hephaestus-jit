@@ -394,16 +394,20 @@ pub fn compile(
         };
 
         graph_builder.push_pass(pass);
-        // Change op to resulting op
-        // This should prevent the ir compiler from colecting stuff twice
+        // Put the variables in this group into their evaluated state, removing dependencies and
+        // changing the op tpye.
         for i in group.clone() {
             let id = vars[i];
             let var = trace.var_mut(id);
-            if var.data.is_buffer() {
-                continue;
-            }
 
             var.op = var.op.resulting_op();
+
+            // Clear dependencies:
+            let deps = std::mem::take(&mut trace.var_mut(id).deps);
+
+            for dep in deps {
+                trace.dec_rc(dep);
+            }
         }
     }
 
@@ -436,26 +440,6 @@ pub fn compile(
         .into_iter()
         .map(|(_, desc)| desc)
         .collect::<Vec<_>>();
-
-    // Cleanup
-    for group in groups {
-        // Clear Dependecies for schedule variables
-        for i in group {
-            let id = vars[i];
-            let var = trace.var_mut(id);
-
-            if var.data.is_buffer() {
-                continue;
-            }
-
-            // Clear dependencies:
-            let deps = std::mem::take(&mut trace.var_mut(id).deps);
-
-            for dep in deps {
-                trace.dec_rc(dep);
-            }
-        }
-    }
 
     let graph = Graph {
         passes: graph_builder.passes,
