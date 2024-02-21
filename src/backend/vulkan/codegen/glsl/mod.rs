@@ -30,31 +30,35 @@ pub fn assemble_ir(ir: &IR, info: &DeviceInfo, entry_point: &str) -> Option<Vec<
     // let code = shader.compile().unwrap();
 
     // Compile with shaderc
-    let mut options = shaderc::CompileOptions::new().unwrap();
-    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-    options.set_hlsl_offsets(true);
-    options.set_target_env(
-        shaderc::TargetEnv::Vulkan,
-        shaderc::EnvVersion::Vulkan1_3 as _,
-    );
-    options.set_target_spirv(shaderc::SpirvVersion::V1_5);
-    let compiler = shaderc::Compiler::new().unwrap();
+    {
+        profiling::scope!("Compiling with shaderc");
+        let mut options = shaderc::CompileOptions::new().unwrap();
+        options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+        options.set_hlsl_offsets(true);
+        options.set_target_env(
+            shaderc::TargetEnv::Vulkan,
+            shaderc::EnvVersion::Vulkan1_3 as _,
+        );
+        options.set_target_spirv(shaderc::SpirvVersion::V1_5);
+        let compiler = shaderc::Compiler::new().unwrap();
 
-    let artefact = compiler
-        .compile_into_spirv(
-            &s,
-            shaderc::ShaderKind::Compute,
-            "",
-            entry_point,
-            Some(&options),
-        )
-        .map_err(|err| anyhow::anyhow!("{err}: {s}"))
-        .unwrap();
-    let code = artefact.as_binary().to_vec();
+        let artefact = compiler
+            .compile_into_spirv(
+                &s,
+                shaderc::ShaderKind::Compute,
+                "",
+                entry_point,
+                Some(&options),
+            )
+            .map_err(|err| anyhow::anyhow!("{err}: {s}"))
+            .unwrap();
+        let code = artefact.as_binary().to_vec();
 
-    Some(code)
+        Some(code)
+    }
 }
 
+#[profiling::function]
 pub fn assemble_entry_point(
     s: &mut String,
     ir: &IR,

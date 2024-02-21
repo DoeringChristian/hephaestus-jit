@@ -62,6 +62,7 @@ pub struct GlslShaderDef<'a> {
     pub defines: &'a [(&'a str, Option<&'a str>)],
 }
 impl<'a> codegen::CodegenDef for GlslShaderDef<'a> {
+    #[profiling::function]
     fn generate(&self) -> Vec<u32> {
         let compiler = shaderc::Compiler::new().unwrap();
         let mut options = shaderc::CompileOptions::new().unwrap();
