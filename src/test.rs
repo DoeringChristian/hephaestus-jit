@@ -983,7 +983,7 @@ fn example() {
     );
     let mask = tr::sized_literal(true, n);
 
-    let mut f = tr::record(|()| {
+    let mut f = tr::record(|| {
         // Compress wavefront
         let indices = mask.compress_dyn();
         let b = a.gather(&indices);
@@ -1001,7 +1001,7 @@ fn example() {
 
     // Launch it multiple times
     for _ in 0..10 {
-        f(&device, ((),));
+        f(&device, ());
     }
 
     // Read data back to CPU and print it
@@ -1013,7 +1013,7 @@ fn record() {
 
     let device = vulkan(0);
 
-    let mut f = tr::record(|a: VarRef| {
+    let f = tr::record(|a: VarRef| {
         a.add(&tr::literal(1)).scatter(&a, &tr::index(3));
     });
 
@@ -1036,7 +1036,7 @@ fn record_output() {
 
     let device = vulkan(0);
 
-    let mut f = tr::record(|a: VarRef| {
+    let f = tr::record(|a: VarRef| {
         let a = a.add(&tr::literal(1));
         a
     });
@@ -1058,7 +1058,7 @@ fn record_change() {
 
     let device = vulkan(0);
 
-    let mut f = tr::record(|a: VarRef| a.add(&tr::literal(1)));
+    let f = tr::record(|a: VarRef| a.add(&tr::literal(1)));
 
     let a = tr::array(&[1, 2, 3], &device);
 
