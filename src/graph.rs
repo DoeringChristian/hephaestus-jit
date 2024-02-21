@@ -19,21 +19,35 @@ use indexmap::IndexMap;
 /// they get overriden by the internal resource.
 ///
 pub enum GraphResource {
-    Input { idx: usize },
-    Output { idx: usize },
+    Input {
+        idx: usize,
+        out_idx: Option<usize>, // NOTE: might also be returned
+    },
+    Output {
+        idx: usize,
+    },
     // Using strong reference for captured variables
-    Captured { r: trace::VarRef },
+    Captured {
+        r: trace::VarRef,
+        out_idx: Option<usize>, // NOTE: might also be returned
+    },
     // Using weak reference for internal variables
-    Internal { id: trace::VarId },
+    Internal {
+        id: trace::VarId,
+    },
 }
 // Have to implement debug for snapshot tests to work
 impl Debug for GraphResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Input { idx } => f.debug_struct("Param").field("idx", idx).finish(),
+            Self::Input { idx, out_idx } => f
+                .debug_struct("Input")
+                .field("idx", idx)
+                .field("out_idx", out_idx)
+                .finish(),
+            Self::Output { idx } => f.debug_struct("Output").field("idx", idx).finish(),
             Self::Captured { .. } => f.debug_struct("Captured").finish(),
             Self::Internal { .. } => f.debug_struct("Internal").finish(),
-            Self::Output { idx } => f.debug_struct("Output").field("idx", idx).finish(),
         }
     }
 }
@@ -160,13 +174,13 @@ impl Graph {
                 .iter()
                 .zip(self.resource_descs.iter())
                 .map(|(res, desc)| match res {
-                    GraphResource::Input { idx } => {
+                    GraphResource::Input { idx, .. } => {
                         let var = trace.var(inputs[*idx].id());
                         assert_eq!(var.resource_desc().as_ref(), Some(desc));
                         var.data.clone()
                     }
                     GraphResource::Output { .. } => Resource::create(device, desc),
-                    GraphResource::Captured { r } => trace.var(r.id()).data.clone(),
+                    GraphResource::Captured { r, .. } => trace.var(r.id()).data.clone(),
                     GraphResource::Internal { .. } => Resource::create(device, desc),
                 })
                 .collect::<Vec<_>>();
@@ -180,17 +194,17 @@ impl Graph {
 
         // In case, internal variables are kept, update those.
         // Also construct new Output variables.
-        trace::with_trace(|trace| {
-            env.resources
-                .into_iter()
-                .zip(self.resources.iter())
-                .zip(self.resource_descs.iter())
-                .for_each(|((res, gres), desc)| match gres {
-                    GraphResource::Internal { id } => {
-                        // Set resource (only if descriptors match) this way the resource desc of
-                        // the variable never
-                        // changes
-                        // TODO: remove get_var_mut
+        env.resources
+            .into_iter()
+            .zip(self.resources.iter())
+            .zip(self.resource_descs.iter())
+            .for_each(|((res, gres), desc)| match gres {
+                GraphResource::Internal { id } => {
+                    // Set resource (only if descriptors match) this way the resource desc of
+                    // the variable never
+                    // changes
+                    // TODO: remove get_var_mut
+                    trace::with_trace(|trace| {
                         if let Some(var) = trace.get_var_mut(*id) {
                             if let Some(var_resource_desc) = var.resource_desc() {
                                 if &var_resource_desc == desc {
@@ -198,28 +212,30 @@ impl Graph {
                                 }
                             }
                         }
-                    }
-                    GraphResource::Output { idx } => {
-                        // Create a new variable for all output variables
-                        let op = match res {
-                            Resource::Buffer(_) => op::Op::Buffer,
-                            Resource::Texture(_) => op::Op::Texture,
-                            Resource::Accel(_) => op::Op::Accel,
-                            _ => todo!(),
-                        };
-                        let (ty, extent) = match desc {
-                            ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
-                            ResourceDesc::TextureDesc(desc) => (
-                                desc.format,
-                                Extent::Texture {
-                                    shape: desc.shape,
-                                    channels: desc.channels,
-                                },
-                            ),
-                            ResourceDesc::AccelDesc(desc) => {
-                                (vartype::void(), Extent::Accel(desc.clone()))
-                            }
-                        };
+                    });
+                }
+                GraphResource::Output { idx } => {
+                    // Create a new variable for all output variables
+                    let op = match res {
+                        Resource::Buffer(_) => op::Op::Buffer,
+                        Resource::Texture(_) => op::Op::Texture,
+                        Resource::Accel(_) => op::Op::Accel,
+                        _ => todo!(),
+                    };
+                    let (ty, extent) = match desc {
+                        ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
+                        ResourceDesc::TextureDesc(desc) => (
+                            desc.format,
+                            Extent::Texture {
+                                shape: desc.shape,
+                                channels: desc.channels,
+                            },
+                        ),
+                        ResourceDesc::AccelDesc(desc) => {
+                            (vartype::void(), Extent::Accel(desc.clone()))
+                        }
+                    };
+                    trace::with_trace(|trace| {
                         output[*idx] = Some(trace.push_var(trace::Var {
                             op,
                             ty,
@@ -227,10 +243,24 @@ impl Graph {
                             data: res,
                             ..Default::default()
                         }))
-                    }
-                    _ => {}
-                });
-        });
+                    })
+                }
+                GraphResource::Input {
+                    idx,
+                    out_idx: Some(out_idx),
+                } => {
+                    // Use input variable for output
+                    output[*out_idx] = Some(inputs[*idx].clone());
+                }
+                GraphResource::Captured {
+                    r,
+                    out_idx: Some(out_idx),
+                } => {
+                    // Use captured variable for output
+                    output[*out_idx] = Some(r.clone());
+                }
+                _ => {}
+            });
 
         let output = output.into_iter().collect::<Option<Vec<_>>>().unwrap();
 
@@ -276,6 +306,11 @@ pub fn compile(
     input: &[&trace::VarRef],
     output: &[&trace::VarRef],
 ) -> Graph {
+    let mut graph_builder = GraphBuilder::default();
+    for r in input.iter().chain(output.iter()) {
+        graph_builder.try_push_resource(&trace, r.id());
+    }
+
     let input = input
         .into_iter()
         .enumerate()
@@ -286,6 +321,7 @@ pub fn compile(
         .enumerate()
         .map(|(i, r)| (r.id(), i))
         .collect::<HashMap<_, _>>();
+
     let n_outputs = output.len();
 
     // Get scheduled variables from thread state in order
@@ -327,7 +363,6 @@ pub fn compile(
         .collect::<Vec<_>>();
 
     // We can now insert the variables as well as the
-    let mut graph_builder = GraphBuilder::default();
     for group in groups.iter() {
         let first_id = vars[group.start];
         let first_var = trace.var(first_id);
@@ -410,21 +445,24 @@ pub fn compile(
     let resources = graph_builder
         .resources
         .iter()
-        .map(|(id, desc)| {
+        .map(|(id, _)| {
             if input.contains_key(&id) {
-                GraphResource::Input { idx: input[&id] }
+                GraphResource::Input {
+                    idx: input[&id],
+                    out_idx: output.get(id).cloned(),
+                }
+            } else if matches!(
+                trace.var(*id).data,
+                Resource::Buffer(_) | Resource::Texture(_) | Resource::Accel(_)
+            ) {
+                GraphResource::Captured {
+                    r: trace.ref_borrow(*id),
+                    out_idx: output.get(id).cloned(),
+                }
             } else if output.contains_key(&id) {
                 GraphResource::Output { idx: output[&id] }
             } else {
-                let var = trace.var(*id);
-                match var.data {
-                    Resource::Buffer(_) | Resource::Texture(_) | Resource::Accel(_) => {
-                        GraphResource::Captured {
-                            r: trace.ref_borrow(*id),
-                        }
-                    }
-                    _ => GraphResource::Internal { id: *id },
-                }
+                GraphResource::Internal { id: *id }
             }
         })
         .collect::<Vec<_>>();

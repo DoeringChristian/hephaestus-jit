@@ -1051,6 +1051,33 @@ fn record_output() {
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_ne!(a1.id(), a2.id());
 }
+#[test]
+fn record_ident() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let c = tr::array(&[1, 2, 3], &device);
+    let cr = &c;
+
+    let f = tr::record(|a: VarRef, b: VarRef| {
+        let a = a.add(&tr::literal(1));
+        a.schedule();
+        let c = cr.clone();
+        (b, c)
+    });
+
+    let a = tr::array(&[1, 2, 3], &device);
+    let b = tr::array(&[1, 2, 3], &device);
+
+    let (b1, c1) = f(&device, (a.clone(), b.clone()));
+
+    dbg!(c.id());
+    dbg!(c1.id());
+
+    assert_eq!(b1.to_vec::<i32>(..), vec![1, 2, 3]);
+    assert_eq!(c1.to_vec::<i32>(..), vec![1, 2, 3]);
+}
 
 #[test]
 fn record_change() {
