@@ -2,11 +2,11 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Range;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
 
 use crate::extent::Extent;
-use crate::graph;
+use crate::{graph, resource};
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::{Resource, ResourceDesc};
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
@@ -233,16 +233,13 @@ pub struct Var {
     pub(crate) rc: usize,
 }
 impl Var {
-    pub fn match_resource_desc(&self, desc: &ResourceDesc) -> bool {
-        match (&self.extent, desc) {
-            (
-                Extent::Size(capacity) | Extent::DynSize { capacity, .. },
-                ResourceDesc::BufferDesc(backend::BufferDesc {
-                    size: buffer_size,
-                    ty: buffer_ty,
-                }),
-            ) if *buffer_ty == self.ty && capacity == buffer_size => true,
-            _ => false,
+    pub fn resource_desc(&self) -> Option<resource::ResourceDesc>{
+        match &self.extent{
+            Extent::Size(size) => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc{size: *size, ty: self.ty})),
+            Extent::DynSize { capacity, .. } => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc{size: *capacity, ty: self.ty})),
+            Extent::Texture { shape, channels } => Some(resource::ResourceDesc::TextureDesc(resource::TextureDesc{shape: *shape, channels: *channels, format: self.ty})),
+            Extent::Accel(desc) => Some(resource::ResourceDesc::AccelDesc(desc.clone())),
+            _ => None
         }
     }
 }
@@ -667,7 +664,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
                 }
             }
         })
-        .collect::<Vec<_>>();
+        .collect::<Arc<[_]>>();
     let create_desc = backend::AccelDesc {
         geometries,
         instances: desc.instances.size(),

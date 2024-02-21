@@ -1,6 +1,7 @@
 mod cuda;
 mod vulkan;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
@@ -188,7 +189,7 @@ pub trait BackendAccel: Clone + Send + Sync {
     type Device: BackendDevice;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GeometryDesc {
     Triangles {
         // TODO: add stride
@@ -205,18 +206,18 @@ pub enum GeometryDesc {
 /// descriptor on the device.
 /// This would allow us to change instance transforms on the fly (necessary for differentiable
 /// rendering)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccelDesc {
-    pub geometries: Vec<GeometryDesc>,
+    pub geometries: Arc<[GeometryDesc]>,
     pub instances: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BufferDesc {
     pub size: usize,
     pub ty: &'static VarType,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TextureDesc {
     pub shape: [usize; 3],
     pub channels: usize,

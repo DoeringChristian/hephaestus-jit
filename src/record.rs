@@ -1,4 +1,7 @@
 use std::array::IntoIter;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::{backend, graph};
 
@@ -103,23 +106,32 @@ pub fn record<'a, Input, Output, F>(f: F) -> impl FnMut(&backend::Device, Input)
 where
     Input: Traverse + Clone,
     Output: Traverse + Construct + Clone,
-    F: FnOnce(Input) -> Output + 'a,
+    F: FnMut(Input) -> Output + 'a,
 {
     // TODO: make this a cache
-    let mut graph = None;
-    let mut f = Some(f);
+    let mut graphs = HashMap::new();
+    let f = RefCell::new(f);
+    // let mut f = Some(f);
 
     move |device, input: Input| {
         let input_vec = input.traverse().collect::<Vec<_>>();
 
-        if graph.is_none() {
+        let mut hasher = DefaultHasher::new();
+        with_trace(|trace| {
+            for var in &input_vec {
+                trace.var(var.id()).resource_desc().hash(&mut hasher);
+            }
+        });
+        let hash = hasher.finish();
+
+        if !graphs.contains_key(&hash) {
             // Swap out current schedule
             let tmp = TS.with(|s| {
                 let mut s = s.borrow_mut();
                 std::mem::take(&mut *s)
             });
 
-            let f = f.take().unwrap();
+            let mut f = f.borrow_mut();
             let output = f(input.clone());
 
             let output_vec = output.traverse().collect::<Vec<_>>();
@@ -130,11 +142,14 @@ where
 
             // Compile with params
             schedule_eval();
-            graph = Some(TS.with(|s| {
-                let mut s = s.borrow_mut();
-                let schedule = std::mem::take(&mut (*s));
-                with_trace(|t| graph::compile(t, &schedule, &input_vec, &output_vec))
-            }));
+            graphs.insert(
+                hash,
+                TS.with(|s| {
+                    let mut s = s.borrow_mut();
+                    let schedule = std::mem::take(&mut (*s));
+                    with_trace(|t| graph::compile(t, &schedule, &input_vec, &output_vec))
+                }),
+            );
 
             // Swap in old schedule
             TS.with(|s| {
@@ -142,7 +157,8 @@ where
                 *s = tmp;
             });
         }
-        let (report, output) = graph.as_ref().unwrap().launch_with(device, &input_vec);
+        let graph = &graphs[&hash];
+        let (report, output) = graph.launch_with(device, &input_vec);
         let mut output = output.into_iter();
         Output::construct(&mut output)
     }

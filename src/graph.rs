@@ -161,7 +161,8 @@ impl Graph {
                 .map(|(res, desc)| match res {
                     GraphResource::Input { idx } => {
                         let var = trace.var(inputs[*idx].id());
-                        var.data.match_and_get(desc).unwrap()
+                        assert_eq!(var.resource_desc().as_ref(), Some(desc));
+                        var.data.clone()
                     }
                     GraphResource::Output { .. } => Resource::create(device, desc),
                     GraphResource::Captured { r } => trace.var(r.id()).data.clone(),
@@ -185,8 +186,15 @@ impl Graph {
                 .zip(self.resource_descs.iter())
                 .for_each(|((res, gres), desc)| match gres {
                     GraphResource::Internal { id } => {
+                        // Set resource (only if descriptors match) this way the resource desc of
+                        // the variable never
+                        // changes
                         if let Some(var) = trace.get_var_mut(*id) {
-                            var.data = res;
+                            if let Some(var_resource_desc) = var.resource_desc() {
+                                if &var_resource_desc == desc {
+                                    var.data = res;
+                                }
+                            }
                         }
                     }
                     GraphResource::Output { idx } => {
