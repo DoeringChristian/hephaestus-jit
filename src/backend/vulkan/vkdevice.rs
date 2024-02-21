@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use ash::vk;
 use std::sync::Arc;
-use text_placeholder::Template;
 
 use super::shader_cache::ShaderKind;
 use super::vulkan_core::graph::RGraph;

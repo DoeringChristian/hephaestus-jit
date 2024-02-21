@@ -3,7 +3,7 @@ use std::hash::Hash;
 use crate::ir::IR;
 
 mod glsl;
-mod rspirv;
+// mod rspirv;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct DeviceInfo {

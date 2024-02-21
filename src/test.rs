@@ -1374,10 +1374,8 @@ fn matmul_linspace() {
 #[cfg(feature = "profile-with-puffin")]
 #[allow(non_snake_case)]
 pub fn puffin() {
-    use std::mem::ManuallyDrop;
     let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-    let puffin_server =
-        std::mem::ManuallyDrop::new(puffin_http::Server::new(&server_addr).unwrap());
+    let _puffin_server = puffin_http::Server::new(&server_addr).unwrap();
     puffin::set_scopes_on(true);
 
     pretty_env_logger::try_init().ok();
