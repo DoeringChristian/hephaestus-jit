@@ -184,38 +184,7 @@ where
         let mut output = output.into_iter();
         (report, Output::construct(&mut output))
     }
-
-    pub fn to(self, device: &backend::Device) -> DeviceFunc<Input, Output, F> {
-        DeviceFunc {
-            f: self,
-            device: device.clone(),
-        }
-    }
 }
-
-pub struct DeviceFunc<Input, Output, F> {
-    f: Func<Input, Output, F>,
-    device: backend::Device,
-}
-// impl<'a, Input, Output, F> DeviceFunc<Input, Output, F>
-// where
-//     Input: Traverse + Clone + 'a,
-//     Output: Traverse + Construct + Clone + 'a,
-//     F: FnMut(Input) -> Output + 'a,
-// {
-//     pub fn call(&self, input: Input) -> Output {
-//         self.f.call(&self.device, input)
-//     }
-//     pub fn call_report(&self, input: Input) -> (backend::Report, Output) {
-//         self.f.call_report(&self.device, input)
-//     }
-//     pub fn func(self) -> impl Fn(Input) -> Output + 'a {
-//         move |input: Input| {
-//             let _ = ();
-//             self.call(input)
-//         }
-//     }
-// }
 
 pub fn record<Input, Output, F>(f: F) -> impl Fn(&backend::Device, Input) -> Output
 where

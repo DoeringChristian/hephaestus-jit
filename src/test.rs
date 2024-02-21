@@ -1071,25 +1071,6 @@ fn record_change() {
     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
 }
-// #[test]
-// fn record_device() {
-//     pretty_env_logger::try_init().ok();
-//
-//     let device = vulkan(0);
-//
-//     let f = record_on(&device, |a: VarRef| a.add(&tr::literal(1)));
-//
-//     let a = tr::array(&[1, 2, 3], &device);
-//
-//     let a1 = f(a.clone());
-//
-//     let a = tr::array(&[1, 2, 3, 4], &device);
-//
-//     let a2 = f(a.clone());
-//
-//     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
-//     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
-// }
 #[test]
 fn matrix_times_matrix() {
     pretty_env_logger::try_init().ok();
@@ -1253,42 +1234,6 @@ fn atomic_inc_rand() {
         "Atomic Operations should return the previous index which is unique!"
     );
 }
-
-// #[test]
-// fn scope() {
-//     pretty_env_logger::try_init().ok();
-//     let device = vulkan(0);
-//
-//     let x = tr::sized_literal(1, 2);
-//
-//     let ym = Mutex::new(None);
-//     let yr = &ym;
-//
-//     thread::scope(|s| {
-//         let thread = s.spawn(move || {
-//             let _scope = tr::new_scope();
-//             let y = tr::literal(1);
-//             *yr.lock().unwrap() = Some(y);
-//         });
-//
-//         thread.join().unwrap();
-//     });
-//
-//     let y = std::mem::take(&mut (*ym.lock().unwrap())).unwrap();
-//
-//     let z = x.add(&y);
-//
-//     z.schedule();
-//
-//     let graph = tr::compile();
-//     insta::assert_debug_snapshot!(graph);
-//     graph.launch(&device);
-//
-//     assert_eq!(y.scope(), z.scope());
-//     assert!(x.scope() < y.scope());
-//
-//     assert_eq!(z.to_vec::<i32>(..), vec![2, 2]);
-// }
 #[test]
 fn loop_record1() {
     // TODO: loops work without scopes -> comment out scopes
