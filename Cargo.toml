@@ -56,10 +56,23 @@ vk-sync = { git = "https://github.com/DoeringChristian/vk-sync-rs.git", branch =
 gpu-allocator = { git = "https://github.com/DoeringChristian/gpu-allocator.git", branch = "custom-ash" }
 slice-group-by = { version = "0.3.1", features = ["nightly"]}
 
+profiling = "1.0"
+
+[features]
+default = ["profile-with-puffin"]
+profile-with-puffin = ["profiling/profile-with-puffin"]
+profile-with-optick = ["profiling/profile-with-optick"]
+profile-with-superluminal = ["profiling/profile-with-superluminal"]
+profile-with-tracing = ["profiling/profile-with-tracing"]
+profile-with-tracy = ["profiling/profile-with-tracy"]
+
 [dev-dependencies]
 rusty-hook = "^0.11.2"
 criterion = { version = "0.4", features = ["html_reports"] }
 ndarray = "0.15.6"
+
+puffin = { version = "0.19" }
+puffin_http = { version = "0.16" }
 
 [hooks]
 pre-commit = "cargo test"

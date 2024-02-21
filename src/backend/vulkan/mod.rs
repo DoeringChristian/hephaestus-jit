@@ -87,6 +87,7 @@ impl std::ops::Deref for InternalVkDevice {
 #[derive(Clone, Debug)]
 pub struct VulkanDevice(Arc<InternalVkDevice>);
 impl VulkanDevice {
+    #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
         Ok(Self(Arc::new(InternalVkDevice {
             device: Device::create(id),
@@ -130,6 +131,7 @@ impl backend::BackendDevice for VulkanDevice {
         })
     }
 
+    #[profiling::function]
     fn execute_graph(
         &self,
         graph: &crate::graph::Graph,
@@ -317,12 +319,9 @@ impl backend::BackendDevice for VulkanDevice {
                 _ => todo!(),
             }
         }
-        let (cpu_time, pass_report) = rgraph.submit(self);
+        let execution_report = rgraph.submit(self);
 
-        Ok(backend::Report {
-            passes: pass_report,
-            cpu_time,
-        })
+        Ok(backend::Report { execution_report })
     }
 
     fn create_texture(&self, desc: &backend::TextureDesc) -> backend::Result<Self::Texture> {

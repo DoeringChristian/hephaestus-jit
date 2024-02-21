@@ -1370,3 +1370,49 @@ fn matmul_linspace() {
         "lhs = {D:?}\n is not equal to rhs = {D_ref:?}\n"
     );
 }
+#[test]
+#[cfg(feature = "profile-with-puffin")]
+#[allow(non_snake_case)]
+pub fn puffin() {
+    use std::mem::ManuallyDrop;
+    let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+    let puffin_server =
+        std::mem::ManuallyDrop::new(puffin_http::Server::new(&server_addr).unwrap());
+    puffin::set_scopes_on(true);
+
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let D = {
+        profiling::scope!("Tracing");
+        let N = 4096;
+        let M = 4096;
+        let K = 4096;
+
+        pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
+            tr::literal(start).add(
+                &tr::index(num)
+                    .cast(f32::var_ty())
+                    .mul(&tr::literal((end - start) / (num as f32))),
+            )
+        }
+
+        let A = linspace(0f32, 1f32, M * K).cast(f16::var_ty());
+        let B = linspace(0f32, 1f32, K * N).cast(f16::var_ty());
+        let C = tr::sized_literal(f16::ZERO, M * N);
+
+        let D = tr::matfma(&A, &B, &C, M, N, K);
+        D
+    };
+
+    D.schedule();
+
+    let graph = tr::compile();
+
+    for i in 0..10 {
+        graph.launch(&device);
+    }
+
+    profiling::finish_frame!();
+}

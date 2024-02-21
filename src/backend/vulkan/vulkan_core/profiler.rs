@@ -15,6 +15,11 @@ pub struct Profiler {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ScopeId(u32);
 
+pub struct TimedScope {
+    pub start: std::time::Duration,
+    pub duration: std::time::Duration,
+}
+
 type DurationRange = [u64; 2];
 
 impl Profiler {
@@ -90,7 +95,7 @@ impl Profiler {
             )
         };
     }
-    pub fn report(self) -> Vec<std::time::Duration> {
+    pub fn report(self) -> Vec<TimedScope> {
         // Copy query to buffer
 
         let ns_per_tick = self
@@ -103,12 +108,18 @@ impl Profiler {
         let report: Vec<DurationRange> =
             bytemuck::cast_slice(self.buffer.mapped_slice())[..self.next_scope as usize].to_vec();
 
+        let start_frame = report[0][0];
+
         let report = report
             .into_iter()
-            .map(|chunk| {
-                let ticks = chunk[1] - chunk[0];
-                let duration = std::time::Duration::from_nanos((ticks as f64 * ns_per_tick) as u64);
-                duration
+            .map(|[start_scope, end_scope]| {
+                let start = std::time::Duration::from_nanos(
+                    ((start_scope - start_frame) as f64 * ns_per_tick) as u64,
+                );
+                let duration = std::time::Duration::from_nanos(
+                    ((end_scope - start_scope) as f64 * ns_per_tick) as u64,
+                );
+                TimedScope { start, duration }
             })
             .collect::<Vec<_>>();
 

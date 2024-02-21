@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt::Debug;
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 use std::sync::{Arc, Mutex};
 
 use ash::extensions::ext::DebugUtils;
@@ -62,7 +62,7 @@ impl Device {
     pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(
         &'a self,
         f: F,
-    ) -> std::time::Duration {
+    ) -> Range<std::time::Instant> {
         unsafe {
             // Record command buffer
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
@@ -79,11 +79,16 @@ impl Device {
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
 
             let start = std::time::Instant::now();
-            self.queue_submit(self.queue, &[submit_info], self.fence)
-                .unwrap();
+            {
+                profiling::scope!("Submit and Wait");
+                self.queue_submit(self.queue, &[submit_info], self.fence)
+                    .unwrap();
 
-            self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
-            return std::time::Instant::now() - start;
+                self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
+            }
+            let end = std::time::Instant::now();
+
+            return start..end;
         }
     }
 }

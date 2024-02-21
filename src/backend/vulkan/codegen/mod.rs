@@ -10,6 +10,7 @@ pub struct DeviceInfo {
     pub work_group_size: u32,
 }
 
+#[profiling::function]
 pub fn assemble_trace(ir: &IR, device_info: &DeviceInfo, entry_point: &str) -> Vec<u32> {
     // rspirv::assemble_trace(ir, info, entry_point).unwrap()
     IrGlslDef {

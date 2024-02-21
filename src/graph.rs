@@ -144,6 +144,7 @@ impl Graph {
     pub fn launch(&self, device: &backend::Device) -> backend::Report {
         self.launch_with(device, &[]).0
     }
+    #[profiling::function]
     pub fn launch_with(
         &self,
         device: &backend::Device,
@@ -268,6 +269,7 @@ pub enum PassOp {
 /// * `refs`: Variable references
 ///
 /// TODO: should we compile for a device?
+#[profiling::function]
 pub fn compile(
     trace: &mut trace::Trace,
     ts: &trace::ThreadState,

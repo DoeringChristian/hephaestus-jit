@@ -4,7 +4,8 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use slice_group_by::GroupBy;
 
-use crate::backend::PassReport;
+use crate::backend::vulkan::vulkan_core::profiler::TimedScope;
+use crate::backend::{self, PassReport};
 
 use super::acceleration_structure::AccelerationStructure;
 use super::buffer::Buffer;
@@ -13,6 +14,7 @@ use super::image::Image;
 use super::profiler::Profiler;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Range;
 use std::sync::Arc;
 use vk_sync::cmd::pipeline_barrier;
 use vk_sync::{AccessType, ImageLayout};
@@ -350,7 +352,8 @@ impl RGraph {
             write: vec![],
         }
     }
-    pub fn submit(mut self, device: &Device) -> (std::time::Duration, Vec<PassReport>) {
+    #[profiling::function]
+    pub fn submit(self, device: &Device) -> backend::ExecutionReport {
         // Passes are already in topological order
         //
         log::trace!("Passes: {passes:#?}", passes = self.passes);
@@ -530,15 +533,19 @@ impl RGraph {
             profiler.end_frame(cb);
         });
 
-        let report = profiler
+        let passes = profiler
             .report()
             .into_iter()
             .zip(pass_names)
-            .map(|(duration, name)| PassReport { name, duration })
+            .map(|(TimedScope { start, duration }, name)| PassReport {
+                name,
+                start,
+                duration,
+            })
             .collect::<Vec<_>>();
 
         drop(tmp_resource_pool);
 
-        (cpu_time, report)
+        backend::ExecutionReport { cpu_time, passes }
     }
 }
