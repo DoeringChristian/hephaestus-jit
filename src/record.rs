@@ -2,6 +2,8 @@ use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::marker::PhantomData;
+use std::sync::Mutex;
 
 use crate::{backend, graph};
 
@@ -102,18 +104,37 @@ impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-pub fn record<'a, Input, Output, F>(f: F) -> impl FnMut(&backend::Device, Input) -> Output + 'a
+pub struct Func<Input, Output, F> {
+    graphs: Mutex<HashMap<u64, graph::Graph>>,
+    f: Mutex<F>,
+    _in: PhantomData<Input>,
+    _out: PhantomData<Output>,
+}
+
+impl<'a, Input, Output, F> Func<Input, Output, F>
 where
-    Input: Traverse + Clone,
-    Output: Traverse + Construct + Clone,
+    Input: Traverse + Clone + 'a,
+    Output: Traverse + Construct + Clone + 'a,
     F: FnMut(Input) -> Output + 'a,
 {
-    // TODO: make this a cache
-    let mut graphs = HashMap::new();
-    let f = RefCell::new(f);
-    // let mut f = Some(f);
-
-    move |device, input: Input| {
+    pub fn new(f: F) -> Self {
+        Self {
+            graphs: Mutex::new(HashMap::new()),
+            f: Mutex::new(f),
+            _in: PhantomData,
+            _out: PhantomData,
+        }
+    }
+    pub fn func(self) -> impl Fn(&backend::Device, Input) -> Output + 'a {
+        move |device: &backend::Device, input: Input| {
+            let _ = ();
+            self.call(device, input)
+        }
+    }
+    pub fn call(&self, device: &backend::Device, input: Input) -> Output {
+        self.call_report(device, input).1
+    }
+    pub fn call_report(&self, device: &backend::Device, input: Input) -> (backend::Report, Output) {
         let input_vec = input.traverse().collect::<Vec<_>>();
 
         let mut hasher = DefaultHasher::new();
@@ -124,14 +145,15 @@ where
         });
         let hash = hasher.finish();
 
-        if !graphs.contains_key(&hash) {
+        if !self.graphs.lock().unwrap().contains_key(&hash) {
             // Swap out current schedule
+            // TODO: think about this
             let tmp = TS.with(|s| {
                 let mut s = s.borrow_mut();
                 std::mem::take(&mut *s)
             });
 
-            let mut f = f.borrow_mut();
+            let mut f = self.f.lock().unwrap();
             let output = f(input.clone());
 
             let output_vec = output.traverse().collect::<Vec<_>>();
@@ -142,7 +164,7 @@ where
 
             // Compile with params
             schedule_eval();
-            graphs.insert(
+            self.graphs.lock().unwrap().insert(
                 hash,
                 TS.with(|s| {
                     let mut s = s.borrow_mut();
@@ -157,11 +179,62 @@ where
                 *s = tmp;
             });
         }
-        let graph = &graphs[&hash];
+        let graph = &self.graphs.lock().unwrap()[&hash];
         let (report, output) = graph.launch_with(device, &input_vec);
         let mut output = output.into_iter();
-        Output::construct(&mut output)
+        (report, Output::construct(&mut output))
     }
+
+    pub fn to(self, device: &backend::Device) -> DeviceFunc<Input, Output, F> {
+        DeviceFunc {
+            f: self,
+            device: device.clone(),
+        }
+    }
+}
+
+pub struct DeviceFunc<Input, Output, F> {
+    f: Func<Input, Output, F>,
+    device: backend::Device,
+}
+impl<'a, Input, Output, F> DeviceFunc<Input, Output, F>
+where
+    Input: Traverse + Clone + 'a,
+    Output: Traverse + Construct + Clone + 'a,
+    F: FnMut(Input) -> Output + 'a,
+{
+    pub fn call(&self, input: Input) -> Output {
+        self.f.call(&self.device, input)
+    }
+    pub fn call_report(&self, input: Input) -> (backend::Report, Output) {
+        self.f.call_report(&self.device, input)
+    }
+    pub fn func(self) -> impl Fn(Input) -> Output + 'a {
+        move |input: Input| {
+            let _ = ();
+            self.call(input)
+        }
+    }
+}
+
+pub fn record<'a, Input, Output, F>(f: F) -> impl Fn(&backend::Device, Input) -> Output + 'a
+where
+    Input: Traverse + Clone + 'a,
+    Output: Traverse + Construct + Clone + 'a,
+    F: FnMut(Input) -> Output + 'a,
+{
+    Func::new(f).func()
+}
+pub fn record_on<'a, Input, Output, F>(
+    device: &backend::Device,
+    f: F,
+) -> impl Fn(Input) -> Output + 'a
+where
+    Input: Traverse + Clone + 'a,
+    Output: Traverse + Construct + Clone + 'a,
+    F: FnMut(Input) -> Output + 'a,
+{
+    Func::new(f).to(device).func()
 }
 
 #[macro_export]
