@@ -111,11 +111,11 @@ pub struct Func<Input, Output, F> {
     _out: PhantomData<Output>,
 }
 
-impl<'a, Input, Output, F> Func<Input, Output, F>
+impl<Input, Output, F> Func<Input, Output, F>
 where
-    Input: Traverse + Clone + 'a,
-    Output: Traverse + Construct + Clone + 'a,
-    F: FnMut(Input) -> Output + 'a,
+    Input: Traverse + Clone + 'static,
+    Output: Traverse + Construct + Clone + 'static,
+    F: FnMut(Input) -> Output,
 {
     pub fn new(f: F) -> Self {
         Self {
@@ -125,7 +125,7 @@ where
             _out: PhantomData,
         }
     }
-    pub fn func(self) -> impl Fn(&backend::Device, Input) -> Output + 'a {
+    pub fn func(self) -> impl Fn(&backend::Device, Input) -> Output {
         move |device: &backend::Device, input: Input| {
             let _ = ();
             self.call(device, input)
@@ -197,45 +197,82 @@ pub struct DeviceFunc<Input, Output, F> {
     f: Func<Input, Output, F>,
     device: backend::Device,
 }
-impl<'a, Input, Output, F> DeviceFunc<Input, Output, F>
+// impl<'a, Input, Output, F> DeviceFunc<Input, Output, F>
+// where
+//     Input: Traverse + Clone + 'a,
+//     Output: Traverse + Construct + Clone + 'a,
+//     F: FnMut(Input) -> Output + 'a,
+// {
+//     pub fn call(&self, input: Input) -> Output {
+//         self.f.call(&self.device, input)
+//     }
+//     pub fn call_report(&self, input: Input) -> (backend::Report, Output) {
+//         self.f.call_report(&self.device, input)
+//     }
+//     pub fn func(self) -> impl Fn(Input) -> Output + 'a {
+//         move |input: Input| {
+//             let _ = ();
+//             self.call(input)
+//         }
+//     }
+// }
+
+pub fn record<Input, Output, F>(f: F) -> impl Fn(&backend::Device, Input) -> Output
 where
-    Input: Traverse + Clone + 'a,
-    Output: Traverse + Construct + Clone + 'a,
-    F: FnMut(Input) -> Output + 'a,
+    Input: Traverse + Clone + 'static,
+    Output: Traverse + Construct + Clone + 'static,
+    F: Recordable<Input, Output>,
 {
-    pub fn call(&self, input: Input) -> Output {
-        self.f.call(&self.device, input)
-    }
-    pub fn call_report(&self, input: Input) -> (backend::Report, Output) {
-        self.f.call_report(&self.device, input)
-    }
-    pub fn func(self) -> impl Fn(Input) -> Output + 'a {
-        move |input: Input| {
-            let _ = ();
-            self.call(input)
-        }
-    }
+    f.record()
 }
 
-pub fn record<'a, Input, Output, F>(f: F) -> impl Fn(&backend::Device, Input) -> Output + 'a
-where
-    Input: Traverse + Clone + 'a,
-    Output: Traverse + Construct + Clone + 'a,
-    F: FnMut(Input) -> Output + 'a,
-{
-    Func::new(f).func()
+pub trait Recordable<Input, Output> {
+    // type In;
+    // type Out;
+    fn record(self) -> impl Fn(&backend::Device, Input) -> Output;
 }
-pub fn record_on<'a, Input, Output, F>(
-    device: &backend::Device,
-    f: F,
-) -> impl Fn(Input) -> Output + 'a
-where
-    Input: Traverse + Clone + 'a,
-    Output: Traverse + Construct + Clone + 'a,
-    F: FnMut(Input) -> Output + 'a,
-{
-    Func::new(f).to(device).func()
+
+macro_rules! impl_recordable {
+    ($($param:ident),*) => {
+        impl<$($param,)* Output, Fin> Recordable<($($param,)*), Output> for Fin
+        where
+            $($param: Traverse + Clone + 'static,)*
+            // I0: Traverse + Clone + 'static,
+            // I1: Traverse + Clone + 'static,
+            Output: Traverse + Construct + Clone + 'static,
+            Fin: FnMut($($param,)*) -> Output,
+            // Fout: Fn(&backend::Device, ($($param,)*)) -> Output,
+        {
+            // type In = ($($param,)*);
+            // type Out = Output;
+            fn record(mut self) -> impl Fn(&backend::Device, ($($param,)*)) -> Output {
+                let func = Func::new(move |input: ($($param,)*)| {
+                    let ($($param,)*) = input;
+                    self($($param),*)
+                }).func();
+
+                move |device: &backend::Device, input: ($($param,)*)| func(device, input)
+            }
+        }
+    };
 }
+impl_recordable!();
+impl_recordable!(A);
+impl_recordable!(A, B);
+impl_recordable!(A, B, C);
+impl_recordable!(A, B, C, D);
+impl_recordable!(A, B, C, D, E);
+impl_recordable!(A, B, C, D, E, F);
+impl_recordable!(A, B, C, D, E, F, G);
+impl_recordable!(A, B, C, D, E, F, G, H);
+impl_recordable!(A, B, C, D, E, F, G, H, I);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J, K);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_recordable!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[macro_export]
 macro_rules! loop_record {
