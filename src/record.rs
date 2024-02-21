@@ -227,24 +227,18 @@ where
 }
 
 pub trait Recordable<Input, Output> {
-    // type In;
-    // type Out;
     fn record(self) -> impl Fn(&backend::Device, Input) -> Output;
 }
 
 macro_rules! impl_recordable {
     ($($param:ident),*) => {
+        #[allow(non_snake_case)]
         impl<$($param,)* Output, Fin> Recordable<($($param,)*), Output> for Fin
         where
             $($param: Traverse + Clone + 'static,)*
-            // I0: Traverse + Clone + 'static,
-            // I1: Traverse + Clone + 'static,
             Output: Traverse + Construct + Clone + 'static,
             Fin: FnMut($($param,)*) -> Output,
-            // Fout: Fn(&backend::Device, ($($param,)*)) -> Output,
         {
-            // type In = ($($param,)*);
-            // type Out = Output;
             fn record(mut self) -> impl Fn(&backend::Device, ($($param,)*)) -> Output {
                 let func = Func::new(move |input: ($($param,)*)| {
                     let ($($param,)*) = input;
