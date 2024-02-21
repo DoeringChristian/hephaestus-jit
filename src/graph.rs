@@ -189,6 +189,7 @@ impl Graph {
                         // Set resource (only if descriptors match) this way the resource desc of
                         // the variable never
                         // changes
+                        // TODO: remove get_var_mut
                         if let Some(var) = trace.get_var_mut(*id) {
                             if let Some(var_resource_desc) = var.resource_desc() {
                                 if &var_resource_desc == desc {
@@ -395,19 +396,10 @@ pub fn compile(
 
         graph_builder.push_pass(pass);
         // Put the variables in this group into their evaluated state, removing dependencies and
-        // changing the op tpye.
+        // changing the op type.
         for i in group.clone() {
             let id = vars[i];
-            let var = trace.var_mut(id);
-
-            var.op = var.op.resulting_op();
-
-            // Clear dependencies:
-            let deps = std::mem::take(&mut trace.var_mut(id).deps);
-
-            for dep in deps {
-                trace.dec_rc(dep);
-            }
+            trace.advance(id);
         }
     }
 

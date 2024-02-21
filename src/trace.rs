@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
 
 use crate::extent::Extent;
-use crate::{graph, resource};
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
 use crate::resource::{Resource, ResourceDesc};
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, utils};
+use crate::{graph, resource};
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
@@ -101,13 +101,13 @@ impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
         &self.vars[id.0]
     }
-    pub fn var_mut(&mut self, id: VarId) -> &mut Var {
-        &mut self.vars[id.0]
-    }
-    pub fn mark_dirty(&mut self, id: VarId){
+    // pub fn var_mut(&mut self, id: VarId) -> &mut Var {
+    //     &mut self.vars[id.0]
+    // }
+    pub fn mark_dirty(&mut self, id: VarId) {
         self.vars[id.0].dirty = true;
     }
-    pub fn clear_dirty(&mut self, id: VarId){
+    pub fn clear_dirty(&mut self, id: VarId) {
         self.vars[id.0].dirty = false;
     }
     pub fn deps(&self, id: VarId) -> &[VarId] {
@@ -116,6 +116,7 @@ impl Trace {
     pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
         self.vars.get(id.0)
     }
+    // TODO: remove this
     pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
         self.vars.get_mut(id.0)
     }
@@ -129,6 +130,22 @@ impl Trace {
     }
     pub fn inc_rc(&mut self, id: VarId) {
         self.vars[id.0].rc += 1;
+    }
+    ///
+    /// Put variable into it's evaluated state, removing dependencies and chaning its op type to
+    /// the evaluated type.
+    ///
+    pub fn advance(&mut self, id: VarId) {
+        let var = &mut self.vars[id.0];
+
+        var.op = var.op.resulting_op();
+
+        // Clear dependencies:
+        let deps = std::mem::take(&mut var.deps);
+
+        for dep in deps {
+            self.dec_rc(dep);
+        }
     }
     ///
     /// Decrement the reference count of an entry in the trace.
@@ -233,13 +250,27 @@ pub struct Var {
     pub(crate) rc: usize,
 }
 impl Var {
-    pub fn resource_desc(&self) -> Option<resource::ResourceDesc>{
-        match &self.extent{
-            Extent::Size(size) => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc{size: *size, ty: self.ty})),
-            Extent::DynSize { capacity, .. } => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc{size: *capacity, ty: self.ty})),
-            Extent::Texture { shape, channels } => Some(resource::ResourceDesc::TextureDesc(resource::TextureDesc{shape: *shape, channels: *channels, format: self.ty})),
+    pub fn resource_desc(&self) -> Option<resource::ResourceDesc> {
+        match &self.extent {
+            Extent::Size(size) => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc {
+                size: *size,
+                ty: self.ty,
+            })),
+            Extent::DynSize { capacity, .. } => {
+                Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc {
+                    size: *capacity,
+                    ty: self.ty,
+                }))
+            }
+            Extent::Texture { shape, channels } => {
+                Some(resource::ResourceDesc::TextureDesc(resource::TextureDesc {
+                    shape: *shape,
+                    channels: *channels,
+                    format: self.ty,
+                }))
+            }
             Extent::Accel(desc) => Some(resource::ResourceDesc::AccelDesc(desc.clone())),
-            _ => None
+            _ => None,
         }
     }
 }
