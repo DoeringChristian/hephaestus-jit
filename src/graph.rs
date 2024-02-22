@@ -308,6 +308,7 @@ pub fn compile(
     input: &[&trace::VarRef],
     output: &[&trace::VarRef],
 ) -> Graph {
+    // TODO: Not sure if we should lock the graph for the whole compilation?
     trace::with_trace(|trace| {
         let mut graph_builder = GraphBuilder::default();
         for r in input.iter().chain(output.iter()) {
