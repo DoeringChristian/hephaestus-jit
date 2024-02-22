@@ -110,9 +110,9 @@ impl Extent {
             _ => todo!(),
         }
     }
-    pub fn texture_dim(&self) -> usize {
+    pub fn texture_dim(&self) -> u32 {
         let (shape, _) = self.shape_and_channles();
         let dim = shape.iter().take_while(|d| **d > 0).count();
-        dim
+        dim as u32
     }
 }

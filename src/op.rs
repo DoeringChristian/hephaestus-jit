@@ -54,7 +54,7 @@ pub enum KernelOp {
     Index,
     Literal,
 
-    Extract(usize),
+    Extract(u32),
     DynExtract,
     Construct,
 
@@ -74,7 +74,7 @@ pub enum KernelOp {
     // Operations that are only available in IR
     BufferRef,
     TextureRef {
-        dim: usize,
+        dim: u32,
     }, // not sure if it's a good idea to put it here
     AccelRef,
 }

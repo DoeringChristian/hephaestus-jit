@@ -4,7 +4,9 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use hephaestus_jit::tr;
 
 pub fn simple(c: &mut Criterion) {
-    c.bench_function("simple", |b| {
+    let mut group = c.benchmark_group("simple1000");
+    group.sample_size(1_000);
+    group.bench_function("simple", |b| {
         b.iter_batched(
             || {
                 let mut a = tr::sized_literal(1, 2);

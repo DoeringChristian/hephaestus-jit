@@ -1210,7 +1210,7 @@ impl VarRef {
         };
         push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Extract(elem)),
+                op: Op::KernelOp(KernelOp::Extract(elem as u32)),
                 ty,
                 extent,
                 ..Default::default()

@@ -143,7 +143,7 @@ pub fn assemble_entry_point(
 pub struct GlslBuilder {
     n_buffers: usize,
     buffer_types: HashSet<&'static VarType>,
-    samplers: HashSet<(usize, &'static VarType)>,
+    samplers: HashSet<(u32, &'static VarType)>,
     composite_types: HashSet<&'static VarType>,
     ray_query: bool,
 }
@@ -200,7 +200,7 @@ impl GlslBuilder {
         &mut self,
         s: &mut String,
         ir: &IR,
-        dim: usize,
+        dim: u32,
         ty: &'static VarType,
     ) -> std::fmt::Result {
         let n_samplers = ir.n_textures;
