@@ -38,10 +38,11 @@
 #define WIDTH
 #define N_ITERS
 #define OUT_T
-#define ACTIVATION
+// #define ACTIVATION
 #define INFERENCE
 #define BACKWARD
-#define OUTPUT
+// #define OUTPUT
+#define A_BITS
 */
 
 // Compatibility macros
@@ -82,18 +83,27 @@ layout(set = 0, binding = 4) buffer Config{
 // In some cases, it also contains the weight matrix for the first and last layer.
 
 
-shared uvec4 shmem[];
+const uint SKEW = WIDTH % 16 == 0 ? 8 : 0; // <- always going to be 8 as we only support multiple-of-16 widths
+const uint ELEMENTS_PER_VEC4 = 16/(A_BITS / 8);// 16 bytes, A_BITS bits per element
+const uint SHMEM_ELEMENTS = (16 + 16 * N_ITERS) * (WIDTH * SKEW);
+shared uvec4 shmem[SHMEM_ELEMENTS / ELEMENTS_PER_VEC4]; // 16*WIDTH rows of weights (for the last layer; others are in registers only) + 16*WIDTH*N_ITERS rows of intermediate activations
 
 
 // Define ReLU
-#ifndef WARP_ACTIVATION
-#define WARP_ACTIVATION(frag, result) { result = max(frag, 0); }
+#ifndef ACTIVATION
+#define ACTIVATION RELU
 #endif
 
-// Define ReLU backward
-#ifndef WARP_ACTIVATION_BACKWARD
-#define WARP_ACTIVATION_BACKWARD(frag, frag_forward, result) { result = frag * (forward_frag > 0.0); }
+void warp_activation(in float16_t frag, out float16_t result){
+#if ACTIVATION == RELU
+    result = max(frag, 0);
 #endif
+}
+void warp_activation_backward(in float16_t frag, in float16_t frag_forward, out float16_t result){
+#if ACTIVATION == RELU
+    result = frag * (forward_frag > 0.0); 
+#endif
+}
 
 // Port of: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L47
 void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadblock_this_layer, uint activation_aux){
@@ -104,7 +114,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 	//                  Can be nullptr if nothing should be written.
 	// activation_aux points to additional arguments that the activation function may depend on. Points to the hidden forward activations when computing backward activations.
 
-    const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
+    // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     const uint32_t N_BLOCKS = WIDTH / 16;
 
     // If we're performing the backward pass, weights must be loaded in transposed form, which
@@ -142,28 +152,25 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
         [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
             // Load a chunk of intermediate activations from shared memory and multiply with chunk of weights
-            // NOTE: we can't cast shmem therefore we need to change the index by dividing by (halfs in uvec4)
-            // This should be valid since both sides of the sum are divisible by 16
-            // | | | | | | | | | | | | | | | | |
-            // |   |   |   |   |   |   |   |   |
-            // |                               |
-            uint half_idx = 16 * i + (16 * l) * (WIDTH + SKEW);
-            coopMatLoad(act_frag, shmem, half_idx/8, LAYOUT_ROW_MAJOR);
+            // NOTE: we can't cast shmem therefore we need to change the index by dividing by (elems in uvec4)
+            // WARN: `elem_idx` has to be divisble by `ELEMENTS_PER_VEC4`
+            uint elem_idx = 16 * i + (16 * l) * (WIDTH + SKEW);
+            coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
             result_frag[l] = coopMatMulAdd(act_frag, weights_frag[i], result_frag[l]);
         }
 
 		// Activation
         if (BACKWARD){
             // Load the temporary forward matrix for the relu transfer
-            uint half_idx = activation_aux + weights_col + l * 16 * WIDTH;
-            coopMatLoad(act_frag, out_intermediate, half_idx/8, WIDTH, LAYOUT_ROW_MAJOR);
+            uint elem_idx = activation_aux + weights_col + l * 16 * WIDTH;
+            coopMatLoad(act_frag, out_intermediate, elem_idx / ELEMENTS_PER_VEC4, WIDTH, LAYOUT_ROW_MAJOR);
             // NOTE: don't have generics
             for (uint i = 0; i < result_frag[l].length(); i++){
-                WARP_ACTIVATION_BACKWARD(result_frag[l][i], act_frag[l][i], result_frag[l][i]);
+                warp_activation_backward(result_frag[l][i], act_frag[l][i], result_frag[l][i]);
             }
         }else{
             for (uint i = 0; i < result_frag[l].length(); i++){
-                WARP_ACTIVATION(result_frag[l][i], result_frag[l][i]);
+                warp_activation(result_frag[l][i], result_frag[l][i]);
             }
         }
     }
@@ -172,8 +179,8 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
     [[unroll]] for (uint l = 0; l < N_ITERS; l++){
         // NOTE: index by u32x4 (weights_col is divisible by 16)
-        uint half_idx = weights_col + l * 16 * (WIDTH + SKEW);
-        coopMatStore(result_frag[l], shmem, half_idx/8, WIDTH + SKEW, LAYOUT_ROW_MAJOR);
+        uint elem_idx = weights_col + l * 16 * (WIDTH + SKEW);
+        coopMatStore(result_frag[l], shmem, elem_idx/ELEMENTS_PER_VEC4, WIDTH + SKEW, LAYOUT_ROW_MAJOR);
     }
 
     if (!INFERENCE){
@@ -181,10 +188,10 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
         [[unroll]]
         for (uint l = 0; l < N_ITERS; l++){
-            // NOTE: both `half_idx_intermeidate` and `half_idx_shmem` are divisible by 8
-            uint half_idx_intermeidate = lane_offset + (row + 16 * l) * WIDTH;
-            uint half_idx_shmem = lane_offset + (row + 16 * l) * (WIDTH + SKEW);
-            out_intermediate[half_idx_itl / 8] = shmem[half_idx_shmem / 8];
+            // NOTE: both `elem_idx_intermeidate` and `elem_idx_shmem` are divisible by `ELEMENTS_PER_VEC4`
+            uint elem_idx_intermeidate = lane_offset + (row + 16 * l) * WIDTH;
+            uint elem_idx_shmem = lane_offset + (row + 16 * l) * (WIDTH + SKEW);
+            out_intermediate[elem_idx_intermeidate / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
         }
     }
     
@@ -193,7 +200,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 void threadblock_load_input_static(uint input_threadblock){
     // act_shmem will be filled by the thread block's chunk of input_threadblock
 
-    const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
+    // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     
     // Indices
     uint32_t li = threadIdx.x; // index in warp ("lane index")
@@ -203,18 +210,18 @@ void threadblock_load_input_static(uint input_threadblock){
 	uint32_t row = (8 * li + wi * 8 * 32) / WIDTH;
 
     [[unroll]] for (uint i = 0; i < N_ITERS; i++){
-        // WARN: both `half_idx_shmem` and `half_idx_input` have to be divisible by 8
-        uint half_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
-        uint half_idx_input = input_threadblock + lane_offset + (row + 16 * i) * WIDTH;
+        // WARN: both `elem_idx_shmem` and `elem_idx_input` have to be divisible by ELEMENTS_PER_VEC4
+        uint elem_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
+        uint elem_idx_input = input_threadblock + lane_offset + (row + 16 * i) * WIDTH;
 
-        shmem[half_idx_shmem / 8] = input[half_idx_input / 8];
+        shmem[elem_idx_shmem / ELEMENTS_PER_VEC4] = input[elem_idx_input / ELEMENTS_PER_VEC4];
     }
 }
 
 void threadblock_write_output_static(uint output_threadblock){
     // output_threadblock will be filled by the thread block's act_shmem
     
-    const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
+    // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     
     // Indices
 	uint32_t li = threadIdx.x; // index in warp ("lane index")
@@ -226,11 +233,11 @@ void threadblock_write_output_static(uint output_threadblock){
     barriers();
 
     [[unroll]] for (uint i = 0; i < N_ITERS; i++){
-        // WARN: both `half_idx_output` and `half_idx_shmem` have to be divisible by 8
-        uint half_idx_output = output_threadblock + lane_offset + (row + 16 * i) * WIDTH;
-        uint half_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
+        // WARN: both `elem_idx_output` and `elem_idx_shmem` have to be divisible by ELEMENTS_PER_VEC4
+        uint elem_idx_output = output_threadblock + lane_offset + (row + 16 * i) * WIDTH;
+        uint elem_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
 
-        out_intermediate[half_idx_output / 8] = shmem[half_idx_shmem / 8];
+        out_intermediate[elem_idx_output / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
     }
 }
 
