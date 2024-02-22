@@ -353,7 +353,7 @@ impl RGraph {
         }
     }
     #[profiling::function]
-    pub fn submit(self, device: &Device) -> backend::ExecutionReport {
+    pub fn submit(self, device: &Device) -> backend::ExecReport {
         // Passes are already in topological order
         //
         log::trace!("Passes: {passes:#?}", passes = self.passes);
@@ -368,30 +368,33 @@ impl RGraph {
         // PassId of the last pass, that has written to this resource
         let mut last_writes = vec![None; self.resources.len()];
 
-        for id in (0..self.passes.len()).map(|i| PassId(i)) {
-            let pass = &self.passes[id.0];
-            let start = deps.len();
+        {
+            profiling::scope!("Compute pass dependencies");
+            for id in (0..self.passes.len()).map(|i| PassId(i)) {
+                let pass = &self.passes[id.0];
+                let start = deps.len();
 
-            // Get the passes this pass is depending on.
-            deps.extend(
-                pass.read
-                    .iter()
-                    .map(|(id, _)| *id)
-                    .chain(pass.write.iter().map(|(id, _)| *id))
-                    .unique()
-                    .flat_map(|r| last_writes[r.0]),
-            );
-            let range = start..deps.len();
-            pass_deps.push(range.clone());
+                // Get the passes this pass is depending on.
+                deps.extend(
+                    pass.read
+                        .iter()
+                        .map(|(id, _)| *id)
+                        .chain(pass.write.iter().map(|(id, _)| *id))
+                        .unique()
+                        .flat_map(|r| last_writes[r.0]),
+                );
+                let range = start..deps.len();
+                pass_deps.push(range.clone());
 
-            // Increment dependant count for this pass
-            for dep in &deps[range] {
-                dep_counts[dep.0] += 1;
-            }
+                // Increment dependant count for this pass
+                for dep in &deps[range] {
+                    dep_counts[dep.0] += 1;
+                }
 
-            // Update the last_writes field
-            for (r, _) in &pass.write {
-                last_writes[r.0] = Some(id);
+                // Update the last_writes field
+                for (r, _) in &pass.write {
+                    last_writes[r.0] = Some(id);
+                }
             }
         }
 
@@ -409,32 +412,35 @@ impl RGraph {
         // groups of passes, that can be executed in parallel
         let mut groups = vec![];
 
-        while passes.len() < self.passes.len() {
-            // Iterate through all dependencies of all variables in the frontier
-            for &id in frontier
-                .iter()
-                .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
-            {
-                dep_counts[id.0] -= 1;
-            }
-            // Collect the new frontier by searching for all 0 dependant variables
-            // These have to be among the dependencies of the current frontier
-            // TODO: the call to unique allocates memory, and could maybe be optimized
-            new_frontier.extend(
-                frontier
+        {
+            profiling::scope!("Group passes");
+            while passes.len() < self.passes.len() {
+                // Iterate through all dependencies of all variables in the frontier
+                for &id in frontier
                     .iter()
                     .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
-                    .filter(|id| dep_counts[id.0] == 0)
-                    .unique(),
-            );
+                {
+                    dep_counts[id.0] -= 1;
+                }
+                // Collect the new frontier by searching for all 0 dependant variables
+                // These have to be among the dependencies of the current frontier
+                // TODO: the call to unique allocates memory, and could maybe be optimized
+                new_frontier.extend(
+                    frontier
+                        .iter()
+                        .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
+                        .filter(|id| dep_counts[id.0] == 0)
+                        .unique(),
+                );
 
-            let start = passes.len();
-            passes.extend(frontier.drain(..));
-            groups.push(start..passes.len());
+                let start = passes.len();
+                passes.extend(frontier.drain(..));
+                groups.push(start..passes.len());
 
-            // Swap out the now empty frontier with the new frontier
-            std::mem::swap(&mut frontier, &mut new_frontier);
-            assert!(new_frontier.is_empty());
+                // Swap out the now empty frontier with the new frontier
+                std::mem::swap(&mut frontier, &mut new_frontier);
+                assert!(new_frontier.is_empty());
+            }
         }
 
         // Use pass ids to gather passes from graph
@@ -465,7 +471,8 @@ impl RGraph {
         let mut profiler = Profiler::new(device, passes.len());
         let mut pass_names = vec![];
 
-        let cpu_time = device.submit_global(|device, cb| {
+        let (cpu_start, cpu_duration) = device.submit_global(|device, cb| {
+            profiling::scope!("Record commad buffer");
             profiler.begin_frame(cb);
 
             // NOTE: that, since we did BFS in from the top down, groups and passes are in reverse
@@ -546,6 +553,10 @@ impl RGraph {
 
         drop(tmp_resource_pool);
 
-        backend::ExecutionReport { cpu_time, passes }
+        backend::ExecReport {
+            cpu_start,
+            cpu_duration,
+            passes,
+        }
     }
 }

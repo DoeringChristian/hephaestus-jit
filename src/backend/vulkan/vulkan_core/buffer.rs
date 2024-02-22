@@ -52,6 +52,7 @@ impl Buffer {
     pub fn device(&self) -> &Device {
         &self.device
     }
+    #[profiling::function]
     pub fn create(device: &Device, info: BufferInfo) -> Self {
         let device = device.clone();
         let queue_family_indices = [device.physical_device.queue_family_index];

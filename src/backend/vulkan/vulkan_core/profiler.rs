@@ -23,6 +23,7 @@ pub struct TimedScope {
 type DurationRange = [u64; 2];
 
 impl Profiler {
+    #[profiling::function]
     pub fn new(device: &Device, max_scopes: usize) -> Self {
         let buffer = Buffer::create(
             device,

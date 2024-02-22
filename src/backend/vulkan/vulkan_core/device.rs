@@ -59,10 +59,11 @@ impl Device {
     pub fn create(index: usize) -> Self {
         Self(Arc::new(InternalDevice::create(index).unwrap()))
     }
+    #[profiling::function]
     pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(
         &'a self,
         f: F,
-    ) -> Range<std::time::Instant> {
+    ) -> (std::time::SystemTime, std::time::Duration) {
         unsafe {
             // Record command buffer
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
@@ -78,9 +79,12 @@ impl Device {
             let command_buffers = [self.command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
 
-            let start = std::time::Instant::now();
+            let start_system;
+            let start;
             {
                 profiling::scope!("Submit and Wait");
+                start_system = std::time::SystemTime::now();
+                start = std::time::Instant::now();
                 self.queue_submit(self.queue, &[submit_info], self.fence)
                     .unwrap();
 
@@ -88,7 +92,7 @@ impl Device {
             }
             let end = std::time::Instant::now();
 
-            return start..end;
+            return (start_system, end - start);
         }
     }
 }

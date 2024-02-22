@@ -321,7 +321,9 @@ impl backend::BackendDevice for VulkanDevice {
         }
         let execution_report = rgraph.submit(self);
 
-        Ok(backend::Report { execution_report })
+        Ok(backend::Report {
+            exec: execution_report,
+        })
     }
 
     fn create_texture(&self, desc: &backend::TextureDesc) -> backend::Result<Self::Texture> {

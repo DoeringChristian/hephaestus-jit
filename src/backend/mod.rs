@@ -85,9 +85,9 @@ impl Device {
             Device::CudaDevice(_) => todo!(),
             Device::VulkanDevice(device) => device.execute_graph(graph, env),
         };
-        // if let Ok(report) = &report {
-        //     report.submit_to_profiler();
-        // };
+        if let Ok(report) = &report {
+            report.submit_to_profiler();
+        };
         report
     }
 }
@@ -236,18 +236,19 @@ pub struct PassReport {
     pub duration: std::time::Duration,
 }
 
-pub struct ExecutionReport {
-    pub cpu_time: Range<std::time::Instant>,
+pub struct ExecReport {
+    pub cpu_start: std::time::SystemTime,
+    pub cpu_duration: std::time::Duration,
     pub passes: Vec<PassReport>,
 }
 
 pub struct Report {
-    pub execution_report: ExecutionReport,
+    pub exec: ExecReport,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Passes:")?;
-        for pass in self.execution_report.passes.iter() {
+        for pass in self.exec.passes.iter() {
             writeln!(
                 f,
                 "\t{name: <50} {duration:?} @ {start:?}",
@@ -264,11 +265,17 @@ impl Report {
         #[cfg(feature = "profile-with-puffin")]
         {
             use profiling::puffin;
-            let start_ns = puffin::now_ns();
+            let start_ns = self
+                .exec
+                .cpu_start
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as i64;
+            // let start_ns = puffin::now_ns();
             let mut stream = puffin::Stream::default();
 
             let scope_details = self
-                .execution_report
+                .exec
                 .passes
                 .iter()
                 .map(|pass| puffin::ScopeDetails::from_scope_name(pass.name.clone()))
@@ -276,20 +283,32 @@ impl Report {
 
             let ids = puffin::GlobalProfiler::lock().register_user_scopes(&scope_details);
 
-            for (pass, id) in self.execution_report.passes.iter().zip(ids.into_iter()) {
+            for (pass, id) in self.exec.passes.iter().zip(ids.into_iter()) {
                 let start = stream.begin_scope(|| start_ns + pass.start.as_nanos() as i64, id, "");
                 stream.end_scope(
                     start.0,
                     start_ns + (pass.start.as_nanos() + pass.duration.as_nanos()) as i64,
                 );
             }
-            let stream_info = puffin::StreamInfo::parse(stream).unwrap();
+            // let stream_info = puffin::StreamInfo::parse(stream).unwrap();
             puffin::GlobalProfiler::lock().report_user_scopes(
                 puffin::ThreadInfo {
                     start_time_ns: None,
-                    name: "".into(),
+                    name: "gpu".into(),
                 },
-                &stream_info.as_stream_into_ref(),
+                &puffin::StreamInfo {
+                    stream,
+                    num_scopes: 0,
+                    depth: 1,
+                    range_ns: (
+                        start_ns,
+                        start_ns
+                            + (self.exec.passes.last().unwrap().start.as_nanos()
+                                + self.exec.passes.last().unwrap().duration.as_nanos())
+                                as i64,
+                    ),
+                }
+                .as_stream_into_ref(), //& stream_info.as_stream_into_ref(),
             );
         }
     }

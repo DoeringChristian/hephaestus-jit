@@ -50,7 +50,7 @@ mod benches {
         let report = graph.launch(&device);
 
         let pass = report
-            .execution_report
+            .exec
             .passes
             .into_iter()
             .find(|pass| pass.name == "Cooperative Matrix Multiply")
@@ -70,7 +70,7 @@ mod benches {
         assert_eq!(count.item::<u32>(), n as u32);
 
         let pass = report
-            .execution_report
+            .exec
             .passes
             .into_iter()
             .find(|pass| pass.name == "Compress Large")
@@ -92,7 +92,7 @@ mod benches {
         assert_eq!(pfs.to_vec::<T>(n - 1..n)[0], sum);
 
         let pass = report
-            .execution_report
+            .exec
             .passes
             .into_iter()
             .find(|pass| pass.name == "Prefix Sum Large")
