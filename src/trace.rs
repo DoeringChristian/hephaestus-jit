@@ -428,16 +428,16 @@ pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef> {
 }
 
 ///
-/// Compiles the currently scheduled variables (see [Schedule]) into a [graph::Graph], which can be
+/// Compiles the current thread state (see [ThreadState]) into a [graph::Graph], which can be
 /// launched on any device.
 /// This captures the current environment (variables which are already evaluated).
 ///
 pub fn compile() -> graph::Graph {
     schedule_eval();
     TS.with(|s| {
-        let mut s = s.borrow_mut();
-        let schedule = std::mem::take(&mut (*s));
-        let graph = with_trace(|t| graph::compile(t, &schedule, &[], &[]));
+        let mut ts = s.borrow_mut();
+        let ts = std::mem::take(&mut (*ts));
+        let graph =graph::compile(&ts, &[], &[]);
         graph
     })
 }

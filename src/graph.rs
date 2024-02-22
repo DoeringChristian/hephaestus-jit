@@ -304,183 +304,184 @@ pub enum PassOp {
 /// TODO: should we compile for a device?
 #[profiling::function]
 pub fn compile(
-    trace: &mut trace::Trace,
     ts: &trace::ThreadState,
     input: &[&trace::VarRef],
     output: &[&trace::VarRef],
 ) -> Graph {
-    let mut graph_builder = GraphBuilder::default();
-    for r in input.iter().chain(output.iter()) {
-        graph_builder.try_push_resource(&trace, r.id());
-    }
+    trace::with_trace(|trace| {
+        let mut graph_builder = GraphBuilder::default();
+        for r in input.iter().chain(output.iter()) {
+            graph_builder.try_push_resource(&trace, r.id());
+        }
 
-    let input = input
-        .into_iter()
-        .enumerate()
-        .map(|(i, r)| (r.id(), i))
-        .collect::<HashMap<_, _>>();
-    let output = output
-        .into_iter()
-        .enumerate()
-        .map(|(i, r)| (r.id(), i))
-        .collect::<HashMap<_, _>>();
+        let input = input
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| (r.id(), i))
+            .collect::<HashMap<_, _>>();
+        let output = output
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| (r.id(), i))
+            .collect::<HashMap<_, _>>();
 
-    let n_outputs = output.len();
+        let n_outputs = output.len();
 
-    // Get scheduled variables from thread state in order
-    let mut vars = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
-    let groups = ts.groups.clone();
+        // Get scheduled variables from thread state in order
+        let mut vars = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
+        let groups = ts.groups.clone();
 
-    // Subdivide groups by extent
-    let groups = groups
-        .iter()
-        .flat_map(|group| {
-            vars[group.clone()].sort_by(|id0, id1| {
-                trace
-                    .var(*id0)
-                    .extent
-                    .partial_cmp(&trace.var(*id1).extent)
-                    .unwrap()
-            });
+        // Subdivide groups by extent
+        let groups = groups
+            .iter()
+            .flat_map(|group| {
+                vars[group.clone()].sort_by(|id0, id1| {
+                    trace
+                        .var(*id0)
+                        .extent
+                        .partial_cmp(&trace.var(*id1).extent)
+                        .unwrap()
+                });
 
-            let mut groups = vec![];
-            let mut size = Extent::default();
-            let mut start = group.start;
+                let mut groups = vec![];
+                let mut size = Extent::default();
+                let mut start = group.start;
 
-            for i in group.clone() {
-                if trace.var(vars[i]).extent != size {
-                    let end = i + 1;
-                    if start != end {
-                        groups.push(start..end);
+                for i in group.clone() {
+                    if trace.var(vars[i]).extent != size {
+                        let end = i + 1;
+                        if start != end {
+                            groups.push(start..end);
+                        }
+                        size = trace.var(vars[i]).extent.clone();
+                        start = end;
                     }
-                    size = trace.var(vars[i]).extent.clone();
-                    start = end;
                 }
-            }
-            let end = group.end;
-            if start != end {
-                groups.push(start..end);
-            }
-            groups
-        })
-        .collect::<Vec<_>>();
+                let end = group.end;
+                if start != end {
+                    groups.push(start..end);
+                }
+                groups
+            })
+            .collect::<Vec<_>>();
 
-    // We can now insert the variables as well as the
-    for group in groups.iter() {
-        let first_id = vars[group.start];
-        let first_var = trace.var(first_id);
-        // Note: we know, that all variables in a group have the same size
-        // TODO: validate, that the the size_buffer is a buffer
-        let size_buffer = match first_var.extent {
-            Extent::DynSize { size: size_dep, .. } => {
-                graph_builder.try_push_resource(trace, size_dep)
-            }
-            _ => None,
-        };
+        // We can now insert the variables as well as the
+        for group in groups.iter() {
+            let first_id = vars[group.start];
+            let first_var = trace.var(first_id);
+            // Note: we know, that all variables in a group have the same size
+            // TODO: validate, that the the size_buffer is a buffer
+            let size_buffer = match first_var.extent {
+                Extent::DynSize { size: size_dep, .. } => {
+                    graph_builder.try_push_resource(trace, size_dep)
+                }
+                _ => None,
+            };
 
-        let pass = if first_var.op.is_device_op() {
-            // Handle Device Ops (precompiled)
-            assert_eq!(group.len(), 1);
-            let id = vars[group.start];
+            let pass = if first_var.op.is_device_op() {
+                // Handle Device Ops (precompiled)
+                assert_eq!(group.len(), 1);
+                let id = vars[group.start];
 
-            let var = trace.var(id);
-            match var.op {
-                op::Op::DeviceOp(op) => {
-                    let deps = trace.deps(id).to_vec();
+                let var = trace.var(id);
+                match var.op {
+                    op::Op::DeviceOp(op) => {
+                        let deps = trace.deps(id).to_vec();
 
-                    // TODO: Improve the readability here. atm. we are pushing all the
-                    // dependenceis into multiple vecs starting with [id]
-                    let resources = [id]
+                        // TODO: Improve the readability here. atm. we are pushing all the
+                        // dependenceis into multiple vecs starting with [id]
+                        let resources = [id]
+                            .iter()
+                            .chain(deps.iter())
+                            .flat_map(|id| graph_builder.try_push_resource(trace, *id))
+                            .collect::<Vec<_>>();
+
+                        Pass {
+                            resources,
+                            size_buffer,
+                            op: PassOp::DeviceOp(op),
+                        }
+                    }
+                    _ => todo!(),
+                }
+            } else {
+                // Handle Kernel Ops (compile)
+                thread_local! {
+                    static COMPILER: RefCell<compiler::Compiler> = Default::default();
+                };
+                let (resources, ir) = COMPILER.with(|compiler| {
+                    let mut compiler = compiler.borrow_mut();
+                    compiler.clear();
+
+                    compiler.compile(trace, &vars[group.clone()]);
+
+                    let resources = compiler
+                        .buffers
                         .iter()
-                        .chain(deps.iter())
-                        .flat_map(|id| graph_builder.try_push_resource(trace, *id))
+                        .chain(compiler.textures.iter())
+                        .chain(compiler.accels.iter())
+                        .flat_map(|&id| graph_builder.try_push_resource(trace, id))
                         .collect::<Vec<_>>();
 
-                    Pass {
-                        resources,
-                        size_buffer,
-                        op: PassOp::DeviceOp(op),
-                    }
+                    let ir = std::mem::take(&mut compiler.ir);
+                    (resources, ir)
+                });
+                let size = trace.var(vars[group.start]).extent.capacity();
+                Pass {
+                    resources,
+                    size_buffer,
+                    op: PassOp::Kernel { ir, size },
                 }
-                _ => todo!(),
-            }
-        } else {
-            // Handle Kernel Ops (compile)
-            thread_local! {
-                static COMPILER: RefCell<compiler::Compiler> = Default::default();
             };
-            let (resources, ir) = COMPILER.with(|compiler| {
-                let mut compiler = compiler.borrow_mut();
-                compiler.clear();
 
-                compiler.compile(trace, &vars[group.clone()]);
-
-                let resources = compiler
-                    .buffers
-                    .iter()
-                    .chain(compiler.textures.iter())
-                    .chain(compiler.accels.iter())
-                    .flat_map(|&id| graph_builder.try_push_resource(trace, id))
-                    .collect::<Vec<_>>();
-
-                let ir = std::mem::take(&mut compiler.ir);
-                (resources, ir)
-            });
-            let size = trace.var(vars[group.start]).extent.capacity();
-            Pass {
-                resources,
-                size_buffer,
-                op: PassOp::Kernel { ir, size },
+            graph_builder.push_pass(pass);
+            // Put the variables in this group into their evaluated state, removing dependencies and
+            // changing the op type.
+            for i in group.clone() {
+                let id = vars[i];
+                trace.advance(id);
             }
-        };
-
-        graph_builder.push_pass(pass);
-        // Put the variables in this group into their evaluated state, removing dependencies and
-        // changing the op type.
-        for i in group.clone() {
-            let id = vars[i];
-            trace.advance(id);
         }
-    }
 
-    // Collect descriptors and input resources
+        // Collect descriptors and input resources
 
-    let resources = graph_builder
-        .resources
-        .iter()
-        .map(|(id, _)| {
-            if input.contains_key(&id) {
-                GraphResource::Input {
-                    idx: input[&id],
-                    out_idx: output.get(id).cloned(),
+        let resources = graph_builder
+            .resources
+            .iter()
+            .map(|(id, _)| {
+                if input.contains_key(&id) {
+                    GraphResource::Input {
+                        idx: input[&id],
+                        out_idx: output.get(id).cloned(),
+                    }
+                } else if matches!(
+                    trace.var(*id).data,
+                    Resource::Buffer(_) | Resource::Texture(_) | Resource::Accel(_)
+                ) {
+                    GraphResource::Captured {
+                        r: trace.ref_borrow(*id),
+                        out_idx: output.get(id).cloned(),
+                    }
+                } else if output.contains_key(&id) {
+                    GraphResource::Output { idx: output[&id] }
+                } else {
+                    GraphResource::Internal { id: *id }
                 }
-            } else if matches!(
-                trace.var(*id).data,
-                Resource::Buffer(_) | Resource::Texture(_) | Resource::Accel(_)
-            ) {
-                GraphResource::Captured {
-                    r: trace.ref_borrow(*id),
-                    out_idx: output.get(id).cloned(),
-                }
-            } else if output.contains_key(&id) {
-                GraphResource::Output { idx: output[&id] }
-            } else {
-                GraphResource::Internal { id: *id }
-            }
-        })
-        .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
-    let resource_descs = graph_builder
-        .resources
-        .into_iter()
-        .map(|(_, desc)| desc)
-        .collect::<Vec<_>>();
+        let resource_descs = graph_builder
+            .resources
+            .into_iter()
+            .map(|(_, desc)| desc)
+            .collect::<Vec<_>>();
 
-    let graph = Graph {
-        passes: graph_builder.passes,
-        resource_descs,
-        resources,
-        n_outputs,
-    };
-    graph
+        let graph = Graph {
+            passes: graph_builder.passes,
+            resource_descs,
+            resources,
+            n_outputs,
+        };
+        graph
+    })
 }
