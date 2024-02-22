@@ -25,7 +25,7 @@ mod benches {
     ) -> std::time::Duration {
         pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
             tr::literal(start).add(
-                &tr::index(num)
+                &tr::sized_index(num)
                     .cast(f32::var_ty())
                     .mul(&tr::literal((end - start) / (num as f32))),
             )

@@ -5,7 +5,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
-use crate::{backend, graph};
+use crate::{backend, graph, tr};
 
 use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 
@@ -146,6 +146,19 @@ where
     ) -> Option<(backend::Report, Output)> {
         let input_vec = input.traverse().collect::<Vec<_>>();
 
+        // We evaluate the inputs to the function, to not collect dependencies of input variables.
+        // This might not be the best solution, but it solves some of the problems.
+        for input in input_vec.iter() {
+            input.schedule();
+        }
+        // Evaluate all iput variables
+        let graph = tr::compile();
+        graph.launch(&device);
+
+        // Throughout function calls, the size or type of input variables might change.
+        // To this end we keep a chache of graphs.
+        // We calculate the hash of the inputs by using their resource descriptors, as they
+        // uniquely identify the type and extent of the variable.
         let mut hasher = DefaultHasher::new();
         with_trace(|trace| {
             for var in &input_vec {
@@ -155,13 +168,6 @@ where
         let hash = hasher.finish();
 
         if !self.graphs.lock().unwrap().contains_key(&hash) {
-            // Swap out current schedule
-            // TODO: think about this
-            let tmp = TS.with(|s| {
-                let mut s = s.borrow_mut();
-                std::mem::take(&mut *s)
-            });
-
             let mut f = self.f.lock().unwrap();
             let output = f(input.clone());
 
@@ -181,12 +187,6 @@ where
                     with_trace(|t| graph::compile(t, &schedule, &input_vec, &output_vec))
                 }),
             );
-
-            // Swap in old schedule
-            TS.with(|s| {
-                let mut s = s.borrow_mut();
-                *s = tmp;
-            });
         }
         let graph = &self.graphs.lock().unwrap()[&hash];
         let (report, output) = graph.launch_with(device, &input_vec)?;

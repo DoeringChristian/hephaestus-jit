@@ -456,7 +456,22 @@ pub fn schedule_eval() {
 ///
 /// Returns a variable that represents a global index within a kernel.
 ///
-pub fn index(size: usize) -> VarRef {
+pub fn index() -> VarRef {
+    push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::Index),
+            ty: u32::var_ty(),
+            extent: Extent::None,
+            ..Default::default()
+        },
+        [],
+    )
+}
+///
+/// Returns a variable that represents a global index within a kernel, while enforcing a minimum
+/// size.
+///
+pub fn sized_index(size: usize) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),

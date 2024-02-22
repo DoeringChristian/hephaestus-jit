@@ -17,8 +17,8 @@ fn simple1() {
 
     let device = backend::Device::vulkan(0).unwrap();
 
-    let i = tr::index(10);
-    let j = tr::index(5);
+    let i = tr::sized_index(10);
+    let j = tr::sized_index(5);
 
     j.add(&tr::literal(1u32)).scatter(&i, &j);
 
@@ -71,7 +71,7 @@ fn simple_f16() {
     pretty_env_logger::try_init().ok();
     let device = vulkan(0);
 
-    let c = tr::index(10).cast(f16::var_ty());
+    let c = tr::sized_index(10).cast(f16::var_ty());
 
     c.schedule();
 
@@ -88,7 +88,7 @@ fn scatter_chain1() {
 
     let b0 = tr::sized_literal(0, 5);
 
-    tr::literal(1).scatter(&b0, &tr::index(10));
+    tr::literal(1).scatter(&b0, &tr::sized_index(10));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
@@ -113,7 +113,7 @@ fn scatter_chain2() {
 
     let a = tr::sized_literal(0, 5);
     let b = a.add(&tr::literal(1));
-    tr::literal(1).scatter(&a, &tr::index(5));
+    tr::literal(1).scatter(&a, &tr::sized_index(5));
 
     b.schedule();
 
@@ -305,7 +305,7 @@ fn conditional_scatter() {
     );
     dbg!(&active.to_vec::<u8>(..));
 
-    tr::literal(1).scatter_if(&dst, &tr::index(10), &active);
+    tr::literal(1).scatter_if(&dst, &tr::sized_index(10), &active);
 
     dst.schedule();
 
@@ -328,7 +328,7 @@ fn conditional_gather() {
         &device,
     );
 
-    let dst = src.gather_if(&tr::index(10), &active);
+    let dst = src.gather_if(&tr::sized_index(10), &active);
     dst.schedule();
 
     let mut graph = tr::compile();
@@ -1014,7 +1014,7 @@ fn record() {
     let device = vulkan(0);
 
     let f = tr::record(|a: VarRef| {
-        a.add(&tr::literal(1)).scatter(&a, &tr::index(3));
+        a.add(&tr::literal(1)).scatter(&a, &tr::sized_index(3));
     });
 
     let a = tr::array(&[1, 2, 3], &device);
@@ -1099,6 +1099,29 @@ fn record_change() {
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
 }
 #[test]
+fn record_scatter() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    let f = tr::record(|a: VarRef| {
+        tr::sized_literal(1, 3).scatter(&a, &tr::index());
+    });
+
+    let a = tr::sized_literal(0, 3);
+
+    let b = a.add(&tr::literal(1));
+
+    f(&device, (a.clone(),));
+
+    b.schedule();
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    dbg!(a.to_vec::<i32>(..));
+    dbg!(b.to_vec::<i32>(..));
+}
+#[test]
 fn matrix_times_matrix() {
     pretty_env_logger::try_init().ok();
 
@@ -1151,7 +1174,7 @@ fn dyn_extract() {
 
     let array = tr::arr(&[&a0, &a1, &a2]);
 
-    let idx = tr::index(2);
+    let idx = tr::sized_index(2);
 
     let res = array.extract_dyn(&idx);
     res.schedule();
@@ -1169,7 +1192,7 @@ fn vec3_memory_layout() {
 
     let vec = tr::vec(&[&tr::sized_literal(1, 2), &tr::literal(2), &tr::literal(3)]);
 
-    let tmp = vec.gather(&tr::index(2));
+    let tmp = vec.gather(&tr::sized_index(2));
 
     vec.schedule();
     tmp.schedule();
@@ -1349,7 +1372,7 @@ fn matmul_linspace() {
 
     pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
         tr::literal(start).add(
-            &tr::index(num)
+            &tr::sized_index(num)
                 .cast(f32::var_ty())
                 .mul(&tr::literal((end - start) / (num as f32))),
         )
@@ -1417,7 +1440,7 @@ pub fn puffin() {
 
         pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
             tr::literal(start).add(
-                &tr::index(num)
+                &tr::sized_index(num)
                     .cast(f32::var_ty())
                     .mul(&tr::literal((end - start) / (num as f32))),
             )
