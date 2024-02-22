@@ -47,7 +47,7 @@ mod benches {
         C.schedule();
 
         let graph = tr::compile();
-        let report = graph.launch(&device);
+        let report = graph.launch(&device).unwrap();
 
         let pass = report
             .exec
@@ -65,7 +65,7 @@ mod benches {
         let (count, index) = src_tr.compress();
 
         let graph = tr::compile();
-        let report = graph.launch(&device);
+        let report = graph.launch(&device).unwrap();
 
         assert_eq!(count.item::<u32>(), n as u32);
 
@@ -87,7 +87,7 @@ mod benches {
         let pfs = src.prefix_sum(false);
 
         let graph = tr::compile();
-        let report = graph.launch(&device);
+        let report = graph.launch(&device).unwrap();
 
         assert_eq!(pfs.to_vec::<T>(n - 1..n)[0], sum);
 

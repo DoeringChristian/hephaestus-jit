@@ -137,9 +137,13 @@ where
         }
     }
     pub fn call(&self, device: &backend::Device, input: Input) -> Output {
-        self.call_report(device, input).1
+        self.call_report(device, input).unwrap().1
     }
-    pub fn call_report(&self, device: &backend::Device, input: Input) -> (backend::Report, Output) {
+    pub fn call_report(
+        &self,
+        device: &backend::Device,
+        input: Input,
+    ) -> Option<(backend::Report, Output)> {
         let input_vec = input.traverse().collect::<Vec<_>>();
 
         let mut hasher = DefaultHasher::new();
@@ -185,9 +189,9 @@ where
             });
         }
         let graph = &self.graphs.lock().unwrap()[&hash];
-        let (report, output) = graph.launch_with(device, &input_vec);
+        let (report, output) = graph.launch_with(device, &input_vec)?;
         let mut output = output.into_iter();
-        (report, Output::construct(&mut output))
+        Some((report, Output::construct(&mut output)))
     }
 }
 

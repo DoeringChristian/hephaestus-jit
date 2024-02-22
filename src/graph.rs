@@ -155,15 +155,18 @@ impl Graph {
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
-    pub fn launch(&self, device: &backend::Device) -> backend::Report {
-        self.launch_with(device, &[]).0
+    pub fn launch(&self, device: &backend::Device) -> Option<backend::Report> {
+        Some(self.launch_with(device, &[])?.0)
     }
     #[profiling::function]
     pub fn launch_with(
         &self,
         device: &backend::Device,
         inputs: &[&trace::VarRef],
-    ) -> (backend::Report, Vec<trace::VarRef>) {
+    ) -> Option<(backend::Report, Vec<trace::VarRef>)> {
+        if self.passes.is_empty() {
+            return None;
+        }
         // Capture Environment
         // TODO: at some point we could forward "virtual" resources to the backend, so that it can
         // perform resource aliasing
@@ -264,7 +267,7 @@ impl Graph {
 
         let output = output.into_iter().collect::<Option<Vec<_>>>().unwrap();
 
-        (report, output)
+        Some((report, output))
     }
 }
 
