@@ -437,7 +437,7 @@ pub fn compile() -> graph::Graph {
     TS.with(|s| {
         let mut ts = s.borrow_mut();
         let ts = std::mem::take(&mut (*ts));
-        let graph =graph::compile(&ts, &[], &[]);
+        let graph = graph::compile(&ts, &[], &[]);
         graph
     })
 }
