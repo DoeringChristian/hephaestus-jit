@@ -61,8 +61,11 @@
 layout(set = 0, binding = 0) buffer Input{
     uvec4 input_uvec4[];
 };
-layout(set = 0, binding = 1) buffer Weights{
+layout(set = 0, binding = 1) buffer Weightsf16{
     float16_t weights_f16[];
+};
+layout(set = 0, binding = 1) buffer Weightsuvec4{
+    uvec4 weights_uvec4[];
 };
 layout(set = 0, binding = 2) buffer Out{
     uvec4 output_uvec4[];
@@ -164,6 +167,65 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
         // NOTE: index by u32x4 (weights_col is divisible by 16)
         uint elem_idx = weights_col + l * 16 * (WIDTH + SKEW);
         coopMatStore(result_frag[l], shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
+    }
+}
+
+void threadblock_last_layer(uint weights_this_layer, uint output_stride, int output_layout){
+	// act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch
+	// weights_this_layer points to the weight matrix of the current layer
+	// out points to the location where the result produced by the thread block should be written to.
+	//   Can be nullptr if nothing should be written.
+
+    const uint N_BLOCKS = WIDTH / 16;
+
+	// Fragments
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> weights_frag[N_BLOCKS];
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag;
+
+	// Indices
+	const uint32_t li = threadIdx.x; // index in warp ("lane index")
+	const uint32_t wi = threadIdx.y; // index in block ("warp index")
+
+    uint weights_shmem = N_ITERS * 16 * (WIDTH + SKEW);
+
+	uint weights_row = (8 * li) % WIDTH;
+	uint weights_col = (8 * li + 8 * 32 * wi) / WIDTH;
+
+	// Load weight matrix into shared memory for the last multiplication.
+	// Loading into shared memory as opposed to directly into registers is faster
+	// because unlike in the previous layers, each warp uses the same entries of the weight matrix.
+    uint elem_idx_shmem = weights_row + weights_col * (WIDTH + SKEW);
+    uint elem_idx_weights = weights_this_layer + weights_row + weights_col * WIDTH;
+    
+    shmem[elem_idx_shmem / ELEMENTS_PER_VEC4] = weights_uvec4[elem_idx_weights / ELEMENTS_PER_VEC4];
+
+    barrier();
+
+    [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
+        uint elem_idx = weights_shmem + 16 * i;
+        coopMatLoad(weights_frag[i], shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_COL_MAJOR);
+    }
+
+	// Perform last layer by parallelizing over iters
+    for (uint idx = wi; idx < N_ITERS; idx += N_BLOCKS){
+        result_frag = coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
+        [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
+			// Load a chunk of intermediate activations from shared memory and multiply with chunk of the weight matrix
+            uint elem_idx = 16 * i + (16 * idx) * (WIDTH + SKEW);
+            coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
+            result_frag = coopMatMulAdd(act_frag, weights_frag[i], result_frag);
+        }
+
+        // TODO: Output Activation
+
+        if (output_layout == LAYOUT_ROW_MAJOR){
+            uint elem_idx = idx * 16 * output_stride;
+            coopMatStore(result_frag, output_uvec4, elem_idx/ELEMENTS_PER_VEC4, output_stride/ELEMENTS_PER_VEC4, output_layout);
+        }else{
+            uint elem_idx = idx * 16;
+            coopMatStore(result_frag, output_uvec4, elem_idx/ELEMENTS_PER_VEC4, output_stride/ELEMENTS_PER_VEC4, output_layout);
+        }
     }
 }
 
