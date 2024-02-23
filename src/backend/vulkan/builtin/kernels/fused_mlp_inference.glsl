@@ -99,10 +99,6 @@ float16_t warp_activation(float16_t frag){
 #endif
 }
 
-coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
-coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> act_frag[N_BLOCKS];
-coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag[N_ITERS];
-
 // Port of: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L47
 void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadblock_this_layer, uint activation_aux){
     // act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch.
@@ -117,10 +113,14 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
     // If we're performing the backward pass, weights must be loaded in transposed form, which
 	// is achieved by interpreting the memory in row_major instead of col_major order.
-    const int weights_layout_t = BACKWARD ? LAYOUT_ROW_MAJOR : LAYOUT_COL_MAJOR;
+    // const int weights_layout_t = BACKWARD ? LAYOUT_ROW_MAJOR : LAYOUT_COL_MAJOR;
+    const int weights_layout_t = LAYOUT_COL_MAJOR;
 
     // Fragments
     // NOTE: using transposed form? $H'_{i+1}^T = H_i^T \cdot W_i^T$
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> weights_frag[N_BLOCKS];
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag[N_ITERS];
 
     // Indices
     const uint32_t li = threadIdx.x; // index in warp ("lane index")
@@ -135,14 +135,10 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
     // Load N_BLOCKS chunks of weights from global memory into registers.
     [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
-        if (BACKWARD){
-            coopMatLoad(weights_frag[i], weights, weights_this_layer + 16 * i * WIDTH + weights_col, WIDTH, weights_layout_t);
-        }else{
-            coopMatLoad(weights_frag[i], weights, weights_this_layer + 16 * i + weights_col * WIDTH, WIDTH, weights_layout_t);
-        }
+        coopMatLoad(weights_frag[i], weights, weights_this_layer + 16 * i + weights_col * WIDTH, WIDTH, weights_layout_t);
     }
 
-    [[unroll]] for (uint l = 0; l < N_ITERS; i++){
+    [[unroll]] for (uint l = 0; l < N_ITERS; l++){
         result_frag[l] = coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
 
         [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
@@ -150,23 +146,13 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
             // NOTE: we can't cast shmem therefore we need to change the index by dividing by (elems in uvec4)
             // WARN: `elem_idx` has to be divisble by `ELEMENTS_PER_VEC4`
             uint elem_idx = 16 * i + (16 * l) * (WIDTH + SKEW);
-            coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
+            coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, WIDTH + SKEW, LAYOUT_ROW_MAJOR);
             result_frag[l] = coopMatMulAdd(act_frag, weights_frag[i], result_frag[l]);
         }
 
 		// Activation
-        if (BACKWARD){
-            // Load the temporary forward matrix for the relu transfer
-            uint elem_idx = activation_aux + weights_col + l * 16 * WIDTH;
-            coopMatLoad(act_frag, out_intermediate, elem_idx / ELEMENTS_PER_VEC4, WIDTH, LAYOUT_ROW_MAJOR);
-            // NOTE: don't have generics
-            for (uint i = 0; i < result_frag[l].length(); i++){
-                warp_activation_backward(result_frag[l][i], act_frag[l][i], result_frag[l][i]);
-            }
-        }else{
-            for (uint i = 0; i < result_frag[l].length(); i++){
-                warp_activation(result_frag[l][i], result_frag[l][i]);
-            }
+        for (uint i = 0; i < result_frag[l].length(); i++){
+            result_frag[l][i] = warp_activation(result_frag[l][i]);
         }
     }
 
@@ -200,7 +186,7 @@ void threadblock_load_input_static(uint input_threadblock){
     }
 }
 
-void threadblock_write_output_static(){
+void threadblock_write_output_static(uint output_threadblock){
     // output_threadblock will be filled by the thread block's act_shmem
     
     // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
@@ -212,11 +198,11 @@ void threadblock_write_output_static(){
     uint32_t lane_offset = (ELEMENTS_PER_VEC4 * li) % WIDTH;
 	uint32_t row = (ELEMENTS_PER_VEC4 * li + wi * ELEMENTS_PER_VEC4 * 32) / WIDTH;
 
-    barriers();
+    barrier();
 
     [[unroll]] for (uint i = 0; i < N_ITERS; i++){
         // WARN: both `elem_idx_output` and `elem_idx_shmem` have to be divisible by ELEMENTS_PER_VEC4
-        uint elem_idx_output = lane_offset + (row + 16 * i) * WIDTH;
+        uint elem_idx_output = output_threadblock + lane_offset + (row + 16 * i) * WIDTH;
         uint elem_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
 
         output_uvec4[elem_idx_output / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
@@ -238,7 +224,7 @@ void main(){
         // If the input has the same width & layout as the hidden layers, we can simply use the network's regular layer routine (with static size)
 		// instead of using the slower dynamic input layer routine.
         threadblock_load_input_static(elem_idx * WIDTH);
-        threadblock_layer(0, elem_idx * WIDTH)
+        threadblock_layer(0, elem_idx * WIDTH, 0);
     }
 
     uint32_t first_weights_stride = WIDTH * in_width;
@@ -248,7 +234,7 @@ void main(){
     // Hidden layers
 
     for (uint k = 0; k < n_hidden_matmuls; k++){
-        threadblock_layer(weights + first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
+        threadblock_layer(first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
     }
 
     threadblock_write_output_static(elem_idx * WIDTH);
