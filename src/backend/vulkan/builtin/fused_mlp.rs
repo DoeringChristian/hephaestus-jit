@@ -190,6 +190,7 @@ mod test {
     use super::*;
     #[test]
     fn fused_mlp_inference() {
+        pretty_env_logger::try_init().ok();
         let device = VulkanDevice::create(0).unwrap();
 
         // [64] -> [64x64] -> ( _/ ) -> [64x64] -> [64]
@@ -199,7 +200,7 @@ mod test {
         let width = 64;
         let batch_size = 128;
 
-        let input = vec![f16::from_f32(1f32); n_inputs * batch_size];
+        let input = vec![f16::from_f32(-1f32); n_inputs * batch_size];
         // let output = vec![f16::from_f32(1f32); 64];
         // let output_intermediate = vec![f16::from_f32(0.); 64 * (n_hidden_layers + 2)];
         let mut win = vec![f16::from_f32(0f32); 64 * 64];
@@ -209,8 +210,8 @@ mod test {
         for row in 0..64 {
             for col in 0..64 {
                 if row == col {
-                    win[64 * row + col] = f16::from_f32(1.);
-                    wout[64 * row + col] = f16::from_f32(1.);
+                    // win[64 * row + col] = f16::from_f32(1.);
+                    // wout[64 * row + col] = f16::from_f32(1.);
                 }
             }
         }

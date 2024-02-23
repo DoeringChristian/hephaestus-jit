@@ -82,7 +82,7 @@ layout(set = 0, binding = 3) buffer Config{
 
 const uint SKEW = WIDTH % 16 == 0 ? 8 : 0; // <- always going to be 8 as we only support multiple-of-16 widths
 const uint ELEMENTS_PER_VEC4 = 16/(A_BITS / 8);// 16 bytes, A_BITS bits per element
-const uint SHMEM_ELEMENTS = (16 + 16 * N_ITERS) * (WIDTH * SKEW);
+const uint SHMEM_ELEMENTS = (16 + 16 * N_ITERS) * (WIDTH + SKEW);
 shared uvec4 shmem[SHMEM_ELEMENTS / ELEMENTS_PER_VEC4]; // 16*WIDTH rows of weights (for the last layer; others are in registers only) + 16*WIDTH*N_ITERS rows of intermediate activations
 
 const uint N_BLOCK_ROWS = WIDTH/16;
@@ -214,18 +214,8 @@ void main(){
     uint32_t elem_idx = 16 * blockIdx.x * N_ITERS;
     
     // First layer
-    if (input_layout == LAYOUT_COL_MAJOR || in_width != WIDTH){
-        if (input_layout == LAYOUT_ROW_MAJOR){
-            // TODO: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L524
-        }else{
-            // TODO: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L526
-        }
-    }else{
-        // If the input has the same width & layout as the hidden layers, we can simply use the network's regular layer routine (with static size)
-		// instead of using the slower dynamic input layer routine.
-        threadblock_load_input_static(elem_idx * WIDTH);
-        threadblock_layer(0, elem_idx * WIDTH, 0);
-    }
+    threadblock_load_input_static(elem_idx * WIDTH);
+    threadblock_layer(0, elem_idx * WIDTH, 0);
 
     uint32_t first_weights_stride = WIDTH * in_width;
 	uint32_t weights_stride = WIDTH * WIDTH;
