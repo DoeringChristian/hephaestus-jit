@@ -62,7 +62,7 @@ layout(set = 0, binding = 0) buffer Input{
     uvec4 input_uvec4[];
 };
 layout(set = 0, binding = 1) buffer Weights{
-    float16_t weights[];
+    float16_t weights_f16[];
 };
 layout(set = 0, binding = 2) buffer Out{
     uvec4 output_uvec4[];
@@ -81,10 +81,12 @@ layout(set = 0, binding = 3) buffer Config{
 
 
 const uint SKEW = WIDTH % 16 == 0 ? 8 : 0; // <- always going to be 8 as we only support multiple-of-16 widths
+// const uint SKEW = 0;
 const uint ELEMENTS_PER_VEC4 = 16/(A_BITS / 8);// 16 bytes, A_BITS bits per element
 const uint SHMEM_ELEMENTS = (16 + 16 * N_ITERS) * (WIDTH + SKEW);
 shared uvec4 shmem[SHMEM_ELEMENTS / ELEMENTS_PER_VEC4]; // 16*WIDTH rows of weights (for the last layer; others are in registers only) + 16*WIDTH*N_ITERS rows of intermediate activations
 
+// const uint N_BLOCKS = WIDTH / 16;
 const uint N_BLOCK_ROWS = WIDTH/16;
 layout(local_size_x = 32, local_size_y = N_BLOCK_ROWS, local_size_z = 1) in;
 
@@ -109,7 +111,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 	// activation_aux points to additional arguments that the activation function may depend on. Points to the hidden forward activations when computing backward activations.
 
     // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
-    const uint32_t N_BLOCKS = WIDTH / 16;
+    const uint N_BLOCKS = WIDTH / 16;
 
     // If we're performing the backward pass, weights must be loaded in transposed form, which
 	// is achieved by interpreting the memory in row_major instead of col_major order.
@@ -135,7 +137,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
     // Load N_BLOCKS chunks of weights from global memory into registers.
     [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
-        coopMatLoad(weights_frag[i], weights, weights_this_layer + 16 * i + weights_col * WIDTH, WIDTH, weights_layout_t);
+        coopMatLoad(weights_frag[i], weights_f16, weights_this_layer + 16 * i + weights_col * WIDTH, WIDTH, weights_layout_t);
     }
 
     [[unroll]] for (uint l = 0; l < N_ITERS; l++){
@@ -146,7 +148,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
             // NOTE: we can't cast shmem therefore we need to change the index by dividing by (elems in uvec4)
             // WARN: `elem_idx` has to be divisble by `ELEMENTS_PER_VEC4`
             uint elem_idx = 16 * i + (16 * l) * (WIDTH + SKEW);
-            coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, WIDTH + SKEW, LAYOUT_ROW_MAJOR);
+            coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
             result_frag[l] = coopMatMulAdd(act_frag, weights_frag[i], result_frag[l]);
         }
 
@@ -161,7 +163,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
     [[unroll]] for (uint l = 0; l < N_ITERS; l++){
         // NOTE: index by u32x4 (weights_col is divisible by 16)
         uint elem_idx = weights_col + l * 16 * (WIDTH + SKEW);
-        coopMatStore(result_frag[l], shmem, elem_idx/ELEMENTS_PER_VEC4, WIDTH + SKEW, LAYOUT_ROW_MAJOR);
+        coopMatStore(result_frag[l], shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
     }
 }
 
