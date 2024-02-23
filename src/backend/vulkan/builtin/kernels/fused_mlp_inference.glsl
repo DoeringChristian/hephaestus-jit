@@ -59,18 +59,15 @@
 // `out_intermediate` points to the memory where intermediate activations should be written. When performing inference, a value of nullptr is expected (intermediate results are not written).
 // `out` points to the memory where the network output should be written. (Output width is assumed to be 16 neurons.)
 layout(set = 0, binding = 0) buffer Input{
-    uvec4 input[];
+    uvec4 input_uvec4[];
 };
 layout(set = 0, binding = 1) buffer Weights{
     float16_t weights[];
 };
-layout(set = 0, binding = 2) buffer OutIntermediate{
-    uvec4 out_intermediate[];
+layout(set = 0, binding = 2) buffer Out{
+    uvec4 output_uvec4[];
 };
-layout(set = 0, binding = 3) buffer Out{
-    uvec4 output[];
-};
-layout(set = 0, binding = 4) buffer Config{
+layout(set = 0, binding = 3) buffer Config{
     uint32_t output_stride;
     uint32_t batch_size;
     uint32_t in_width;
@@ -96,16 +93,15 @@ layout(local_size_x = 32, local_size_y = N_BLOCK_ROWS, local_size_z = 1) in;
 #define ACTIVATION RELU
 #endif
 
-void warp_activation(in float16_t frag, out float16_t result){
+float16_t warp_activation(float16_t frag){
 #if ACTIVATION == RELU
-    result = max(frag, float16_t(0));
+    return max(frag, float16_t(0));
 #endif
 }
-void warp_activation_backward(in float16_t frag, in float16_t frag_forward, out float16_t result){
-#if ACTIVATION == RELU
-    result = frag * (forward_frag > 0.0); 
-#endif
-}
+
+coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
+coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> act_frag[N_BLOCKS];
+coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag[N_ITERS];
 
 // Port of: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L47
 void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadblock_this_layer, uint activation_aux){
@@ -125,9 +121,6 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
     // Fragments
     // NOTE: using transposed form? $H'_{i+1}^T = H_i^T \cdot W_i^T$
-    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
-    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> act_frag[N_BLOCKS];
-    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag[N_ITERS];
 
     // Indices
     const uint32_t li = threadIdx.x; // index in warp ("lane index")
@@ -184,19 +177,6 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
         uint elem_idx = weights_col + l * 16 * (WIDTH + SKEW);
         coopMatStore(result_frag[l], shmem, elem_idx/ELEMENTS_PER_VEC4, WIDTH + SKEW, LAYOUT_ROW_MAJOR);
     }
-
-    if (!INFERENCE){
-        barrier();
-
-        [[unroll]]
-        for (uint l = 0; l < N_ITERS; l++){
-            // NOTE: both `elem_idx_intermeidate` and `elem_idx_shmem` are divisible by `ELEMENTS_PER_VEC4`
-            uint elem_idx_intermeidate = lane_offset + (row + 16 * l) * WIDTH;
-            uint elem_idx_shmem = lane_offset + (row + 16 * l) * (WIDTH + SKEW);
-            out_intermediate[elem_idx_intermeidate / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
-        }
-    }
-    
 }
 
 void threadblock_load_input_static(uint input_threadblock){
@@ -216,11 +196,11 @@ void threadblock_load_input_static(uint input_threadblock){
         uint elem_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
         uint elem_idx_input = input_threadblock + lane_offset + (row + 16 * i) * WIDTH;
 
-        shmem[elem_idx_shmem / ELEMENTS_PER_VEC4] = input[elem_idx_input / ELEMENTS_PER_VEC4];
+        shmem[elem_idx_shmem / ELEMENTS_PER_VEC4] = input_uvec4[elem_idx_input / ELEMENTS_PER_VEC4];
     }
 }
 
-void threadblock_write_output_static(uint output_threadblock){
+void threadblock_write_output_static(){
     // output_threadblock will be filled by the thread block's act_shmem
     
     // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
@@ -229,17 +209,17 @@ void threadblock_write_output_static(uint output_threadblock){
 	uint32_t li = threadIdx.x; // index in warp ("lane index")
 	uint32_t wi = threadIdx.y; // index in block ("warp index")
 
-    uint32_t lane_offset = (8 * li) % WIDTH;
-	uint32_t row = (8 * li + wi * 8 * 32) / WIDTH;
+    uint32_t lane_offset = (ELEMENTS_PER_VEC4 * li) % WIDTH;
+	uint32_t row = (ELEMENTS_PER_VEC4 * li + wi * ELEMENTS_PER_VEC4 * 32) / WIDTH;
 
     barriers();
 
     [[unroll]] for (uint i = 0; i < N_ITERS; i++){
         // WARN: both `elem_idx_output` and `elem_idx_shmem` have to be divisible by ELEMENTS_PER_VEC4
-        uint elem_idx_output = output_threadblock + lane_offset + (row + 16 * i) * WIDTH;
+        uint elem_idx_output = lane_offset + (row + 16 * i) * WIDTH;
         uint elem_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
 
-        out_intermediate[elem_idx_output / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
+        output_uvec4[elem_idx_output / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
     }
 }
 
@@ -271,12 +251,6 @@ void main(){
         threadblock_layer(weights + first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
     }
 
-    if (out_width > 16){
-        // In the forward pass, intermediate activations are already written out.
-        if (INFERENCE){
-            threadblock_write_output_static(elem_idx * WIDTH);
-        }
-        // TODO: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L549
-    }
+    threadblock_write_output_static(elem_idx * WIDTH);
 }
 

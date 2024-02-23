@@ -125,4 +125,20 @@ impl Buffer {
             )
         }
     }
+    pub fn create_mapped_storage(device: &Device, data: &[u8]) -> Self {
+        let mut buffer = Self::create(
+            device,
+            BufferInfo {
+                size: data.len(),
+                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                memory_location: MemoryLocation::CpuToGpu,
+                ..Default::default()
+            },
+        );
+        buffer.mapped_slice_mut().copy_from_slice(data);
+
+        buffer
+    }
 }
