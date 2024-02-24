@@ -17,26 +17,41 @@ if __name__ == "__main__":
 
     win = generator.standard_normal(size=[width, width]).astype(np.float16)
     wout = generator.standard_normal(size=[width, width]).astype(np.float16)
+    # W = np.identity(width).astype(np.float16)
+    # W[0][1] = 1
+    # W[0][0] = 0
+    # W = W
 
-    # weights = [win, wout]
     weights = [wout]
 
     H = input
-    for W in weights[:-1]:
-        H = H @ np.transpose(W, [1, 0])
-        H = relu(H)
 
-    H = weights[-1] @ H
+    for W in weights:
+        H = W @ H
 
     output = H
+    print(f"{input[:, 0]=}")
+    print(f"{output[:, 0]=}")
 
     weights = np.stack(weights)
+
+    input = np.transpose(input, [1, 0])
+    input = input.reshape([-1])
+
+    output = np.transpose(output, [1, 0])
+    output = output.reshape([-1])
+
+    weights = weights.reshape([-1])
+
+    print(f"{input[:64]=}")
+    print(f"{output[:64]=}")
+    print(f"{weights[:2]=}")
 
     print(f"{input.reshape([-1]).shape=}")
     datapath = Path(__file__).parent / "data"
     datapath.mkdir(exist_ok=True, parents=True)
-    weights.reshape([-1]).tofile(datapath / "weights.bin")
-    input.reshape([-1]).tofile(datapath / "input.bin")
-    output.reshape([-1]).tofile(datapath / "output.bin")
+    weights.tofile(datapath / "weights.bin")
+    input.tofile(datapath / "input.bin")
+    output.tofile(datapath / "output.bin")
 
     print(f"{output.reshape([-1])}")
