@@ -346,10 +346,10 @@ void main(){
     
     // First layer
     threadblock_load_input_static(elem_idx * WIDTH);
-    // threadblock_layer(0, elem_idx * WIDTH, 0);
+    threadblock_layer(0, elem_idx * WIDTH, 0);
 
-    // uint32_t first_weights_stride = WIDTH * in_width;
-    uint32_t first_weights_stride = 0;
+    uint32_t first_weights_stride = WIDTH * in_width;
+    // uint32_t first_weights_stride = 0;
     uint32_t weights_stride = WIDTH * WIDTH;
     uint32_t layer_stride = WIDTH * batch_size;
     
