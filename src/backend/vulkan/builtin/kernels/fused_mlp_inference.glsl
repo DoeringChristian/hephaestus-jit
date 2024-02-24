@@ -231,7 +231,7 @@ void threadblock_last_layer(uint weights_this_layer, uint output_threadblock, ui
 
     [[unroll]] for (uint l = 0; l < N_ITERS; l++){
         if (output_layout ==  LAYOUT_ROW_MAJOR){
-            uint elem_idx = output_threadblock + l * 16 + wi * output_stride * 16;
+            uint elem_idx = output_threadblock + l * 16 * output_stride + wi * 16;
             coopMatStore(result_frag[l], output_f16, elem_idx, output_stride, LAYOUT_ROW_MAJOR);
         }
     }

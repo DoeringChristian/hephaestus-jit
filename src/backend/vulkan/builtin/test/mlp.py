@@ -10,19 +10,22 @@ if __name__ == "__main__":
     generator = np.random.Generator(np.random.PCG64(seed=0))
 
     width = 64
-    hidden_layers = 0
+    hidden_layers = 2
     batch_size = 128
 
     input = generator.standard_normal(size=[width, batch_size]).astype(np.float16)
 
     win = generator.standard_normal(size=[width, width]).astype(np.float16)
     wout = generator.standard_normal(size=[width, width]).astype(np.float16)
-    # W = np.identity(width).astype(np.float16)
-    # W[0][1] = 1
-    # W[0][0] = 0
-    # W = W
 
-    weights = [win, wout]
+    weights = [win]
+
+    for i in range(hidden_layers):
+        weights.append(
+            generator.standard_normal(size=[width, width]).astype(np.float16)
+        )
+
+    weights.append(wout)
 
     H = input
 
