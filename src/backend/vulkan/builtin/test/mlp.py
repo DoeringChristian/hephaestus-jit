@@ -22,12 +22,16 @@ if __name__ == "__main__":
     # W[0][0] = 0
     # W = W
 
-    weights = [wout]
+    weights = [win, wout]
 
     H = input
 
-    for W in weights:
+    for W in weights[:-1]:
         H = W @ H
+        H = relu(H)
+
+    W = weights[-1]
+    H = W @ H
 
     output = H
     print(f"{input[:, 0]=}")

@@ -36,7 +36,7 @@ fn fused_mlp_inference() {
     let weights = std::fs::read(path.join("weights.bin")).unwrap();
     assert_eq!(
         weights.len(),
-        width * width * (1 + hidden_layers as usize) * std::mem::size_of::<f16>()
+        width * width * (2 + hidden_layers as usize) * std::mem::size_of::<f16>()
     );
     let weights = bytemuck::cast_slice::<_, f16>(&weights).to_vec();
 
