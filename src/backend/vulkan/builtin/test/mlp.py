@@ -17,6 +17,8 @@ if __name__ == "__main__":
 
     win = generator.standard_normal(size=[width, width]).astype(np.float16)
     wout = generator.standard_normal(size=[width, width]).astype(np.float16)
+    # win = np.identity(width).astype(np.float16)
+    # wout = np.identity(width).astype(np.float16)
 
     weights = [win]
 
@@ -24,6 +26,7 @@ if __name__ == "__main__":
         weights.append(
             generator.standard_normal(size=[width, width]).astype(np.float16)
         )
+        # weights.append(np.identity(width).astype(np.float16))
 
     weights.append(wout)
 

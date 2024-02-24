@@ -92,7 +92,7 @@ fn fused_mlp_inference() {
 
     let output: &[f16] = bytemuck::cast_slice(&output_buf.mapped_slice());
 
-    let row = 4;
+    let row = 100;
     let row_range = (row * 64)..(row + 1) * 64;
 
     let ouput_row = &output[row_range.clone()];
@@ -101,11 +101,22 @@ fn fused_mlp_inference() {
     println!("output={ouput_row:?}");
     println!("reference={reference_row:?}");
 
+    // println!("output={output:?}");
+    // println!("reference={reference:?}");
+
     dbg!(output
         .iter()
         .zip(&reference)
         .map(|(a, b)| (a - b).abs())
         .reduce(|a, b| a.max(b)));
+    let mean = output
+        .iter()
+        .zip(&reference)
+        .map(|(&a, &b)| (a.to_f32() - b.to_f32()).powi(2))
+        .reduce(|a, b| a + b)
+        .unwrap()
+        / output.len() as f32;
+    dbg!(mean);
     assert!(
         output
             .iter()
