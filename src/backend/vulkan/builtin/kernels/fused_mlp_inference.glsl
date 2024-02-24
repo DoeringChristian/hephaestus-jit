@@ -67,8 +67,11 @@ layout(set = 0, binding = 1) buffer Weightsf16{
 layout(set = 0, binding = 1) buffer Weightsuvec4{
     uvec4 weights_uvec4[];
 };
-layout(set = 0, binding = 2) buffer Out{
+layout(set = 0, binding = 2) buffer Outputuvec4{
     uvec4 output_uvec4[];
+};
+layout(set = 0, binding = 2) buffer Outputf16{
+    float16_t output_f16[];
 };
 layout(set = 0, binding = 3) buffer Config{
     uint32_t output_stride;
@@ -107,17 +110,17 @@ float16_t warp_activation(float16_t frag){
 // Port of: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L47
 void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadblock_this_layer, uint activation_aux){
     // act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch.
-	//           Can be forward activations or backward activations, depending on caller.
-	// weights_this_layer points to the weight matrix of the current layer.
-	// out_intermediate_threadblock_this_layer points to the location where intermediate activations produced by the thread block should be written to.
-	//                  Can be nullptr if nothing should be written.
-	// activation_aux points to additional arguments that the activation function may depend on. Points to the hidden forward activations when computing backward activations.
+    //           Can be forward activations or backward activations, depending on caller.
+    // weights_this_layer points to the weight matrix of the current layer.
+    // out_intermediate_threadblock_this_layer points to the location where intermediate activations produced by the thread block should be written to.
+    //                  Can be nullptr if nothing should be written.
+    // activation_aux points to additional arguments that the activation function may depend on. Points to the hidden forward activations when computing backward activations.
 
     // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     const uint N_BLOCKS = WIDTH / 16;
 
     // If we're performing the backward pass, weights must be loaded in transposed form, which
-	// is achieved by interpreting the memory in row_major instead of col_major order.
+    // is achieved by interpreting the memory in row_major instead of col_major order.
     // const int weights_layout_t = BACKWARD ? LAYOUT_ROW_MAJOR : LAYOUT_COL_MAJOR;
     const int weights_layout_t = LAYOUT_COL_MAJOR;
 
@@ -129,10 +132,10 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 
     // Indices
     const uint32_t li = threadIdx.x; // index in warp ("lane index")
-	const uint32_t wi = threadIdx.y; // index in block ("warp index")
+    const uint32_t wi = threadIdx.y; // index in block ("warp index")
 
     const uint32_t lane_offset = (8 * li) % WIDTH;
-	const uint32_t row = (8 * li + wi * 8 * 32) / WIDTH;
+    const uint32_t row = (8 * li + wi * 8 * 32) / WIDTH;
 
     const uint32_t weights_col = 16 * wi;
 
@@ -155,7 +158,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
             result_frag[l] = coopMatMulAdd(act_frag, weights_frag[i], result_frag[l]);
         }
 
-		// Activation
+        // Activation
         for (uint i = 0; i < result_frag[l].length(); i++){
             result_frag[l][i] = warp_activation(result_frag[l][i]);
         }
@@ -170,64 +173,128 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
     }
 }
 
-void threadblock_last_layer(uint weights_this_layer, uint output_stride, int output_layout){
-	// act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch
-	// weights_this_layer points to the weight matrix of the current layer
-	// out points to the location where the result produced by the thread block should be written to.
-	//   Can be nullptr if nothing should be written.
+// Port of: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L47
+void threadblock_last_layer(uint weights_this_layer, uint output_threadblock, uint output_stride, int output_layout){
+    // act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch.
+    //           Can be forward activations or backward activations, depending on caller.
+    // weights_this_layer points to the weight matrix of the current layer.
+    // out_intermediate_threadblock_this_layer points to the location where intermediate activations produced by the thread block should be written to.
+    //                  Can be nullptr if nothing should be written.
+    // activation_aux points to additional arguments that the activation function may depend on. Points to the hidden forward activations when computing backward activations.
 
+    // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     const uint N_BLOCKS = WIDTH / 16;
 
-	// Fragments
+    // If we're performing the backward pass, weights must be loaded in transposed form, which
+	// is achieved by interpreting the memory in row_major instead of col_major order.
+    // const int weights_layout_t = BACKWARD ? LAYOUT_ROW_MAJOR : LAYOUT_COL_MAJOR;
+    const int weights_layout_t = LAYOUT_COL_MAJOR;
+
+    // Fragments
+    // NOTE: using transposed form? $H'_{i+1}^T = H_i^T \cdot W_i^T$
     coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
     coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> weights_frag[N_BLOCKS];
-    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag;
+    coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag[N_ITERS];
 
-	// Indices
-	const uint32_t li = threadIdx.x; // index in warp ("lane index")
-	const uint32_t wi = threadIdx.y; // index in block ("warp index")
+    // Indices
+    const uint32_t li = threadIdx.x; // index in warp ("lane index")
+    const uint32_t wi = threadIdx.y; // index in block ("warp index")
 
-    uint weights_shmem = N_ITERS * 16 * (WIDTH + SKEW);
+    const uint32_t lane_offset = (8 * li) % WIDTH;
+    const uint32_t row = (8 * li + wi * 8 * 32) / WIDTH;
 
-	uint weights_row = (8 * li) % WIDTH;
-	uint weights_col = (8 * li + 8 * 32 * wi) / WIDTH;
-
-	// Load weight matrix into shared memory for the last multiplication.
-	// Loading into shared memory as opposed to directly into registers is faster
-	// because unlike in the previous layers, each warp uses the same entries of the weight matrix.
-    uint elem_idx_shmem = weights_row + weights_col * (WIDTH + SKEW);
-    uint elem_idx_weights = weights_this_layer + weights_row + weights_col * WIDTH;
-    
-    shmem[elem_idx_shmem / ELEMENTS_PER_VEC4] = weights_uvec4[elem_idx_weights / ELEMENTS_PER_VEC4];
+    const uint32_t weights_col = 16 * wi;
 
     barrier();
 
+    // Load N_BLOCKS chunks of weights from global memory into registers.
     [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
-        uint elem_idx = weights_shmem + 16 * i;
-        coopMatLoad(weights_frag[i], shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_COL_MAJOR);
+        coopMatLoad(weights_frag[i], weights_f16, weights_this_layer + 16 * i + weights_col * WIDTH, WIDTH, weights_layout_t);
     }
 
-	// Perform last layer by parallelizing over iters
-    for (uint idx = wi; idx < N_ITERS; idx += N_BLOCKS){
-        result_frag = coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
+    [[unroll]] for (uint l = 0; l < N_ITERS; l++){
+        result_frag[l] = coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
+
         [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
-			// Load a chunk of intermediate activations from shared memory and multiply with chunk of the weight matrix
-            uint elem_idx = 16 * i + (16 * idx) * (WIDTH + SKEW);
+            // Load a chunk of intermediate activations from shared memory and multiply with chunk of weights
+            // NOTE: we can't cast shmem therefore we need to change the index by dividing by (elems in uvec4)
+            // WARN: `elem_idx` has to be divisble by `ELEMENTS_PER_VEC4`
+            uint elem_idx = 16 * i + (16 * l) * (WIDTH + SKEW);
             coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
-            result_frag = coopMatMulAdd(act_frag, weights_frag[i], result_frag);
+            result_frag[l] = coopMatMulAdd(act_frag, weights_frag[i], result_frag[l]);
         }
 
-        // TODO: Output Activation
+        // TODO: output Activation
+    }
 
-        if (output_layout == LAYOUT_ROW_MAJOR){
-            uint elem_idx = idx * 16 * output_stride;
-            coopMatStore(result_frag, output_uvec4, elem_idx/ELEMENTS_PER_VEC4, output_stride/ELEMENTS_PER_VEC4, output_layout);
-        }else{
-            uint elem_idx = idx * 16;
-            coopMatStore(result_frag, output_uvec4, elem_idx/ELEMENTS_PER_VEC4, output_stride/ELEMENTS_PER_VEC4, output_layout);
+    barrier();
+
+    [[unroll]] for (uint l = 0; l < N_ITERS; l++){
+        if (output_layout ==  LAYOUT_ROW_MAJOR){
+            uint elem_idx = output_threadblock + l * 16 + wi * output_stride * 16;
+            coopMatStore(result_frag[l], output_f16, elem_idx, output_stride, LAYOUT_ROW_MAJOR);
         }
     }
 }
+
+// void threadblock_last_layer(uint weights_this_layer, uint output_threadblock, uint output_stride, int output_layout){
+//     // act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch
+//     // weights_this_layer points to the weight matrix of the current layer
+//     // out points to the location where the result produced by the thread block should be written to.
+//     //   Can be nullptr if nothing should be written.
+//
+//     const uint N_BLOCKS = WIDTH / 16;
+//
+//     // Fragments
+//     coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> act_frag;
+//     coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> weights_frag[N_BLOCKS];
+//     coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> result_frag;
+//
+//     // Indices
+//     const uint32_t li = threadIdx.x; // index in warp ("lane index")
+//     const uint32_t wi = threadIdx.y; // index in block ("warp index")
+//
+//     uint weights_shmem = N_ITERS * 16 * (WIDTH + SKEW);
+//
+//     uint weights_row = (8 * li) % WIDTH;
+//     uint weights_col = (8 * li + 8 * 32 * wi) / WIDTH;
+//
+//     // Load weight matrix into shared memory for the last multiplication.
+//     // Loading into shared memory as opposed to directly into registers is faster
+//     // because unlike in the previous layers, each warp uses the same entries of the weight matrix.
+//     uint elem_idx_shmem = weights_row + weights_col * (WIDTH + SKEW);
+//     uint elem_idx_weights = weights_this_layer + weights_row + weights_col * WIDTH;
+//     
+//     shmem[elem_idx_shmem / ELEMENTS_PER_VEC4] = weights_uvec4[elem_idx_weights / ELEMENTS_PER_VEC4];
+//
+//     barrier();
+//
+//     [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
+//         uint elem_idx = weights_shmem + 16 * i;
+//         coopMatLoad(weights_frag[i], shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_COL_MAJOR);
+//     }
+//
+//     // Perform last layer by parallelizing over iters
+//     for (uint idx = wi; idx < N_ITERS; idx += N_BLOCKS){
+//         result_frag = coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(1.0);
+//         // [[unroll]] for (uint i = 0; i < N_BLOCKS; i++){
+//         //     // Load a chunk of intermediate activations from shared memory and multiply with chunk of the weight matrix
+//         //     uint elem_idx = 16 * i + (16 * idx) * (WIDTH + SKEW);
+//         //     coopMatLoad(act_frag, shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
+//         //     result_frag = coopMatMulAdd(act_frag, weights_frag[i], result_frag);
+//         // }
+//
+//         // TODO: Output Activation
+//
+//         if (output_layout == LAYOUT_ROW_MAJOR){
+//             uint elem_idx = output_threadblock + idx * 16 * output_stride;
+//             coopMatStore(result_frag, output_f16, elem_idx, output_stride, LAYOUT_ROW_MAJOR);
+//         }else{
+//             uint elem_idx = output_threadblock + idx * 16;
+//             coopMatStore(result_frag, output_f16, elem_idx, output_stride, LAYOUT_COL_MAJOR);
+//         }
+//     }
+// }
 
 void threadblock_load_input_static(uint input_threadblock){
     // act_shmem will be filled by the thread block's chunk of input_threadblock
@@ -279,11 +346,12 @@ void main(){
     
     // First layer
     threadblock_load_input_static(elem_idx * WIDTH);
-    threadblock_layer(0, elem_idx * WIDTH, 0);
+    // threadblock_layer(0, elem_idx * WIDTH, 0);
 
-    uint32_t first_weights_stride = WIDTH * in_width;
-	uint32_t weights_stride = WIDTH * WIDTH;
-	uint32_t layer_stride = WIDTH * batch_size;
+    // uint32_t first_weights_stride = WIDTH * in_width;
+    uint32_t first_weights_stride = 0;
+    uint32_t weights_stride = WIDTH * WIDTH;
+    uint32_t layer_stride = WIDTH * batch_size;
     
     // Hidden layers
 
@@ -291,6 +359,6 @@ void main(){
         threadblock_layer(first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
     }
 
-    threadblock_write_output_static(elem_idx * WIDTH);
+    threadblock_last_layer(first_weights_stride + weights_stride * n_hidden_matmuls, elem_idx * output_stride, output_stride, LAYOUT_ROW_MAJOR);
 }
 

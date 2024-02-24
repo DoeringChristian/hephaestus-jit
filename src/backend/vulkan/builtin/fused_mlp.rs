@@ -23,12 +23,12 @@ use crate::backend::vulkan::pipeline::{
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct MlpConfig {
-    output_stride: u32,
-    batch_size: u32,
-    in_width: u32,
-    n_hidden_matmuls: u32,
-    input_layout: i32,
-    output_layout: i32,
+    pub output_stride: u32,
+    pub batch_size: u32,
+    pub in_width: u32,
+    pub n_hidden_matmuls: u32,
+    pub input_layout: i32,
+    pub output_layout: i32,
 }
 
 #[derive(Hash)]
@@ -181,89 +181,4 @@ pub fn mlp_inference(
                 blocks,
             );
         });
-}
-
-#[cfg(test)]
-mod test {
-    use half::f16;
-
-    use super::*;
-    #[test]
-    fn fused_mlp_inference() {
-        pretty_env_logger::try_init().ok();
-        let device = VulkanDevice::create(0).unwrap();
-
-        // [64] -> [64x64] -> ( _/ ) -> [64x64] -> [64]
-        let n_inputs = 64;
-        let n_outputs = 64;
-        let hidden_layers = 0;
-        let width = 64;
-        let batch_size = 128;
-
-        let input = vec![f16::from_f32(1f32); n_inputs * batch_size];
-        // let output = vec![f16::from_f32(1f32); 64];
-        // let output_intermediate = vec![f16::from_f32(0.); 64 * (n_hidden_layers + 2)];
-        let mut win = vec![f16::from_f32(0f32); 64 * 64];
-        let mut wout = vec![f16::from_f32(0f32); 64 * 64];
-
-        // Initialize win and wout
-        for row in 0..64 {
-            for col in 0..64 {
-                if row == col {
-                    win[64 * row + col] = f16::from_f32(1.);
-                    wout[64 * row + col] = f16::from_f32(1.);
-                }
-            }
-        }
-        let weights = [win, wout].into_iter().flatten().collect::<Vec<_>>();
-
-        let input = Arc::new(Buffer::create_mapped_storage(
-            &device,
-            bytemuck::cast_slice(&input),
-        ));
-        let weights = Arc::new(Buffer::create_mapped_storage(
-            &device,
-            bytemuck::cast_slice(&weights),
-        ));
-        let output = Arc::new(Buffer::create(
-            &device,
-            BufferInfo {
-                size: (n_outputs * batch_size) * std::mem::size_of::<f16>(),
-                usage: vk::BufferUsageFlags::TRANSFER_SRC
-                    | vk::BufferUsageFlags::TRANSFER_DST
-                    | vk::BufferUsageFlags::STORAGE_BUFFER,
-                memory_location: MemoryLocation::GpuToCpu,
-                ..Default::default()
-            },
-        ));
-
-        let mut rgraph = RGraph::new();
-
-        mlp_inference(
-            &device,
-            &mut rgraph,
-            input,
-            weights,
-            output.clone(),
-            None,
-            MlpConfig {
-                output_stride: 64,
-                batch_size: batch_size as _,
-                in_width: 64,
-                n_hidden_matmuls: hidden_layers,
-                input_layout: 0,
-                output_layout: 0,
-            },
-            batch_size,
-            width,
-            width,
-            hidden_layers as _,
-            width,
-        );
-
-        rgraph.submit(&device);
-
-        let output: &[f16] = bytemuck::cast_slice(&output.mapped_slice());
-        dbg!(output);
-    }
 }
