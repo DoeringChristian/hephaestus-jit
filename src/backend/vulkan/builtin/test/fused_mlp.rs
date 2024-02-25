@@ -17,7 +17,14 @@ fn fused_mlp_inference() {
     pretty_env_logger::try_init().ok();
     let device = VulkanDevice::create(0).unwrap();
 
-    // [64] -> [64x64] -> ( _/ ) -> [64x64] -> [64]
+    // input: [batch_size x width, RM] = HT
+    // weight: [width x width, RM] = W
+    // output: [batch_size x width, RM] = H'T
+    //    H' = W @ H
+    // => H'T = HT @ WT
+    //
+    // The algorithm loads W transposed by interpreting it in column major order
+    // [128x64 RM] -> [64x64] -> ( _/ ) -> [64x64] -> [64]
     let n_inputs = 64;
     let n_outputs = 64;
     let hidden_layers = 2;
