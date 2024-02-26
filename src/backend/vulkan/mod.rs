@@ -16,11 +16,11 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use crate::backend;
-use crate::backend::vulkan::builtin::cooperative_matrix;
+use crate::backend::vulkan::builtin::{cooperative_matrix, fused_mlp};
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;
-use crate::vartype::AsVarType;
+use crate::vartype::{AsVarType, FusedMlpConfig};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use vk_sync::AccessType;
@@ -304,6 +304,33 @@ impl backend::BackendDevice for VulkanDevice {
                             mat_b,
                             mat_c,
                             mat_d,
+                        );
+                    }
+                    DeviceOp::FusedMlp {
+                        width,
+                        in_width,
+                        out_width,
+                        hidden_layers,
+                        max_batch_size,
+                    } => {
+                        let output = to_buffer(pass.resources[0]).unwrap();
+                        let input = to_buffer(pass.resources[1]).unwrap();
+                        let weights = to_buffer(pass.resources[2]).unwrap();
+                        let config = pass.resources.get(3).cloned().and_then(to_buffer);
+                        fused_mlp::mlp_inference(
+                            &self,
+                            &mut rgraph,
+                            input,
+                            weights,
+                            output,
+                            config,
+                            FusedMlpConfig {
+                                batch_size: *max_batch_size as _,
+                            },
+                            *width,
+                            *in_width,
+                            *out_width,
+                            *hidden_layers,
                         );
                     }
                     DeviceOp::Buffer2Texture => {

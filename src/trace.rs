@@ -11,6 +11,7 @@ use crate::resource::{Resource, ResourceDesc};
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, utils};
 use crate::{graph, resource};
+use half::f16;
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
@@ -754,6 +755,34 @@ pub fn matfma(
     );
 
     mat_c
+}
+
+pub fn fused_mlp(
+    input: &VarRef,
+    weights: &VarRef,
+    width: usize,
+    in_width: usize,
+    out_width: usize,
+    hidden_layers: usize,
+    batch_size: usize,
+) -> VarRef {
+    assert_eq!(width, in_width);
+    assert_eq!(width, out_width);
+    assert_eq!(input.ty(), f16::var_ty());
+    assert_eq!(weights.ty(), f16::var_ty());
+
+    let ty = f16::var_ty();
+    let size = input.size();
+    
+    push_var(
+        Var {
+            op: Op::DeviceOp(DeviceOp::FusedMlp { width, in_width, out_width, hidden_layers, max_batch_size: batch_size}),
+            ty,
+            extent: Extent::Size(size),
+            ..Default::default()
+        },
+        [input, weights],
+    )
 }
 
 impl VarRef {

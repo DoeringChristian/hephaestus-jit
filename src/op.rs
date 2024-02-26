@@ -110,6 +110,13 @@ pub enum DeviceOp {
         max_m: usize,
         max_k: usize,
     },
+    FusedMlp {
+        width: usize,
+        in_width: usize,
+        out_width: usize,
+        hidden_layers: usize,
+        max_batch_size: usize,
+    },
     Buffer2Texture,
     BuildAccel,
 }
@@ -122,6 +129,7 @@ impl DeviceOp {
             DeviceOp::MatMul { .. } => Op::Buffer,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
+            DeviceOp::FusedMlp { .. } => Op::Buffer,
         }
     }
 }

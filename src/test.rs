@@ -1,6 +1,8 @@
 use half::f16;
+use num_traits::Float;
 use rand::Rng;
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Mutex;
 use std::thread;
 
@@ -1463,4 +1465,83 @@ pub fn puffin() {
     }
 
     profiling::finish_frame!();
+}
+#[test]
+fn fused_mlp() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let path = Path::new(file!());
+    let path = path
+        .parent()
+        .unwrap()
+        .join("backend")
+        .join("vulkan")
+        .join("builtin")
+        .join("test")
+        .join("data");
+
+    let width = 64;
+    let in_width = width;
+    let out_width = width;
+    let batch_size = 128;
+    let hidden_layers = 2;
+
+    let input = std::fs::read(path.join("input.bin")).unwrap();
+    assert_eq!(
+        input.len(),
+        (in_width * batch_size) * std::mem::size_of::<f16>()
+    );
+    let input = bytemuck::cast_slice::<_, f16>(&input).to_vec();
+
+    let weights = std::fs::read(path.join("weights.bin")).unwrap();
+    assert_eq!(
+        weights.len(),
+        width * width * (2 + hidden_layers as usize) * std::mem::size_of::<f16>()
+    );
+    let weights = bytemuck::cast_slice::<_, f16>(&weights).to_vec();
+
+    let reference = std::fs::read(path.join("output.bin")).unwrap();
+    let reference = bytemuck::cast_slice::<_, f16>(&reference).to_vec();
+
+    let input = tr::array(&input, &device);
+    let weights = tr::array(&weights, &device);
+
+    let output = tr::fused_mlp(
+        &input,
+        &weights,
+        width,
+        in_width,
+        out_width,
+        hidden_layers,
+        batch_size,
+    );
+
+    output.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    let output = output.to_vec::<f16>(..);
+
+    dbg!(output
+        .iter()
+        .zip(&reference)
+        .map(|(a, b)| (a - b).abs())
+        .reduce(|a, b| a.max(b)));
+    let mean = output
+        .iter()
+        .zip(&reference)
+        .map(|(&a, &b)| (a.to_f32() - b.to_f32()).powi(2))
+        .reduce(|a, b| a + b)
+        .unwrap()
+        / output.len() as f32;
+    dbg!(mean);
+    assert!(
+        output
+            .iter()
+            .zip(&reference)
+            .all(|(&a, &b)| (a - b).abs() < f16::from_f32(10.0)),
+        "lhs = {output:?}\n is not equal to rhs = {reference:?}\n"
+    );
 }

@@ -48,6 +48,7 @@
 
 #define INPUT_LAYOUT
 #define OUTPUT_LAYOUT
+#define HIDDEN_LAYERS
 */
 
 // Compatibility macros
@@ -80,7 +81,6 @@ layout(set = 0, binding = 2) buffer Outputf16{
 };
 layout(set = 0, binding = 3) buffer Config{
     uint32_t batch_size;
-    uint32_t n_hidden_matmuls;
 };
 
 // Shared memory contains the intermediate activations of blockDim.y*16 elements.
@@ -298,13 +298,13 @@ void main(){
     
     // Hidden layers
 
-    for (uint k = 0; k < n_hidden_matmuls; k++){
+    for (uint k = 0; k < HIDDEN_LAYERS; k++){
         threadblock_layer(first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
     }
 
 #if OUTPUT_LAYOUT == LAYOUT_ROW_MAJOR
     const uint output_stride = WIDTH;
-    threadblock_last_layer(first_weights_stride + weights_stride * n_hidden_matmuls, elem_idx * output_stride, WIDTH, LAYOUT_ROW_MAJOR);
+    threadblock_last_layer(first_weights_stride + weights_stride * HIDDEN_LAYERS, elem_idx * output_stride, WIDTH, LAYOUT_ROW_MAJOR);
 #endif
 }
 

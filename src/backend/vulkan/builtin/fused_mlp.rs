@@ -13,19 +13,12 @@ use crate::{
         buffer::{Buffer, BufferInfo},
         graph::RGraph,
     },
-    vartype::MatMulConfig,
+    vartype::FusedMlpConfig,
 };
 
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
 };
-
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
-pub struct MlpConfig {
-    pub batch_size: u32,
-    pub hidden_layers: u32,
-}
 
 #[derive(Hash)]
 enum Activation {
@@ -45,6 +38,8 @@ pub struct MLPCompileDef {
 
     input_layout: u32,
     output_layout: u32,
+
+    hidden_layers: u32,
 }
 impl codegen::CodegenDef for MLPCompileDef {
     fn generate(&self) -> Vec<u32> {
@@ -57,6 +52,7 @@ impl codegen::CodegenDef for MLPCompileDef {
             out_width,
             input_layout,
             output_layout,
+            hidden_layers,
         } = self;
 
         let activation = match activation {
@@ -76,6 +72,7 @@ impl codegen::CodegenDef for MLPCompileDef {
                 ("OUT_WIDTH", Some(&format!("{out_width}"))),
                 ("INPUT_LAYOUT", Some(&format!("{input_layout}"))),
                 ("OUTPUT_LAYOUT", Some(&format!("{output_layout}"))),
+                ("HIDDEN_LAYERS", Some(&format!("{hidden_layers}"))),
             ],
         }
         .generate()
@@ -90,15 +87,20 @@ pub fn mlp_inference(
     weights: Arc<Buffer>,
     output: Arc<Buffer>,
     config: Option<Arc<Buffer>>,
-    default_config: MlpConfig,
+    default_config: FusedMlpConfig,
 
-    batch_size: usize,
+    width: usize,
     in_width: usize,
     out_width: usize,
-    width: usize,
+
+    hidden_layers: usize,
 ) {
     let n_iters = if width >= 256 { 2 } else { 8 };
     let n_block_rows = width / 16;
+
+    // We don't support dynamic config yet
+    assert!(config.is_none());
+    let batch_size = default_config.batch_size as usize;
 
     assert!(
         batch_size % (16 * n_iters) == 0,
@@ -122,6 +124,7 @@ pub fn mlp_inference(
         out_width: out_width as _,
         input_layout: 0,
         output_layout: 0,
+        hidden_layers: hidden_layers as _,
     });
 
     let pipeline = device.get_pipeline(&PipelineDesc {
@@ -140,7 +143,7 @@ pub fn mlp_inference(
         let mut config_buffer = Buffer::create(
             device,
             BufferInfo {
-                size: std::mem::size_of::<MlpConfig>(),
+                size: std::mem::size_of::<FusedMlpConfig>(),
                 usage: vk::BufferUsageFlags::TRANSFER_SRC
                     | vk::BufferUsageFlags::TRANSFER_DST
                     | vk::BufferUsageFlags::STORAGE_BUFFER,

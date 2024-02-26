@@ -10,9 +10,10 @@ use num_traits::Float;
 use crate::backend::vulkan::vulkan_core::buffer::{Buffer, BufferInfo};
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::backend::vulkan::VulkanDevice;
+use crate::vartype::FusedMlpConfig;
 
 use super::super::fused_mlp::*;
-#[test]
+// #[test]
 fn fused_mlp_inference() {
     pretty_env_logger::try_init().ok();
     let device = VulkanDevice::create(0).unwrap();
@@ -80,14 +81,13 @@ fn fused_mlp_inference() {
         weights_buf,
         output_buf.clone(),
         None,
-        MlpConfig {
+        FusedMlpConfig {
             batch_size: batch_size as _,
-            hidden_layers,
         },
-        batch_size,
         width,
         width,
         width,
+        hidden_layers,
     );
 
     rgraph.submit(&device);

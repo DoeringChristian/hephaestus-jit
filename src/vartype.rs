@@ -316,6 +316,18 @@ impl AsVarType for MatMulConfig {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+pub struct FusedMlpConfig {
+    pub batch_size: u32,
+}
+impl AsVarType for FusedMlpConfig {
+    fn var_ty() -> &'static VarType {
+        let u32_ty = u32::var_ty();
+        composite(&[&u32_ty, &u32_ty])
+    }
+}
+
 impl<const N: usize, T: AsVarType + 'static> AsVarType for [T; N] {
     fn var_ty() -> &'static VarType {
         let ty = T::var_ty();
