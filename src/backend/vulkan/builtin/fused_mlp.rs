@@ -23,12 +23,8 @@ use crate::backend::vulkan::pipeline::{
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct MlpConfig {
-    pub output_stride: u32,
     pub batch_size: u32,
-    pub in_width: u32,
-    pub n_hidden_matmuls: u32,
-    pub input_layout: i32,
-    pub output_layout: i32,
+    pub hidden_layers: u32,
 }
 
 #[derive(Hash)]
@@ -43,6 +39,12 @@ pub struct MLPCompileDef {
     n_iters: u32,
     activation: Activation,
     inference: bool,
+
+    in_width: u32,
+    out_width: u32,
+
+    input_layout: u32,
+    output_layout: u32,
 }
 impl codegen::CodegenDef for MLPCompileDef {
     fn generate(&self) -> Vec<u32> {
@@ -51,6 +53,10 @@ impl codegen::CodegenDef for MLPCompileDef {
             n_iters,
             activation,
             inference,
+            in_width,
+            out_width,
+            input_layout,
+            output_layout,
         } = self;
 
         let activation = match activation {
@@ -66,6 +72,10 @@ impl codegen::CodegenDef for MLPCompileDef {
                 ("OUT_T", Some("float16_t")),
                 ("ACTIVATION", Some(activation)),
                 ("A_BITS", Some("16")),
+                ("IN_WIDTH", Some(&format!("{in_width}"))),
+                ("OUT_WIDTH", Some(&format!("{out_width}"))),
+                ("INPUT_LAYOUT", Some(&format!("{input_layout}"))),
+                ("OUTPUT_LAYOUT", Some(&format!("{output_layout}"))),
             ],
         }
         .generate()
@@ -85,7 +95,6 @@ pub fn mlp_inference(
     batch_size: usize,
     in_width: usize,
     out_width: usize,
-    hidden_layers: usize,
     width: usize,
 ) {
     let n_iters = if width >= 256 { 2 } else { 8 };
@@ -109,6 +118,10 @@ pub fn mlp_inference(
         n_iters: n_iters as _,
         activation: Activation::ReLU,
         inference: true,
+        in_width: in_width as _,
+        out_width: out_width as _,
+        input_layout: 0,
+        output_layout: 0,
     });
 
     let pipeline = device.get_pipeline(&PipelineDesc {

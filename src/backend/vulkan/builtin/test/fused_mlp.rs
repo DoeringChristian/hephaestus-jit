@@ -81,17 +81,12 @@ fn fused_mlp_inference() {
         output_buf.clone(),
         None,
         MlpConfig {
-            output_stride: width as _,
             batch_size: batch_size as _,
-            in_width: 64,
-            n_hidden_matmuls: hidden_layers,
-            input_layout: 0,
-            output_layout: 0,
+            hidden_layers,
         },
         batch_size,
         width,
         width,
-        hidden_layers as _,
         width,
     );
 
