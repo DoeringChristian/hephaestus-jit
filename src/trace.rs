@@ -757,7 +757,7 @@ pub fn matfma(
     mat_c
 }
 
-pub fn fused_mlp(
+pub fn fused_mlp_inference(
     input: &VarRef,
     weights: &VarRef,
     width: usize,
@@ -776,7 +776,7 @@ pub fn fused_mlp(
     
     push_var(
         Var {
-            op: Op::DeviceOp(DeviceOp::FusedMlp { width, in_width, out_width, hidden_layers, max_batch_size: batch_size}),
+            op: Op::DeviceOp(DeviceOp::FusedMlpInference { width, in_width, out_width, hidden_layers, max_batch_size: batch_size}),
             ty,
             extent: Extent::Size(size),
             ..Default::default()

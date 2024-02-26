@@ -1507,7 +1507,7 @@ fn fused_mlp() {
     let input = tr::array(&input, &device);
     let weights = tr::array(&weights, &device);
 
-    let output = tr::fused_mlp(
+    let output = tr::fused_mlp_inference(
         &input,
         &weights,
         width,

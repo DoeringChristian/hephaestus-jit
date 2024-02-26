@@ -306,7 +306,7 @@ impl backend::BackendDevice for VulkanDevice {
                             mat_d,
                         );
                     }
-                    DeviceOp::FusedMlp {
+                    DeviceOp::FusedMlpInference {
                         width,
                         in_width,
                         out_width,
