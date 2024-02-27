@@ -298,7 +298,7 @@ void main(){
     
     // Hidden layers
 
-    for (uint k = 0; k < HIDDEN_LAYERS; k++){
+    [[unroll]] for (uint k = 0; k < HIDDEN_LAYERS; k++){
         threadblock_layer(first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
     }
 
