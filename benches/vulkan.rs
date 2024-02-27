@@ -214,6 +214,14 @@ pub fn cooperative_matrix(c: &mut Criterion) {
     group.finish();
 }
 pub fn fused_mlp(c: &mut Criterion) {
+    #[cfg(feature = "profile-with-puffin")]
+    let _puffin_server = {
+        let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+        let puffin_server = puffin_http::Server::new(&server_addr).unwrap();
+        puffin::set_scopes_on(true);
+        puffin_server
+    };
+
     let device = vulkan(0);
 
     let mut group = c.benchmark_group("fused_mlp");
@@ -231,7 +239,9 @@ pub fn fused_mlp(c: &mut Criterion) {
                     let duration = (0..iters)
                         .map(|_| {
                             assert!(tr::is_empty());
-                            black_box(benches::fused_mlp(&device, batch_size))
+                            let duration = black_box(benches::fused_mlp(&device, batch_size));
+                            profiling::finish_frame!();
+                            duration
                         })
                         .reduce(|a, b| a + b)
                         .unwrap();
