@@ -7,6 +7,7 @@ use criterion::{BenchmarkId, Throughput};
 use hephaestus_jit::backend::vulkan;
 use hephaestus_jit::backend::Device;
 use hephaestus_jit::tr;
+use num_traits::Pow;
 
 mod benches {
     use std::time::{Duration, Instant};
@@ -16,6 +17,40 @@ mod benches {
     use hephaestus_jit::vartype::AsVarType;
 
     use super::*;
+
+    pub fn fused_mlp(device: &Device, batch_size: usize) -> std::time::Duration {
+        let width = 64;
+        let in_width = width;
+        let out_width = width;
+        let hidden_layers = 2;
+
+        let input = tr::sized_literal(f16::from_f32(1f32), batch_size * in_width);
+        let weights = tr::sized_literal(f16::from_f32(1f32), width * width * (2 + hidden_layers));
+
+        let output = tr::fused_mlp_inference(
+            &input,
+            &weights,
+            width,
+            in_width,
+            out_width,
+            hidden_layers,
+            batch_size,
+        );
+        output.schedule();
+
+        let graph = tr::compile();
+        let report = graph.launch(&device).unwrap();
+
+        let pass = report
+            .exec
+            .passes
+            .into_iter()
+            .find(|pass| pass.name == "Fused MLP")
+            .unwrap();
+
+        pass.duration
+    }
+
     #[allow(non_snake_case)]
     pub fn cooperative_matrix(
         device: &Device,
@@ -172,11 +207,40 @@ pub fn cooperative_matrix(c: &mut Criterion) {
     }
     group.finish();
 }
+pub fn fused_mlp(c: &mut Criterion) {
+    let device = vulkan(0);
+
+    let mut group = c.benchmark_group("fused_mlp");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+    for i in 14..=21 {
+        let batch_size = 2usize.pow(i);
+
+        group.throughput(Throughput::Elements(batch_size as _));
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(batch_size),
+            &batch_size,
+            |b, &batch_size| {
+                b.iter_custom(|iters| {
+                    let duration = (0..iters)
+                        .map(|_| {
+                            assert!(tr::is_empty());
+                            black_box(benches::fused_mlp(&device, batch_size))
+                        })
+                        .reduce(|a, b| a + b)
+                        .unwrap();
+                    duration
+                })
+            },
+        );
+    }
+}
 
 criterion_group!(
     benches,
     compress_large,
     prefix_sum_large,
-    cooperative_matrix
+    cooperative_matrix,
+    fused_mlp,
 );
 criterion_main!(benches);

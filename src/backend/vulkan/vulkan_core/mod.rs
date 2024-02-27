@@ -1,5 +1,6 @@
 pub mod acceleration_structure;
 pub mod buffer;
+pub mod compute_pipeline;
 pub mod device;
 pub mod graph;
 pub mod image;

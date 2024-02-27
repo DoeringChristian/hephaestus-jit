@@ -1520,7 +1520,8 @@ fn fused_mlp() {
     output.schedule();
 
     let graph = tr::compile();
-    graph.launch(&device);
+    let report = graph.launch(&device).unwrap();
+    println!("{report}");
 
     let output = output.to_vec::<f16>(..);
 
