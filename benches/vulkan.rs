@@ -27,6 +27,10 @@ mod benches {
         let input = tr::sized_literal(f16::from_f32(1f32), batch_size * in_width);
         let weights = tr::sized_literal(f16::from_f32(1f32), width * width * (2 + hidden_layers));
 
+        input.schedule();
+        weights.schedule();
+        tr::compile().launch(&device);
+
         let output = tr::fused_mlp_inference(
             &input,
             &weights,
@@ -39,6 +43,7 @@ mod benches {
         output.schedule();
 
         let graph = tr::compile();
+
         let report = graph.launch(&device).unwrap();
 
         let pass = report
@@ -48,7 +53,8 @@ mod benches {
             .find(|pass| pass.name == "Fused MLP")
             .unwrap();
 
-        pass.duration
+        // pass.duration
+        report.exec.cpu_duration
     }
 
     #[allow(non_snake_case)]
@@ -234,6 +240,7 @@ pub fn fused_mlp(c: &mut Criterion) {
             },
         );
     }
+    group.finish();
 }
 
 criterion_group!(
