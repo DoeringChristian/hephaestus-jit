@@ -266,11 +266,11 @@ void threadblock_write_output_static(uint output_threadblock){
     // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     
     // Indices
-	uint32_t li = threadIdx.x; // index in warp ("lane index")
-	uint32_t wi = threadIdx.y; // index in block ("warp index")
+    uint32_t li = threadIdx.x; // index in warp ("lane index")
+    uint32_t wi = threadIdx.y; // index in block ("warp index")
 
     uint32_t lane_offset = (ELEMENTS_PER_VEC4 * li) % WIDTH;
-	uint32_t row = (ELEMENTS_PER_VEC4 * li + wi * ELEMENTS_PER_VEC4 * 32) / WIDTH;
+    uint32_t row = (ELEMENTS_PER_VEC4 * li + wi * ELEMENTS_PER_VEC4 * 32) / WIDTH;
 
     barrier();
 
