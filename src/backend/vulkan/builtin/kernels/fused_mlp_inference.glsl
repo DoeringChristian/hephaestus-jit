@@ -175,7 +175,7 @@ void threadblock_layer(uint weights_this_layer, uint out_intermediate_threadbloc
 }
 
 // Port of: https://github.com/NVlabs/tiny-cuda-nn/blob/235d1fde956dc04966940f9d1bec66aa3bdb705a/src/fully_fused_mlp.cu#L47
-void threadblock_last_layer(uint weights_this_layer, uint output_threadblock, uint output_stride, int output_layout){
+void threadblock_last_layer(uint weights_this_layer, uint out_intermediate_threadblock_this_layer, uint activation_aux){
     // act_shmem contains the intermediate activations (shared memory) of the thread block's chunk of the batch.
     //           Can be forward activations or backward activations, depending on caller.
     // weights_this_layer points to the weight matrix of the current layer.
@@ -187,7 +187,7 @@ void threadblock_last_layer(uint weights_this_layer, uint output_threadblock, ui
     const uint N_BLOCKS = WIDTH / 16;
 
     // If we're performing the backward pass, weights must be loaded in transposed form, which
-	// is achieved by interpreting the memory in row_major instead of col_major order.
+    // is achieved by interpreting the memory in row_major instead of col_major order.
     // const int weights_layout_t = BACKWARD ? LAYOUT_ROW_MAJOR : LAYOUT_COL_MAJOR;
     const int weights_layout_t = LAYOUT_COL_MAJOR;
 
@@ -226,18 +226,20 @@ void threadblock_last_layer(uint weights_this_layer, uint output_threadblock, ui
         }
 
         // TODO: output Activation
+        // for (uint i = 0; i < result_frag[l].length(); i++){
+        //     result_frag[l][i] = warp_activation(result_frag[l][i]);
+        // }
+        
     }
 
     barrier();
 
     [[unroll]] for (uint l = 0; l < N_ITERS; l++){
-#if OUTPUT_LAYOUT == LAYOUT_ROW_MAJOR
-        uint elem_idx = output_threadblock + l * 16 * output_stride + wi * 16;
-        coopMatStore(result_frag[l], output_f16, elem_idx, output_stride, LAYOUT_ROW_MAJOR);
-#endif
+        // NOTE: index by u32x4 (weights_col is divisible by 16)
+        uint elem_idx = weights_col + l * 16 * (WIDTH + SKEW);
+        coopMatStore(result_frag[l], shmem, elem_idx/ELEMENTS_PER_VEC4, (WIDTH + SKEW)/ELEMENTS_PER_VEC4, LAYOUT_ROW_MAJOR);
     }
 }
-
 
 void threadblock_load_input_static(uint input_threadblock){
     // act_shmem will be filled by the thread block's chunk of input_threadblock
@@ -262,24 +264,24 @@ void threadblock_load_input_static(uint input_threadblock){
 
 void threadblock_write_output_static(uint output_threadblock){
     // output_threadblock will be filled by the thread block's act_shmem
-    
+
     // const uint32_t SKEW = WIDTH % 16 == 0 ? 8 : 0;
     
     // Indices
     uint32_t li = threadIdx.x; // index in warp ("lane index")
     uint32_t wi = threadIdx.y; // index in block ("warp index")
-
-    uint32_t lane_offset = (ELEMENTS_PER_VEC4 * li) % WIDTH;
-    uint32_t row = (ELEMENTS_PER_VEC4 * li + wi * ELEMENTS_PER_VEC4 * 32) / WIDTH;
+    
+    uint32_t lane_offset = (8 * li) % WIDTH;
+    uint32_t row = (8 * li + wi * 8 * 32) / WIDTH;
 
     barrier();
 
     [[unroll]] for (uint i = 0; i < N_ITERS; i++){
-        // WARN: both `elem_idx_output` and `elem_idx_shmem` have to be divisible by ELEMENTS_PER_VEC4
-        uint elem_idx_output = output_threadblock + lane_offset + (row + 16 * i) * WIDTH;
+        // WARN: both `elem_idx_shmem` and `elem_idx_input` have to be divisible by ELEMENTS_PER_VEC4
         uint elem_idx_shmem = lane_offset + (row + 16 * i) * (WIDTH + SKEW);
+        uint elem_idx_input = output_threadblock + lane_offset + (row + 16 * i) * WIDTH;
 
-        output_uvec4[elem_idx_output / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
+        output_uvec4[elem_idx_input / ELEMENTS_PER_VEC4] = shmem[elem_idx_shmem / ELEMENTS_PER_VEC4];
     }
 }
 
@@ -298,13 +300,14 @@ void main(){
     
     // Hidden layers
 
-    [[unroll]] for (uint k = 0; k < HIDDEN_LAYERS; k++){
+    [[unroll]] for (uint k = 0; k < HIDDEN_MAT; k++){
         threadblock_layer(first_weights_stride + weights_stride * k, layer_stride * (k + 1) + elem_idx * WIDTH, 0);
     }
 
 #if OUTPUT_LAYOUT == LAYOUT_ROW_MAJOR
     const uint output_stride = WIDTH;
-    threadblock_last_layer(first_weights_stride + weights_stride * HIDDEN_LAYERS, elem_idx * output_stride, WIDTH, LAYOUT_ROW_MAJOR);
+    threadblock_last_layer(first_weights_stride + weights_stride * HIDDEN_MAT, layer_stride * (HIDDEN_MAT + 1) + elem_idx * WIDTH, 0);
+    threadblock_write_output_static(elem_idx * WIDTH);
 #endif
 }
 

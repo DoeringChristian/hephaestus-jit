@@ -39,7 +39,7 @@ pub struct MLPCompileDef {
     input_layout: u32,
     output_layout: u32,
 
-    hidden_layers: u32,
+    hidden_mat: u32,
 }
 impl codegen::CodegenDef for MLPCompileDef {
     fn generate(&self) -> Vec<u32> {
@@ -52,7 +52,7 @@ impl codegen::CodegenDef for MLPCompileDef {
             out_width,
             input_layout,
             output_layout,
-            hidden_layers,
+            hidden_mat,
         } = self;
 
         let activation = match activation {
@@ -72,7 +72,7 @@ impl codegen::CodegenDef for MLPCompileDef {
                 ("OUT_WIDTH", Some(&format!("{out_width}"))),
                 ("INPUT_LAYOUT", Some(&format!("{input_layout}"))),
                 ("OUTPUT_LAYOUT", Some(&format!("{output_layout}"))),
-                ("HIDDEN_LAYERS", Some(&format!("{hidden_layers}"))),
+                ("HIDDEN_MAT", Some(&format!("{hidden_mat}"))),
             ],
         }
         .generate()
@@ -124,7 +124,7 @@ pub fn mlp_inference(
         out_width: out_width as _,
         input_layout: 0,
         output_layout: 0,
-        hidden_layers: hidden_layers as _,
+        hidden_mat: (hidden_layers - 1) as _,
     });
 
     let pipeline = device.get_pipeline(&PipelineDesc {

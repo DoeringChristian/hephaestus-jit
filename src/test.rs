@@ -1497,7 +1497,8 @@ fn fused_mlp() {
     let weights = std::fs::read(path.join("weights.bin")).unwrap();
     assert_eq!(
         weights.len(),
-        width * width * (2 + hidden_layers as usize) * std::mem::size_of::<f16>()
+        (width * width * ((hidden_layers - 1) as usize) + in_width * width + out_width * width)
+            * std::mem::size_of::<f16>()
     );
     let weights = bytemuck::cast_slice::<_, f16>(&weights).to_vec();
 
