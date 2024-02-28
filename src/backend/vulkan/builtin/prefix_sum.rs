@@ -75,6 +75,7 @@ pub fn prefix_sum_large(
                 .map(|i| Binding {
                     binding: i,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 })
                 .collect::<Vec<_>>(),
         }],
@@ -170,10 +171,12 @@ pub fn prefix_sum_scratch_buffer(
                 Binding {
                     binding: 0,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 },
                 Binding {
                     binding: 1,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 },
             ],
         }],

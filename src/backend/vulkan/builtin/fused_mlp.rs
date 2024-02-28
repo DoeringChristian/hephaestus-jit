@@ -134,6 +134,7 @@ pub fn mlp_inference(
                 .map(|i| Binding {
                     binding: i,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 })
                 .collect::<Vec<_>>(),
         }],

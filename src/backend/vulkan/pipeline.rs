@@ -39,9 +39,9 @@ impl Drop for Pipeline {
 }
 
 impl Pipeline {
-    pub fn create<'a>(device: &Arc<Device>, desc: &PipelineInfo<'a>) -> Self {
+    pub fn create<'a>(device: &Arc<Device>, info: &PipelineInfo<'a>) -> Self {
         unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::default().code(desc.code);
+            let shader_info = vk::ShaderModuleCreateInfo::default().code(info.code);
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
@@ -51,7 +51,7 @@ impl Pipeline {
             // }];
 
             // Create Layout
-            let desc_set_layouts = desc
+            let desc_set_layouts = info
                 .desc_set_layouts
                 .iter()
                 .map(|desc_set_layout| {
@@ -60,7 +60,7 @@ impl Pipeline {
                         .iter()
                         .map(|binding| vk::DescriptorSetLayoutBinding {
                             binding: binding.binding,
-                            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                            descriptor_type: binding.ty,
                             descriptor_count: binding.count as _,
                             stage_flags: vk::ShaderStageFlags::ALL,
                             ..Default::default()
@@ -74,20 +74,6 @@ impl Pipeline {
                 })
                 .collect::<Vec<_>>();
 
-            // let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
-            //     .pool_sizes(&desc_sizes)
-            //     .max_sets(desc.desc_set_layouts.len() as _);
-            // let desc_pool = device
-            //     .create_descriptor_pool(&desc_pool_info, None)
-            //     .unwrap();
-            // // Allocate Descriptor Sets
-            // let desc_sets_allocation_info = vk::DescriptorSetAllocateInfo::builder()
-            //     .descriptor_pool(desc_pool)
-            //     .set_layouts(&desc_set_layouts);
-            // let desc_sets = device
-            //     .allocate_descriptor_sets(&desc_sets_allocation_info)
-            //     .unwrap();
-
             // Create Pipeline
             let pipeline_layout_info =
                 vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
@@ -116,91 +102,9 @@ impl Pipeline {
 
             Self {
                 device: device.clone(),
-                // desc_sets,
                 pipeline_layout,
                 pipeline: compute_pipeline,
                 desc_set_layouts,
-                // desc_pool,
-            }
-        }
-    }
-    pub fn from_ir(device: &Arc<Device>, ir: &IR, info: &DeviceInfo) -> Self {
-        let spirv = codegen::assemble_trace(ir, info, "main");
-
-        let num_buffers = 1 + ir.n_buffers; // Add one for size buffer
-        let num_textures = ir.n_textures;
-        let num_accels = ir.n_accels;
-
-        unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::default().code(spirv.as_slice());
-            let shader = device.create_shader_module(&shader_info, None).unwrap();
-
-            // Create Layout
-            let desc_layout_bindings = [
-                vk::DescriptorSetLayoutBinding {
-                    binding: 0,
-                    descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                    descriptor_count: num_buffers as _,
-                    stage_flags: vk::ShaderStageFlags::ALL,
-                    ..Default::default()
-                },
-                vk::DescriptorSetLayoutBinding {
-                    binding: 1,
-                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: num_textures as _,
-                    stage_flags: vk::ShaderStageFlags::ALL,
-                    ..Default::default()
-                },
-                vk::DescriptorSetLayoutBinding {
-                    binding: 2,
-                    descriptor_type: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-                    descriptor_count: num_accels as _,
-                    stage_flags: vk::ShaderStageFlags::ALL,
-                    ..Default::default()
-                },
-            ];
-            let desc_info =
-                vk::DescriptorSetLayoutCreateInfo::default().bindings(&desc_layout_bindings);
-
-            let desc_set_layouts = vec![device
-                .create_descriptor_set_layout(&desc_info, None)
-                .unwrap()];
-
-            // Allocate Descriptor Sets
-
-            // Create Pipeline
-            let pipeline_layout_info =
-                vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
-            let pipeline_layout = device
-                .create_pipeline_layout(&pipeline_layout_info, None)
-                .unwrap();
-            let pipeline_cache = device
-                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::default(), None)
-                .unwrap();
-
-            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(shader)
-                .name(CStr::from_bytes_with_nul(b"main\0").unwrap());
-
-            let compute_pipeline_info = vk::ComputePipelineCreateInfo::default()
-                .stage(pipeline_shader_info)
-                .layout(pipeline_layout);
-            let compute_pipeline = device
-                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info], None)
-                .unwrap()[0];
-
-            // Destruct temporary elements
-            device.destroy_shader_module(shader, None);
-            device.destroy_pipeline_cache(pipeline_cache, None);
-
-            Self {
-                device: device.clone(),
-                // desc_sets,
-                pipeline_layout,
-                pipeline: compute_pipeline,
-                desc_set_layouts,
-                // desc_pool,
             }
         }
     }
@@ -385,7 +289,7 @@ impl Pipeline {
 pub struct Binding {
     pub binding: u32,
     pub count: u32,
-    // pub ty: vk::DescriptorType,
+    pub ty: vk::DescriptorType,
 }
 
 #[derive(Debug, Clone, Copy, Hash)]

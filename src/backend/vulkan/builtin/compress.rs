@@ -80,18 +80,22 @@ pub fn compress_small(
                 Binding {
                     binding: 0,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 },
                 Binding {
                     binding: 1,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 },
                 Binding {
                     binding: 2,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 },
                 Binding {
                     binding: 3,
                     count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 },
             ],
         }],
@@ -179,6 +183,8 @@ pub fn compress_large(
                 .map(|i| Binding {
                     binding: i,
                     count: 1,
+
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
                 })
                 .collect::<Vec<_>>(),
         }],

@@ -181,14 +181,17 @@ impl Accel {
                     Binding {
                         binding: 0,
                         count: 1,
+                        ty: vk::DescriptorType::STORAGE_BUFFER,
                     },
                     Binding {
                         binding: 1,
                         count: 1,
+                        ty: vk::DescriptorType::STORAGE_BUFFER,
                     },
                     Binding {
                         binding: 2,
                         count: 1,
+                        ty: vk::DescriptorType::STORAGE_BUFFER,
                     },
                 ],
             }],
