@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     weights = [win]
 
-    for i in range(hidden_layers):
+    for i in range(hidden_layers - 1):
         weights.append(
             generator.standard_normal(size=[width, width]).astype(np.float16)
         )
