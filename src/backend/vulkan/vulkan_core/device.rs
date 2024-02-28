@@ -12,6 +12,8 @@ use gpu_allocator::{AllocationSizes, AllocatorDebugSettings};
 pub use ash::{extensions::khr, vk};
 
 use super::physical_device::{self, PhysicalDevice};
+use super::pool::Resource;
+use super::{buffer, pool};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -128,6 +130,8 @@ pub struct InternalDevice {
     pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
     pub cooperative_matrix_ext: Option<khr::CooperativeMatrix>,
     pub cooperative_matrix_properties: Vec<vk::CooperativeMatrixPropertiesKHR<'static>>,
+
+    pub buffer_pool: pool::ResourcePool<buffer::InternalBuffer>,
 }
 unsafe impl Send for InternalDevice {}
 unsafe impl Sync for InternalDevice {}
@@ -338,6 +342,7 @@ impl InternalDevice {
                 acceleration_structure_ext,
                 cooperative_matrix_ext,
                 cooperative_matrix_properties,
+                buffer_pool: Default::default(),
             })
         }
     }
@@ -353,6 +358,9 @@ impl Deref for InternalDevice {
 impl Drop for InternalDevice {
     fn drop(&mut self) {
         unsafe {
+            // Clear buffer cache:
+            self.buffer_pool.clear(self);
+
             self.device_wait_idle().unwrap();
 
             self.allocator.take().unwrap();

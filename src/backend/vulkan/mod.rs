@@ -116,7 +116,7 @@ impl backend::BackendDevice for VulkanDevice {
         let size = crate::utils::u64::round_pow2(size as _);
         let info = BufferInfo {
             size: size as usize,
-            alignment: 0,
+            alignment: 8,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER
@@ -401,7 +401,7 @@ impl backend::BackendDevice for VulkanDevice {
 
         let info = BufferInfo {
             size,
-            alignment: 0,
+            alignment: 8,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER
@@ -459,7 +459,7 @@ impl backend::BackendBuffer for VulkanBuffer {
 
         let info = BufferInfo {
             size,
-            alignment: 0,
+            alignment: std::mem::align_of::<T>(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
             memory_location: MemoryLocation::GpuToCpu,
         };

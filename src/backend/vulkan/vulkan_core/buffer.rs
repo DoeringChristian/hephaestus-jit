@@ -1,17 +1,30 @@
+use std::fmt::Debug;
+use std::ops::Deref;
+
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 
 use crate::utils;
 
-use super::device::Device;
+use super::device::{self, Device};
+use super::pool::{Lease, Resource};
+
+pub struct Buffer {
+    device: Device,
+    lease: Lease<InternalBuffer>,
+    info: BufferInfo,
+}
+impl Debug for Buffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Buffer").field("info", &self.info).finish()
+    }
+}
 
 #[derive(Debug)]
-pub struct Buffer {
+pub(super) struct InternalBuffer {
     allocation: Option<Allocation>,
     buffer: vk::Buffer,
-    device: Device,
-
     info: BufferInfo,
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -31,29 +44,11 @@ impl Default for BufferInfo {
         }
     }
 }
-impl Drop for Buffer {
-    fn drop(&mut self) {
-        self.device
-            .allocator
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .free(self.allocation.take().unwrap())
-            .unwrap();
 
-        unsafe {
-            self.device.destroy_buffer(self.buffer, None);
-        }
-    }
-}
+impl Resource for InternalBuffer {
+    type Info = BufferInfo;
 
-impl Buffer {
-    pub fn device(&self) -> &Device {
-        &self.device
-    }
-    #[profiling::function]
-    pub fn create(device: &Device, info: BufferInfo) -> Self {
+    fn create(device: &Device, info: &Self::Info) -> Self {
         let device = device.clone();
         let queue_family_indices = [device.physical_device.queue_family_index];
         let buffer_info = vk::BufferCreateInfo::default()
@@ -94,15 +89,73 @@ impl Buffer {
         Self {
             allocation: Some(allocation),
             buffer,
-            device,
+            info: info.clone(),
+        }
+    }
+    fn destroy(&mut self, device: &device::InternalDevice) {
+        device
+            .allocator
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .free(self.allocation.take().unwrap())
+            .unwrap();
+
+        unsafe {
+            device.destroy_buffer(self.buffer, None);
+        }
+    }
+}
+
+impl Device {
+    pub fn create_buffer_type<T: Sized>(&self, info: BufferInfo) -> Buffer {
+        let lease_info = BufferInfo {
+            size: utils::usize::align_up(info.size, 2),
+            alignment: info.alignment.max(std::mem::align_of::<T>()),
+            usage: info.usage,
+            memory_location: info.memory_location,
+        };
+        let lease = self.buffer_pool.lease(self, &lease_info);
+        Buffer {
+            device: self.clone(),
+            lease,
+            info,
+        }
+    }
+}
+
+impl Buffer {
+    // pub fn device(&self) -> &Device {
+    //     &self.device
+    // }
+    #[profiling::function]
+    pub fn create(device: &Device, info: BufferInfo) -> Self {
+        let lease_info = BufferInfo {
+            size: utils::usize::align_up(info.size, 2),
+            alignment: info.alignment,
+            usage: info.usage,
+            memory_location: info.memory_location,
+        };
+        let lease = device.buffer_pool.lease(device, &lease_info);
+        Self {
+            device: device.clone(),
+            lease,
             info,
         }
     }
     pub fn mapped_slice(&self) -> &[u8] {
-        &self.allocation.as_ref().unwrap().mapped_slice().unwrap()[0..self.info.size as usize]
+        &self
+            .lease
+            .allocation
+            .as_ref()
+            .unwrap()
+            .mapped_slice()
+            .unwrap()[0..self.info.size as usize]
     }
     pub fn mapped_slice_mut(&mut self) -> &mut [u8] {
         &mut self
+            .lease
             .allocation
             .as_mut()
             .unwrap()
@@ -112,19 +165,23 @@ impl Buffer {
     pub fn info(&self) -> BufferInfo {
         self.info
     }
+    pub fn cache_info(&self) -> BufferInfo {
+        self.lease.info
+    }
     pub fn size(&self) -> usize {
         self.info().size
     }
     pub fn vk(&self) -> vk::Buffer {
-        self.buffer
+        self.lease.buffer
     }
     pub fn device_address(&self) -> vk::DeviceAddress {
         unsafe {
             self.device.get_buffer_device_address(
-                &vk::BufferDeviceAddressInfo::default().buffer(self.buffer),
+                &vk::BufferDeviceAddressInfo::default().buffer(self.lease.buffer),
             )
         }
     }
+
     pub fn create_mapped_storage(device: &Device, data: &[u8]) -> Self {
         let mut buffer = Self::create(
             device,
@@ -142,3 +199,10 @@ impl Buffer {
         buffer
     }
 }
+// impl Deref for Buffer {
+//     type Target = InternalBuffer;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &*self.lease
+//     }
+// }

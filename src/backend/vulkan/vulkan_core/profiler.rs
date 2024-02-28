@@ -29,7 +29,7 @@ impl Profiler {
             device,
             BufferInfo {
                 size: max_scopes * std::mem::size_of::<DurationRange>(),
-                alignment: 0,
+                alignment: 16,
                 usage: vk::BufferUsageFlags::TRANSFER_DST,
                 memory_location: MemoryLocation::GpuToCpu,
             },

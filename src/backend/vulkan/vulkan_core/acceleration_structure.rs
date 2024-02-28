@@ -248,7 +248,12 @@ impl AccelerationStructure {
             &self.device,
             BufferInfo {
                 size: self.sizes.build_scratch_size as _,
-                alignment: 0,
+                alignment: self
+                    .device
+                    .physical_device
+                    .acceleration_structure_properties
+                    .min_acceleration_structure_scratch_offset_alignment
+                    as _,
                 usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                     | vk::BufferUsageFlags::STORAGE_BUFFER,
                 memory_location: MemoryLocation::GpuOnly,
