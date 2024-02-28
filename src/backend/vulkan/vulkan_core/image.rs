@@ -39,7 +39,7 @@ impl Image {
 
 impl Debug for Image {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.info)
+        f.debug_struct("Image").field("info", &self.info).finish()
     }
 }
 
