@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
@@ -11,7 +12,7 @@ use super::device::{self, Device};
 use super::pool::{Lease, Resource};
 
 pub struct Buffer {
-    device: Device,
+    device: Arc<Device>,
     lease: Lease<InternalBuffer>,
     info: BufferInfo,
 }
@@ -90,7 +91,7 @@ impl Resource for InternalBuffer {
             buffer,
         }
     }
-    fn destroy(&mut self, device: &device::InternalDevice) {
+    fn destroy(&mut self, device: &device::Device) {
         device
             .allocator
             .as_ref()
@@ -107,7 +108,7 @@ impl Resource for InternalBuffer {
 }
 
 impl Device {
-    pub fn create_buffer_type<T: Sized>(&self, info: BufferInfo) -> Buffer {
+    pub fn create_buffer_type<T: Sized>(self: &Arc<Self>, info: BufferInfo) -> Buffer {
         let lease_info = BufferInfo {
             size: utils::usize::align_up(info.size, 2),
             alignment: info.alignment.max(std::mem::align_of::<T>()),
@@ -128,7 +129,7 @@ impl Buffer {
     //     &self.device
     // }
     #[profiling::function]
-    pub fn create(device: &Device, info: BufferInfo) -> Self {
+    pub fn create(device: &Arc<Device>, info: BufferInfo) -> Self {
         let lease_info = BufferInfo {
             size: utils::usize::align_up(info.size, 2),
             alignment: info.alignment,
@@ -177,7 +178,7 @@ impl Buffer {
         }
     }
 
-    pub fn create_mapped_storage(device: &Device, data: &[u8]) -> Self {
+    pub fn create_mapped_storage(device: &Arc<Device>, data: &[u8]) -> Self {
         let mut buffer = Self::create(
             device,
             BufferInfo {

@@ -17,7 +17,7 @@ use crate::{
 };
 
 use crate::backend::vulkan::pipeline::{
-    Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
+    Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 
 #[derive(Hash)]
@@ -127,7 +127,7 @@ pub fn mlp_inference(
         hidden_mat: (hidden_layers - 1) as _,
     });
 
-    let pipeline = device.get_pipeline(&PipelineDesc {
+    let pipeline = device.get_pipeline(&PipelineInfo {
         code: &code,
         desc_set_layouts: &[DescSetLayout {
             bindings: &(0..=4)

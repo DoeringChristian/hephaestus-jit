@@ -17,7 +17,7 @@ use ash::vk;
 
 #[derive(Debug)]
 pub struct Pipeline {
-    device: Device,
+    device: Arc<Device>,
     desc_set_layouts: Vec<vk::DescriptorSetLayout>,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
@@ -39,7 +39,7 @@ impl Drop for Pipeline {
 }
 
 impl Pipeline {
-    pub fn create<'a>(device: &Device, desc: &PipelineDesc<'a>) -> Self {
+    pub fn create<'a>(device: &Arc<Device>, desc: &PipelineInfo<'a>) -> Self {
         unsafe {
             let shader_info = vk::ShaderModuleCreateInfo::default().code(desc.code);
             let shader = device.create_shader_module(&shader_info, None).unwrap();
@@ -124,7 +124,7 @@ impl Pipeline {
             }
         }
     }
-    pub fn from_ir(device: &Device, ir: &IR, info: &DeviceInfo) -> Self {
+    pub fn from_ir(device: &Arc<Device>, ir: &IR, info: &DeviceInfo) -> Self {
         let spirv = codegen::assemble_trace(ir, info, "main");
 
         let num_buffers = 1 + ir.n_buffers; // Add one for size buffer
@@ -394,11 +394,11 @@ pub struct DescSetLayout<'a> {
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct PipelineDesc<'a> {
+pub struct PipelineInfo<'a> {
     pub code: &'a [u32],
     pub desc_set_layouts: &'a [DescSetLayout<'a>],
 }
-impl<'a> PipelineDesc<'a> {
+impl<'a> PipelineInfo<'a> {
     pub fn hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         <Self as Hash>::hash(self, &mut hasher);

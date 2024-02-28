@@ -280,13 +280,13 @@ impl<'a> PassBuilder<'a> {
 /// A Resource Pool for temporary resources such as image views or descriptor sets
 #[derive(Debug)]
 pub struct RGraphPool {
-    pub device: Device,
+    pub device: Arc<Device>,
     pub desc_sets: Vec<vk::DescriptorSet>,
     pub desc_pools: Vec<vk::DescriptorPool>,
 }
 
 impl RGraphPool {
-    pub fn new(device: &Device) -> Self {
+    pub fn new(device: &Arc<Device>) -> Self {
         Self {
             device: device.clone(),
             // image_views: vec![],
@@ -353,7 +353,7 @@ impl RGraph {
         }
     }
     #[profiling::function]
-    pub fn submit(self, device: &Device) -> backend::ExecReport {
+    pub fn submit(self, device: &Arc<Device>) -> backend::ExecReport {
         // Passes are already in topological order
         //
         log::trace!("Passes: {passes:#?}", passes = self.passes);

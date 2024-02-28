@@ -16,13 +16,13 @@ use super::graph::RGraph;
 use super::pool::{Lease, Resource};
 
 pub struct Image {
-    device: Device,
+    device: Arc<Device>,
     lease: Lease<InternalImage>,
     info: ImageInfo,
 }
 
 impl Image {
-    pub fn create(device: &Device, info: ImageInfo) -> Self {
+    pub fn create(device: &Arc<Device>, info: ImageInfo) -> Self {
         let lease_info = ImageInfo {
             ty: info.ty,
             format: info.format,
@@ -115,7 +115,7 @@ impl Resource for InternalImage {
         }
     }
 
-    fn destroy(&mut self, device: &super::device::InternalDevice) {
+    fn destroy(&mut self, device: &super::device::Device) {
         if let Some(allocation) = self.allocation.take() {
             unsafe {
                 for view in self.image_view_cache.lock().unwrap().values() {

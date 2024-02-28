@@ -55,63 +55,7 @@ unsafe extern "system" fn vulkan_debug_callback(
     vk::FALSE
 }
 
-#[derive(Clone)]
-pub struct Device(Arc<InternalDevice>);
-impl Device {
-    pub fn create(index: usize) -> Self {
-        Self(Arc::new(InternalDevice::create(index).unwrap()))
-    }
-    #[profiling::function]
-    pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(
-        &'a self,
-        f: F,
-    ) -> (std::time::SystemTime, std::time::Duration) {
-        unsafe {
-            // Record command buffer
-            let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-            self.begin_command_buffer(self.command_buffer, &command_buffer_begin_info)
-                .unwrap();
-            f(self, self.command_buffer);
-            self.end_command_buffer(self.command_buffer).unwrap();
-
-            // Wait for fences and submit command buffer
-            self.reset_fences(&[self.fence]).unwrap();
-
-            let command_buffers = [self.command_buffer];
-            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
-
-            let start_system;
-            let start;
-            {
-                profiling::scope!("Submit and Wait");
-                start_system = std::time::SystemTime::now();
-                start = std::time::Instant::now();
-                self.queue_submit(self.queue, &[submit_info], self.fence)
-                    .unwrap();
-
-                self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
-            }
-            let end = std::time::Instant::now();
-
-            return (start_system, end - start);
-        }
-    }
-}
-impl Deref for Device {
-    type Target = Arc<InternalDevice>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl Debug for Device {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Device")
-    }
-}
-
-pub struct InternalDevice {
+pub struct Device {
     pub entry: ash::Entry,
     pub instance: ash::Instance,
     pub device: ash::Device,
@@ -134,9 +78,9 @@ pub struct InternalDevice {
     pub buffer_pool: pool::ResourcePool<buffer::InternalBuffer>,
     pub image_pool: pool::ResourcePool<image::InternalImage>,
 }
-unsafe impl Send for InternalDevice {}
-unsafe impl Sync for InternalDevice {}
-impl Debug for InternalDevice {
+unsafe impl Send for Device {}
+unsafe impl Sync for Device {}
+impl Debug for Device {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InternalDevice")
             .field("physical_device", &self.physical_device)
@@ -148,9 +92,16 @@ impl Debug for InternalDevice {
             .finish()
     }
 }
+impl Deref for Device {
+    type Target = ash::Device;
 
-impl InternalDevice {
-    pub fn create(index: usize) -> Result<Self> {
+    fn deref(&self) -> &Self::Target {
+        &self.device
+    }
+}
+
+impl Device {
+    pub fn create(index: usize) -> Result<Arc<Self>> {
         unsafe {
             let entry = Entry::linked();
             let app_name = CStr::from_bytes_with_nul_unchecked(b"Candle\0");
@@ -328,7 +279,7 @@ impl InternalDevice {
             let cooperative_matrix_properties = std::mem::transmute(cooperative_matrix_properties);
             log::trace!("The following cooperative matrices are supported: {cooperative_matrix_properties:#?}");
 
-            Ok(Self {
+            Ok(Arc::new(Self {
                 entry,
                 instance,
                 device,
@@ -346,19 +297,49 @@ impl InternalDevice {
 
                 buffer_pool: Default::default(),
                 image_pool: Default::default(),
-            })
+            }))
+        }
+    }
+
+    #[profiling::function]
+    pub fn submit_global<'a, F: FnOnce(&Self, vk::CommandBuffer)>(
+        &'a self,
+        f: F,
+    ) -> (std::time::SystemTime, std::time::Duration) {
+        unsafe {
+            // Record command buffer
+            let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.begin_command_buffer(self.command_buffer, &command_buffer_begin_info)
+                .unwrap();
+            f(self, self.command_buffer);
+            self.end_command_buffer(self.command_buffer).unwrap();
+
+            // Wait for fences and submit command buffer
+            self.reset_fences(&[self.fence]).unwrap();
+
+            let command_buffers = [self.command_buffer];
+            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+
+            let start_system;
+            let start;
+            {
+                profiling::scope!("Submit and Wait");
+                start_system = std::time::SystemTime::now();
+                start = std::time::Instant::now();
+                self.queue_submit(self.queue, &[submit_info], self.fence)
+                    .unwrap();
+
+                self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
+            }
+            let end = std::time::Instant::now();
+
+            return (start_system, end - start);
         }
     }
 }
 
-impl Deref for InternalDevice {
-    type Target = ash::Device;
-
-    fn deref(&self) -> &Self::Target {
-        &self.device
-    }
-}
-impl Drop for InternalDevice {
+impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
             // Clear pools:

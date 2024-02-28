@@ -12,7 +12,7 @@ use super::utils::*;
 use crate::backend::vulkan::shader_cache::ShaderKind;
 use crate::backend::vulkan::VulkanDevice;
 use crate::backend::vulkan::{
-    pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet},
+    pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet},
     vkdevice::LaunchConfig,
 };
 use crate::vartype::VarType;
@@ -68,7 +68,7 @@ pub fn prefix_sum_large(
         ],
     );
 
-    let pipeline = device.get_pipeline(&PipelineDesc {
+    let pipeline = device.get_pipeline(&PipelineInfo {
         code: &prefix_sum_large,
         desc_set_layouts: &[DescSetLayout {
             bindings: &(0..4)
@@ -163,7 +163,7 @@ pub fn prefix_sum_scratch_buffer(
         ShaderKind::Compute,
         &[("WORK_GROUP_SIZE", Some(&format!("{block_size}")))],
     );
-    let prefix_sum_large_init = device.get_pipeline(&PipelineDesc {
+    let prefix_sum_large_init = device.get_pipeline(&PipelineInfo {
         code: &prefix_sum_large_init,
         desc_set_layouts: &[DescSetLayout {
             bindings: &[

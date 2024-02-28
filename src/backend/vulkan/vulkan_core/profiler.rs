@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 
@@ -5,7 +7,7 @@ use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
 
 pub struct Profiler {
-    device: Device,
+    device: Arc<Device>,
     query_pool: vk::QueryPool,
     buffer: Buffer,
     next_scope: u32,
@@ -24,7 +26,7 @@ type DurationRange = [u64; 2];
 
 impl Profiler {
     #[profiling::function]
-    pub fn new(device: &Device, max_scopes: usize) -> Self {
+    pub fn new(device: &Arc<Device>, max_scopes: usize) -> Self {
         let buffer = Buffer::create(
             device,
             BufferInfo {

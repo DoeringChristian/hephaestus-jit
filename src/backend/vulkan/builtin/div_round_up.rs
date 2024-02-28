@@ -17,7 +17,7 @@ use crate::{
 };
 
 use crate::backend::vulkan::pipeline::{
-    Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
+    Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 
 pub fn div_round_up(

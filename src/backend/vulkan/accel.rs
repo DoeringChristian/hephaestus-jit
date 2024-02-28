@@ -9,7 +9,7 @@ use super::vulkan_core::graph::RGraph;
 use super::{vulkan_core::acceleration_structure::*, VulkanDevice};
 
 use crate::backend::vulkan::pipeline::{
-    Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
+    Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 use crate::backend::{AccelDesc, GeometryDesc};
 
@@ -171,7 +171,7 @@ impl Accel {
             .copy_from_slice(bytemuck::cast_slice(&references));
         let references_buffer = Arc::new(references_buffer);
 
-        let copy2instances = self.device.get_pipeline(&PipelineDesc {
+        let copy2instances = self.device.get_pipeline(&PipelineInfo {
             code: inline_spirv::include_spirv!(
                 "src/backend/vulkan/builtin/kernels/copy2instances.glsl",
                 comp

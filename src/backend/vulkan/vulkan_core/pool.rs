@@ -10,7 +10,7 @@ type Cache<R> = Arc<Mutex<Vec<R>>>;
 pub trait Resource {
     type Info: Hash + Eq + Clone;
     fn create(device: &Device, info: &Self::Info) -> Self;
-    fn destroy(&mut self, device: &device::InternalDevice) {}
+    fn destroy(&mut self, device: &device::Device) {}
 }
 
 pub struct ResourcePool<R: Resource> {
@@ -66,7 +66,7 @@ impl<R: Resource> ResourcePool<R> {
             cache: cache.clone(),
         }
     }
-    pub fn clear(&self, device: &device::InternalDevice) {
+    pub fn clear(&self, device: &device::Device) {
         for cache in self.resources.lock().unwrap().values() {
             for res in cache.lock().unwrap().iter_mut() {
                 res.destroy(device);

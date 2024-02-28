@@ -7,7 +7,7 @@ use super::shader_cache::ShaderKind;
 use super::vulkan_core::graph::RGraph;
 
 use crate::backend::vulkan::pipeline::{
-    Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
+    Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 use crate::backend::vulkan::vulkan_core::buffer::{BufferInfo, MemoryLocation};
 use crate::backend::{self, AccelDesc};

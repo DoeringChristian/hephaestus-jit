@@ -29,13 +29,13 @@ use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
 
 use self::codegen::DeviceInfo;
-use self::pipeline::PipelineDesc;
+use self::pipeline::PipelineInfo;
 use self::shader_cache::{ShaderCache, ShaderKind};
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
 pub struct InternalVkDevice {
-    device: Device,
+    device: Arc<Device>,
     pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
     shader_cache: Mutex<ShaderCache>,
 }
@@ -53,7 +53,7 @@ impl InternalVkDevice {
             .or_insert_with(|| Arc::new(pipeline::Pipeline::from_ir(&self.device, ir, info)))
             .clone()
     }
-    fn get_pipeline<'a>(&'a self, desc: &PipelineDesc<'a>) -> Arc<pipeline::Pipeline> {
+    fn get_pipeline<'a>(&'a self, desc: &PipelineInfo<'a>) -> Arc<pipeline::Pipeline> {
         self.pipeline_cache
             .lock()
             .unwrap()
@@ -77,7 +77,7 @@ impl InternalVkDevice {
     }
 }
 impl std::ops::Deref for InternalVkDevice {
-    type Target = Device;
+    type Target = Arc<Device>;
 
     fn deref(&self) -> &Self::Target {
         &self.device
@@ -90,7 +90,7 @@ impl VulkanDevice {
     #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
         Ok(Self(Arc::new(InternalVkDevice {
-            device: Device::create(id),
+            device: Device::create(id).unwrap(),
             pipeline_cache: Default::default(),
             shader_cache: Default::default(),
         })))

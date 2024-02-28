@@ -141,7 +141,7 @@ pub struct AccelerationStructure {
     pub(crate) buffer: Buffer, // Buffer to store AccelerationStructure
     pub accel: vk::AccelerationStructureKHR,
 
-    device: Device,
+    device: Arc<Device>,
 
     sizes: vk::AccelerationStructureBuildSizesInfoKHR<'static>,
     pub info: AccelerationStructureInfo,
@@ -152,7 +152,7 @@ impl AccelerationStructure {
     pub fn device(&self) -> &Device {
         &self.device
     }
-    pub fn create(device: &Device, info: AccelerationStructureInfo) -> Self {
+    pub fn create(device: &Arc<Device>, info: AccelerationStructureInfo) -> Self {
         log::trace!("Creating AccelerationStructure with {info:#?}");
         let (geometries, max_primitive_counts): (Vec<_>, Vec<_>) = info
             .geometries

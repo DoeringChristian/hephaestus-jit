@@ -6,7 +6,7 @@ use vk_sync::AccessType;
 
 use crate::backend::vulkan::builtin::utils::{component_type, GlslShaderDef};
 use crate::backend::vulkan::pipeline::{
-    Binding, BufferWriteInfo, DescSetLayout, PipelineDesc, WriteSet,
+    Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 use crate::backend::vulkan::shader_cache::ShaderKind;
 use crate::backend::vulkan::{codegen, VulkanDevice};
@@ -143,7 +143,7 @@ pub fn multiply(
         subgroup_size,
     });
 
-    let pipeline = device.get_pipeline(&PipelineDesc {
+    let pipeline = device.get_pipeline(&PipelineInfo {
         code: &code,
         desc_set_layouts: &[DescSetLayout {
             bindings: &(0..5)
