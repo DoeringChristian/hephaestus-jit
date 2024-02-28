@@ -25,7 +25,6 @@ impl Debug for Buffer {
 pub(super) struct InternalBuffer {
     allocation: Option<Allocation>,
     buffer: vk::Buffer,
-    info: BufferInfo,
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct BufferInfo {
@@ -89,7 +88,6 @@ impl Resource for InternalBuffer {
         Self {
             allocation: Some(allocation),
             buffer,
-            info: info.clone(),
         }
     }
     fn destroy(&mut self, device: &device::InternalDevice) {
@@ -164,9 +162,6 @@ impl Buffer {
     }
     pub fn info(&self) -> BufferInfo {
         self.info
-    }
-    pub fn cache_info(&self) -> BufferInfo {
-        self.lease.info
     }
     pub fn size(&self) -> usize {
         self.info().size

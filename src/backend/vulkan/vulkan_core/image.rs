@@ -8,24 +8,54 @@ use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 pub use gpu_allocator::MemoryLocation;
 use vk_sync::AccessType;
 
+use crate::utils;
+
 use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
 use super::graph::RGraph;
+use super::pool::{Lease, Resource};
 
 pub struct Image {
-    allocation: Option<Allocation>,
     device: Device,
-    image: vk::Image,
-    sampler: vk::Sampler,
+    lease: Lease<InternalImage>,
     info: ImageInfo,
-    image_view_cache: Mutex<HashMap<ImageViewInfo, vk::ImageView>>,
 }
 
 impl Image {
-    pub fn device(&self) -> &Device {
-        &self.device
-    }
     pub fn create(device: &Device, info: ImageInfo) -> Self {
+        let lease_info = ImageInfo {
+            ty: info.ty,
+            format: info.format,
+            extent: info.extent,
+        };
+        let lease = device.image_pool.lease(device, &lease_info);
+        Self {
+            device: device.clone(),
+            lease,
+            info,
+        }
+    }
+}
+
+impl Debug for Image {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.info)
+    }
+}
+
+pub struct InternalImage {
+    allocation: Option<Allocation>,
+    // device: Device,
+    image: vk::Image,
+    sampler: vk::Sampler,
+    // info: ImageInfo,
+    image_view_cache: Mutex<HashMap<ImageViewInfo, vk::ImageView>>,
+}
+
+impl Resource for InternalImage {
+    type Info = ImageInfo;
+
+    fn create(device: &Device, info: &ImageInfo) -> Self {
         log::trace!("Creating Image with {info:?}");
         let create_info = vk::ImageCreateInfo {
             image_type: info.ty,
@@ -79,13 +109,38 @@ impl Image {
 
         Self {
             allocation: Some(allocation),
-            device: device.clone(),
             image,
             sampler,
             image_view_cache: Mutex::new(Default::default()),
-            info,
         }
     }
+
+    fn destroy(&mut self, device: &super::device::InternalDevice) {
+        if let Some(allocation) = self.allocation.take() {
+            unsafe {
+                for view in self.image_view_cache.lock().unwrap().values() {
+                    device.destroy_image_view(*view, None);
+                }
+                device.destroy_image(self.image, None);
+                device.destroy_sampler(self.sampler, None);
+            }
+
+            device
+                .allocator
+                .as_ref()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .free(allocation)
+                .unwrap();
+        }
+    }
+}
+
+impl Image {
+    // pub fn device(&self) -> &Device {
+    //     &self.device
+    // }
     pub fn copy_from_buffer(self: &Arc<Self>, rgraph: &mut RGraph, src: &Arc<Buffer>) {
         let region = vk::BufferImageCopy::default()
             .image_subresource(
@@ -108,7 +163,7 @@ impl Image {
                     device.cmd_copy_buffer_to_image(
                         cb,
                         src.vk(),
-                        s.image,
+                        s.vk(),
                         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                         &[region],
                     );
@@ -116,62 +171,26 @@ impl Image {
         }
     }
     pub fn default_sampler(&self) -> vk::Sampler {
-        self.sampler
+        self.lease.sampler
     }
     pub fn vk(&self) -> vk::Image {
-        self.image
+        self.lease.image
     }
     pub fn info(&self) -> &ImageInfo {
         &self.info
     }
     pub fn image_view(&self, info: ImageViewInfo) -> vk::ImageView {
         *self
+            .lease
             .image_view_cache
             .lock()
             .unwrap()
             .entry(info)
             .or_insert_with_key(|info| {
                 let mut info: vk::ImageViewCreateInfo = (*info).into();
-                info.image = self.image;
+                info.image = self.vk();
                 unsafe { self.device.create_image_view(&info, None).unwrap() }
             })
-    }
-}
-
-impl Deref for Image {
-    type Target = vk::Image;
-
-    fn deref(&self) -> &Self::Target {
-        &self.image
-    }
-}
-
-impl Debug for Image {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.image)
-    }
-}
-
-impl Drop for Image {
-    fn drop(&mut self) {
-        if let Some(allocation) = self.allocation.take() {
-            unsafe {
-                for view in self.image_view_cache.lock().unwrap().values() {
-                    self.device.destroy_image_view(*view, None);
-                }
-                self.device.destroy_image(self.image, None);
-                self.device.destroy_sampler(self.sampler, None);
-            }
-
-            self.device
-                .allocator
-                .as_ref()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .free(allocation)
-                .unwrap();
-        }
     }
 }
 

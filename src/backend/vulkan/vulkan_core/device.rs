@@ -13,7 +13,7 @@ pub use ash::{extensions::khr, vk};
 
 use super::physical_device::{self, PhysicalDevice};
 use super::pool::Resource;
-use super::{buffer, pool};
+use super::{buffer, image, pool};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -132,6 +132,7 @@ pub struct InternalDevice {
     pub cooperative_matrix_properties: Vec<vk::CooperativeMatrixPropertiesKHR<'static>>,
 
     pub buffer_pool: pool::ResourcePool<buffer::InternalBuffer>,
+    pub image_pool: pool::ResourcePool<image::InternalImage>,
 }
 unsafe impl Send for InternalDevice {}
 unsafe impl Sync for InternalDevice {}
@@ -342,7 +343,9 @@ impl InternalDevice {
                 acceleration_structure_ext,
                 cooperative_matrix_ext,
                 cooperative_matrix_properties,
+
                 buffer_pool: Default::default(),
+                image_pool: Default::default(),
             })
         }
     }
@@ -358,8 +361,9 @@ impl Deref for InternalDevice {
 impl Drop for InternalDevice {
     fn drop(&mut self) {
         unsafe {
-            // Clear buffer cache:
+            // Clear pools:
             self.buffer_pool.clear(self);
+            self.image_pool.clear(self);
 
             self.device_wait_idle().unwrap();
 
