@@ -99,12 +99,6 @@ pub enum Buffer {
     VulkanBuffer(VulkanBuffer),
 }
 impl Buffer {
-    // pub fn size(&self) -> usize {
-    //     match self {
-    //         Buffer::CudaBuffer(buffer) => buffer.size(),
-    //         Buffer::VulkanBuffer(buffer) => buffer.size(),
-    //     }
-    // }
     pub fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>> {
         match self {
             Self::CudaBuffer(buffer) => Ok(buffer.to_host(range)?),
@@ -158,6 +152,10 @@ impl Accel {
     }
 }
 
+///
+/// This trait represents an interface to a device.
+/// It has to be implemented for the device.
+///
 pub trait BackendDevice: Clone + Send + Sync {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
@@ -203,15 +201,6 @@ pub enum GeometryDesc {
         n_vertices: usize,
     },
 }
-// #[derive(Debug, Clone, PartialEq)]
-// pub struct InstanceDesc {
-//     pub geometry: usize,
-//     pub transform: [f32; 12],
-// }
-/// TODO: At some point we should probably rename this to AccelExtent and have a unified instance
-/// descriptor on the device.
-/// This would allow us to change instance transforms on the fly (necessary for differentiable
-/// rendering)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccelDesc {
     pub geometries: Arc<[GeometryDesc]>,

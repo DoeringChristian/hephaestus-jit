@@ -161,6 +161,15 @@ impl Graph {
     pub fn launch(&self, device: &backend::Device) -> Option<backend::Report> {
         Some(self.launch_with(device, &[])?.0)
     }
+    ///
+    /// This function launches the recorded graph with changed input variables.
+    /// It should faile, if the input variables types or sizes changed.
+    /// Therefore when recording a function, we keep multiple graphs with different input
+    /// types/sizes.
+    /// It might be possibel, to infer sizes on a compiled graph.
+    /// Size independent kernels are cached in the backend layer anyways,
+    /// therefore rerecording should be fine.
+    ///
     #[profiling::function]
     pub fn launch_with(
         &self,
@@ -170,7 +179,9 @@ impl Graph {
         if self.passes.is_empty() {
             return None;
         }
-        // Capture Environment
+        //
+        // At first capture the current environment from referenced variables of the graph.
+        //
         // TODO: at some point we could forward "virtual" resources to the backend, so that it can
         // perform resource aliasing
         let mut env = Env::default();
@@ -192,14 +203,18 @@ impl Graph {
                 .collect::<Vec<_>>();
         });
 
+        // Execute the graph with the captured environment on the device.
         log::trace!("Launching Graph");
         let report = device.execute_graph(self, &env).unwrap();
         log::trace!("Report:\n {report}");
 
-        let mut output = vec![None; self.n_outputs];
+        // Update variables from environment.
+        // This does the following things:
+        //      - Internal resources, that still exist are update
+        //      - Variables for output resources are created
+        //      - Create output variables (keeping in mind pass-through variables)
 
-        // In case, internal variables are kept, update those.
-        // Also construct new Output variables.
+        let mut output = vec![None; self.n_outputs];
         env.resources
             .into_iter()
             .zip(self.resources.iter())
@@ -298,13 +313,14 @@ pub enum PassOp {
     DeviceOp(op::DeviceOp),
 }
 
-/// Might not be the best but we keep references to `trace::VarRef`s arround to ensure the rc is
-/// not 0.
 ///
-/// * `trace`: Trace from which the variables come
-/// * `refs`: Variable references
+/// Compile the current thread state.
+/// This results in a graph of passes, and resources.
 ///
-/// TODO: should we compile for a device?
+/// * `ts`: The thread state to compile.
+/// * `input`: Special variables, that are inputs to functions and might change between launches.
+/// * `output`: Output variables, for which new variables have to be generated at every launch.
+///
 #[profiling::function]
 pub fn compile(
     ts: &trace::ThreadState,
