@@ -138,9 +138,6 @@ impl Resource for InternalImage {
 }
 
 impl Image {
-    // pub fn device(&self) -> &Device {
-    //     &self.device
-    // }
     pub fn copy_from_buffer(self: &Arc<Self>, rgraph: &mut RGraph, src: &Arc<Buffer>) {
         let region = vk::BufferImageCopy::default()
             .image_subresource(
