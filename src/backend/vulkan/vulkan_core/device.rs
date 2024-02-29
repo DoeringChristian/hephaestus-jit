@@ -11,18 +11,10 @@ use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use gpu_allocator::{AllocationSizes, AllocatorDebugSettings};
 
 pub use ash::{extensions::khr, vk};
+use itertools::Itertools;
 
-use super::physical_device::{self, PhysicalDevice};
-use super::pool::Resource;
-use super::{buffer, image, pipeline, pool};
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    PhysicalDeviceError(#[from] physical_device::Error),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+use super::physical_device::PhysicalDevice;
+use super::{buffer, image, pipeline, pool, Error, Result};
 
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -129,7 +121,7 @@ impl Device {
                 .enabled_extension_names(&extension_names)
                 .flags(create_flags);
 
-            let instance = entry.create_instance(&create_info, None).unwrap();
+            let instance = entry.create_instance(&create_info, None)?;
             // .map_err(|_| VulkanError::InstanceCreationError)?;
 
             let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
@@ -146,13 +138,11 @@ impl Device {
                 .pfn_user_callback(Some(vulkan_debug_callback));
 
             let debug_utils_loader = DebugUtils::new(&entry, &instance);
-            let debug_callback = debug_utils_loader
-                .create_debug_utils_messenger(&debug_info, None)
-                .unwrap();
+            let debug_callback =
+                debug_utils_loader.create_debug_utils_messenger(&debug_info, None)?;
 
             let mut physical_devices = instance
-                .enumerate_physical_devices()
-                .unwrap()
+                .enumerate_physical_devices()?
                 .into_iter()
                 .map(|physical_device| Ok(PhysicalDevice::new(&instance, physical_device)?))
                 .collect::<Result<Vec<_>>>()?;
@@ -168,7 +158,10 @@ impl Device {
             });
 
             log::trace!("Compatible Devices: {physical_devices:?}");
-            let physical_device = physical_devices.into_iter().nth(index).unwrap();
+            let physical_device = physical_devices
+                .into_iter()
+                .nth(index)
+                .ok_or(Error::PhysicalDeviceNotFound(index))?;
 
             let mut device_extension_names = vec![vk::ExtDescriptorIndexingFn::NAME.as_ptr()];
 
@@ -215,9 +208,7 @@ impl Device {
                 .enabled_extension_names(&device_extension_names)
                 .push_next(&mut features2);
 
-            let device = instance
-                .create_device(vk_physical_device, &device_create_info, None)
-                .unwrap();
+            let device = instance.create_device(vk_physical_device, &device_create_info, None)?;
             // .map_err(|_| VulkanError::DeviceCreateError)?;
 
             let queue = device.get_device_queue(physical_device.queue_family_index, 0);
@@ -229,16 +220,14 @@ impl Device {
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
                 .queue_family_index(physical_device.queue_family_index);
 
-            let pool = device.create_command_pool(&pool_create_info, None).unwrap();
+            let pool = device.create_command_pool(&pool_create_info, None)?;
 
             let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
                 .command_buffer_count(1)
                 .command_pool(pool)
                 .level(vk::CommandBufferLevel::PRIMARY);
 
-            let command_buffer = device
-                .allocate_command_buffers(&command_buffer_allocate_info)
-                .unwrap()[0];
+            let command_buffer = device.allocate_command_buffers(&command_buffer_allocate_info)?[0];
 
             let allocator = Allocator::new(&AllocatorCreateDesc {
                 instance: instance.clone(),
@@ -252,11 +241,10 @@ impl Device {
                 },
                 buffer_device_address: true,
                 allocation_sizes: AllocationSizes::new(u64::MAX, u64::MAX),
-            })
-            .unwrap();
+            })?;
 
             let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
-            let fence = device.create_fence(&fence_info, None).unwrap();
+            let fence = device.create_fence(&fence_info, None)?;
 
             // Extensons:
             let acceleration_structure_ext = physical_device
@@ -270,13 +258,13 @@ impl Device {
             let cooperative_matrix_properties = cooperative_matrix_ext
                 .as_ref()
                 .into_iter()
-                .flat_map(|ext| {
-                    ext.get_physical_device_cooperative_matrix_properties(
+                .map(|ext| {
+                    Ok(ext.get_physical_device_cooperative_matrix_properties(
                         physical_device.physical_device,
-                    )
-                    .unwrap()
+                    )?)
                 })
-                .collect::<Vec<_>>();
+                .flatten_ok()
+                .collect::<Result<Vec<_>>>()?;
             // Cast away livetime constraints
             let cooperative_matrix_properties = std::mem::transmute(cooperative_matrix_properties);
             log::trace!("The following cooperative matrices are supported: {cooperative_matrix_properties:#?}");

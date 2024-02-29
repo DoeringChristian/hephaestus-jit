@@ -4,19 +4,20 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+use super::{Error, Result};
 use ash;
 use ash::extensions::khr;
 use ash::vk;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    VkResult(#[from] vk::Result),
-    #[error("Could not find a Queue Family, supporting the required features!")]
-    QueueFamilyNotFound,
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+// #[derive(thiserror::Error, Debug)]
+// pub enum Error {
+//     #[error("{0}")]
+//     VkResult(#[from] vk::Result),
+//     #[error("Could not find a Queue Family, supporting the required features!")]
+//     QueueFamilyNotFound,
+// }
+//
+// pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct PhysicalDevice {
     pub physical_device: vk::PhysicalDevice,
