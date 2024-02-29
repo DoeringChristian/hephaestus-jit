@@ -524,7 +524,11 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
 
                 if let Some(cond) = cond {
                     let cond = Reg(*cond);
-                    writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
+                    if zeroable(ty) {
+                        writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}(0);", dst = Reg(id))?;
+                    } else {
+                        writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
+                    }
                     match ty {
                         VarType::Bool => {
                             let memory_type = GlslTypeName(u8::var_ty());
@@ -977,4 +981,24 @@ fn assemble_cast(
     assemble_cast_inline(s, Reg(src), dst_ty, src_ty)?;
     writeln!(s, ";")?;
     Ok(())
+}
+
+pub fn zeroable(ty: &VarType) -> bool {
+    matches!(
+        ty,
+        VarType::Bool
+            | VarType::I8
+            | VarType::U8
+            | VarType::I16
+            | VarType::U16
+            | VarType::I32
+            | VarType::U32
+            | VarType::I64
+            | VarType::U64
+            | VarType::F16
+            | VarType::F32
+            | VarType::F64
+            | VarType::Vec { .. }
+            | VarType::Mat { .. }
+    )
 }

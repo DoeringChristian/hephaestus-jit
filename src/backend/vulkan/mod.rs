@@ -21,6 +21,7 @@ use crate::op::DeviceOp;
 use crate::vartype::{AsVarType, FusedMlpConfig};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use once_cell::sync::Lazy;
 use vk_sync::AccessType;
 use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
@@ -42,12 +43,22 @@ impl VulkanDevice {
     }
 }
 
+pub static DEVICES: Lazy<Mutex<HashMap<usize, Arc<Device>>>> =
+    Lazy::new(|| Mutex::new(Default::default()));
+
 #[derive(Clone, Debug)]
 pub struct VulkanDevice(Arc<Device>);
 impl VulkanDevice {
     #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
-        Ok(Self(Device::create(0).unwrap()))
+        Ok(Self(
+            DEVICES
+                .lock()
+                .unwrap()
+                .entry(id)
+                .or_insert_with(|| Device::create(0).unwrap())
+                .clone(),
+        ))
     }
 }
 

@@ -70,7 +70,7 @@ pub struct Device {
 
     pub allocator: Option<Mutex<Allocator>>,
 
-    pub fence: vk::Fence,
+    pub fence: Mutex<vk::Fence>,
 
     pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
     pub cooperative_matrix_ext: Option<khr::CooperativeMatrix>,
@@ -292,7 +292,7 @@ impl Device {
                 pool,
                 allocator: Some(Mutex::new(allocator)),
                 command_buffer,
-                fence,
+                fence: Mutex::new(fence),
                 acceleration_structure_ext,
                 cooperative_matrix_ext,
                 cooperative_matrix_properties,
@@ -309,7 +309,8 @@ impl Device {
         &'a self,
         f: F,
     ) -> (std::time::SystemTime, std::time::Duration) {
-        unsafe {
+        let fence = self.fence.lock().unwrap();
+        let result = unsafe {
             // Record command buffer
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -319,7 +320,7 @@ impl Device {
             self.end_command_buffer(self.command_buffer).unwrap();
 
             // Wait for fences and submit command buffer
-            self.reset_fences(&[self.fence]).unwrap();
+            self.reset_fences(&[*fence]).unwrap();
 
             let command_buffers = [self.command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
@@ -330,15 +331,17 @@ impl Device {
                 profiling::scope!("Submit and Wait");
                 start_system = std::time::SystemTime::now();
                 start = std::time::Instant::now();
-                self.queue_submit(self.queue, &[submit_info], self.fence)
+                self.queue_submit(self.queue, &[submit_info], *fence)
                     .unwrap();
 
-                self.wait_for_fences(&[self.fence], true, u64::MAX).unwrap();
+                self.wait_for_fences(&[*fence], true, u64::MAX).unwrap();
             }
             let end = std::time::Instant::now();
 
-            return (start_system, end - start);
-        }
+            (start_system, end - start)
+        };
+        drop(fence);
+        result
     }
 }
 
@@ -356,7 +359,7 @@ impl Drop for Device {
 
             self.allocator.take().unwrap();
             self.destroy_command_pool(self.pool, None);
-            self.destroy_fence(self.fence, None);
+            self.destroy_fence(*self.fence.lock().unwrap(), None);
             self.destroy_device(None);
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_callback, None);
