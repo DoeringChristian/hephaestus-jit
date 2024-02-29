@@ -7,12 +7,11 @@ use std::sync::Arc;
 use crate::backend::vulkan::codegen;
 use crate::ir::IR;
 
-use super::accel::Accel;
-use super::codegen::DeviceInfo;
-use super::vulkan_core::buffer::Buffer;
-use super::vulkan_core::device::Device;
-use super::vulkan_core::graph::RGraphPool;
-use super::vulkan_core::image::{Image, ImageViewInfo};
+use super::acceleration_structure::AccelerationStructure;
+use super::buffer::Buffer;
+use super::device::Device;
+use super::graph::RGraphPool;
+use super::image::{Image, ImageViewInfo};
 use ash::vk;
 
 #[derive(Debug)]
@@ -118,6 +117,7 @@ impl Pipeline {
     ) {
         let desc_sets = pool.desc_sets(&self.desc_set_layouts);
         log::trace!("Recording Pipeline pass with extent {extent:?}");
+
         let buffer_infos = write_sets
             .iter()
             .map(|write_set| {
@@ -133,6 +133,7 @@ impl Pipeline {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
+
         let write_desc_sets = write_sets
             .iter()
             .enumerate()
@@ -170,7 +171,7 @@ impl Pipeline {
         num: usize,
         buffers: &[Arc<Buffer>],
         images: &[Arc<Image>],
-        accels: &[Arc<Accel>],
+        accels: &[Arc<AccelerationStructure>],
     ) {
         let desc_sets = pool.desc_sets(&self.desc_set_layouts).to_vec();
         let image_views = images
@@ -214,10 +215,7 @@ impl Pipeline {
             })
             .collect::<Vec<_>>();
 
-        let acceleration_structures = accels
-            .iter()
-            .map(|accel| accel.get_tlas())
-            .collect::<Vec<_>>();
+        let acceleration_structures = accels.iter().map(|accel| accel.accel).collect::<Vec<_>>();
 
         let mut desc_accel_infos = vk::WriteDescriptorSetAccelerationStructureKHR::default()
             .acceleration_structures(&acceleration_structures);
@@ -315,7 +313,7 @@ pub struct BufferWriteInfo<'a> {
     pub buffer: &'a Buffer,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct WriteSet<'a> {
     pub set: u32,
     pub binding: u32,

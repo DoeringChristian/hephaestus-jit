@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ffi::CStr;
 use std::fmt::Debug;
 use std::ops::{Deref, Range};
@@ -77,6 +78,7 @@ pub struct Device {
 
     pub buffer_pool: pool::ResourcePool<buffer::InternalBuffer>,
     pub image_pool: pool::ResourcePool<image::InternalImage>,
+    // pub pipeline_cache: HashMap<u64, >
 }
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}

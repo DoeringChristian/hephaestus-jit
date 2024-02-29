@@ -8,7 +8,7 @@ use super::vulkan_core::device::Device;
 use super::vulkan_core::graph::RGraph;
 use super::{vulkan_core::acceleration_structure::*, VulkanDevice};
 
-use crate::backend::vulkan::pipeline::{
+use crate::backend::vulkan::vulkan_core::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 use crate::backend::{AccelDesc, GeometryDesc};

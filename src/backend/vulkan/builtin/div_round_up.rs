@@ -16,7 +16,7 @@ use crate::{
     vartype::FusedMlpConfig,
 };
 
-use crate::backend::vulkan::pipeline::{
+use crate::backend::vulkan::vulkan_core::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 

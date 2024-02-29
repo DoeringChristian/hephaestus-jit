@@ -1,7 +1,6 @@
 mod accel;
 mod builtin;
 mod codegen;
-mod pipeline;
 mod shader_cache;
 #[cfg(test)]
 mod test;
@@ -29,8 +28,8 @@ use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
 
 use self::codegen::DeviceInfo;
-use self::pipeline::{Binding, DescSetLayout, PipelineInfo};
 use self::shader_cache::{ShaderCache, ShaderKind};
+use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, PipelineInfo};
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
@@ -254,12 +253,13 @@ impl backend::BackendDevice for VulkanDevice {
                             rpass = rpass.read(&blas, AccessType::ComputeShaderReadOther);
                         }
                     }
+                    let tlases = accels.iter().map(|a| a.tlas.clone()).collect::<Vec<_>>();
 
                     let grid_size = (size + compile_info.work_group_size as usize - 1)
                         / compile_info.work_group_size as usize;
 
                     rpass.record(move |device, cb, pool| {
-                        pipeline.submit_to_cbuffer(cb, pool, grid_size, &buffers, &images, &accels);
+                        pipeline.submit_to_cbuffer(cb, pool, grid_size, &buffers, &images, &tlases);
                     });
                 }
                 PassOp::DeviceOp(op) => match op {

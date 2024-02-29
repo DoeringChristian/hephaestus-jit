@@ -43,6 +43,7 @@ gpu-allocator = { git = "https://github.com/DoeringChristian/gpu-allocator.git",
 slice-group-by = { version = "0.3.1", features = ["nightly"]}
 
 profiling = "1.0"
+spirq = "1.1.1"
 # test-log = "0.2.14"
 
 [features]
