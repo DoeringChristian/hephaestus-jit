@@ -1,11 +1,10 @@
+use std::any::TypeId;
 // TODO: Unify precompiled and IR Pipeline workflow
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::sync::Arc;
-
-use crate::backend::vulkan::codegen;
-use crate::ir::IR;
 
 use super::acceleration_structure::AccelerationStructure;
 use super::buffer::Buffer;
@@ -14,99 +13,39 @@ use super::graph::RGraphPool;
 use super::image::{Image, ImageViewInfo};
 use ash::vk;
 
-#[derive(Debug)]
 pub struct Pipeline {
     device: Arc<Device>,
-    desc_set_layouts: Vec<vk::DescriptorSetLayout>,
-    pipeline_layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
+    pipeline: Arc<InternalPipeline>,
 }
+impl Deref for Pipeline {
+    type Target = InternalPipeline;
 
-impl Drop for Pipeline {
-    fn drop(&mut self) {
-        unsafe {
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_pipeline(self.pipeline, None);
-            // self.device.destroy_descriptor_pool(self.desc_pool, None);
-            for desc_set_layout in self.desc_set_layouts.iter() {
-                self.device
-                    .destroy_descriptor_set_layout(*desc_set_layout, None);
-            }
-        }
+    fn deref(&self) -> &Self::Target {
+        &self.pipeline
     }
 }
 
 impl Pipeline {
-    pub fn create<'a>(device: &Arc<Device>, info: &PipelineInfo) -> Self {
-        unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::default().code(&info.code);
-            let shader = device.create_shader_module(&shader_info, None).unwrap();
+    pub fn create<D: Into<PipelineInfo> + Hash>(device: &Arc<Device>, def: D) -> Self {
+        let mut hasher = DefaultHasher::new();
+        TypeId::of::<D>().hash(&mut hasher);
+        def.hash(&mut hasher);
+        let hash = hasher.finish();
 
-            // Create Descriptor Pool
-            // let desc_sizes = [vk::DescriptorPoolSize {
-            //     ty: vk::DescriptorType::STORAGE_BUFFER,
-            //     descriptor_count: 2 ^ 16,
-            // }];
-
-            // Create Layout
-            let desc_set_layouts = info
-                .desc_set_layouts
-                .iter()
-                .map(|desc_set_layout| {
-                    let desc_layout_bindings = desc_set_layout
-                        .bindings
-                        .iter()
-                        .map(|binding| vk::DescriptorSetLayoutBinding {
-                            binding: binding.binding,
-                            descriptor_type: binding.ty,
-                            descriptor_count: binding.count as _,
-                            stage_flags: vk::ShaderStageFlags::ALL,
-                            ..Default::default()
-                        })
-                        .collect::<Vec<_>>();
-                    let desc_info = vk::DescriptorSetLayoutCreateInfo::default()
-                        .bindings(&desc_layout_bindings);
-                    device
-                        .create_descriptor_set_layout(&desc_info, None)
-                        .unwrap()
-                })
-                .collect::<Vec<_>>();
-
-            // Create Pipeline
-            let pipeline_layout_info =
-                vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
-            let pipeline_layout = device
-                .create_pipeline_layout(&pipeline_layout_info, None)
-                .unwrap();
-            let pipeline_cache = device
-                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::default(), None)
-                .unwrap();
-
-            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(shader)
-                .name(CStr::from_bytes_with_nul(b"main\0").unwrap());
-
-            let compute_pipeline_info = vk::ComputePipelineCreateInfo::default()
-                .stage(pipeline_shader_info)
-                .layout(pipeline_layout);
-            let compute_pipeline = device
-                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info], None)
-                .unwrap()[0];
-
-            // Destruct temporary elements
-            device.destroy_shader_module(shader, None);
-            device.destroy_pipeline_cache(pipeline_cache, None);
-
-            Self {
-                device: device.clone(),
-                pipeline_layout,
-                pipeline: compute_pipeline,
-                desc_set_layouts,
-            }
+        let mut cache = device.pipeline_cache.lock().unwrap();
+        let pipeline = cache.entry(hash).or_insert_with(|| {
+            let info = def.into();
+            Arc::new(InternalPipeline::create(device, &info))
+        });
+        Self {
+            device: device.clone(),
+            pipeline: pipeline.clone(),
         }
     }
+    pub fn vk(&self) -> vk::Pipeline {
+        self.pipeline.pipeline
+    }
+
     pub fn submit(
         &self,
         cb: vk::CommandBuffer,
@@ -147,10 +86,10 @@ impl Pipeline {
             .collect::<Vec<_>>();
         unsafe {
             log::trace!("Updating Descriptor Sets{write_desc_sets:#?}");
-            self.device.update_descriptor_sets(&write_desc_sets, &[]);
+            device.update_descriptor_sets(&write_desc_sets, &[]);
 
             log::trace!("Binding Pipeline.");
-            device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.vk());
             log::trace!("Binding Descriptor Sets.");
             device.cmd_bind_descriptor_sets(
                 cb,
@@ -264,7 +203,7 @@ impl Pipeline {
             self.device.update_descriptor_sets(&write_desc_sets, &[]);
 
             self.device
-                .cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+                .cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, self.vk());
             self.device.cmd_bind_descriptor_sets(
                 cb,
                 vk::PipelineBindPoint::COMPUTE,
@@ -276,11 +215,99 @@ impl Pipeline {
             self.device.cmd_dispatch(cb, num as _, 1, 1);
         }
     }
-    // pub fn launch_fenced<'a>(&'a self, num: usize, buffers: impl Iterator<Item = &'a Buffer>) {
-    //     self.device.submit_global(|device, cb| {
-    //         self.submit_to_cbuffer(cb, device, num, buffers, [].iter());
-    //     })
-    // }
+}
+
+#[derive(Debug)]
+pub struct InternalPipeline {
+    desc_set_layouts: Vec<vk::DescriptorSetLayout>,
+    pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
+}
+
+// impl Drop for Pipeline {
+//     fn drop(&mut self) {
+//         unsafe {
+//             self.device
+//                 .destroy_pipeline_layout(self.pipeline_layout, None);
+//             self.device.destroy_pipeline(self.pipeline, None);
+//             // self.device.destroy_descriptor_pool(self.desc_pool, None);
+//             for desc_set_layout in self.desc_set_layouts.iter() {
+//                 self.device
+//                     .destroy_descriptor_set_layout(*desc_set_layout, None);
+//             }
+//         }
+//     }
+// }
+
+impl InternalPipeline {
+    pub fn create(device: &Device, info: &PipelineInfo) -> Self {
+        unsafe {
+            let shader_info = vk::ShaderModuleCreateInfo::default().code(&info.code);
+            let shader = device.create_shader_module(&shader_info, None).unwrap();
+
+            // Create Descriptor Pool
+            // let desc_sizes = [vk::DescriptorPoolSize {
+            //     ty: vk::DescriptorType::STORAGE_BUFFER,
+            //     descriptor_count: 2 ^ 16,
+            // }];
+
+            // Create Layout
+            let desc_set_layouts = info
+                .desc_set_layouts
+                .iter()
+                .map(|desc_set_layout| {
+                    let desc_layout_bindings = desc_set_layout
+                        .bindings
+                        .iter()
+                        .map(|binding| vk::DescriptorSetLayoutBinding {
+                            binding: binding.binding,
+                            descriptor_type: binding.ty,
+                            descriptor_count: binding.count as _,
+                            stage_flags: vk::ShaderStageFlags::ALL,
+                            ..Default::default()
+                        })
+                        .collect::<Vec<_>>();
+                    let desc_info = vk::DescriptorSetLayoutCreateInfo::default()
+                        .bindings(&desc_layout_bindings);
+                    device
+                        .create_descriptor_set_layout(&desc_info, None)
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+
+            // Create Pipeline
+            let pipeline_layout_info =
+                vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
+            let pipeline_layout = device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .unwrap();
+            let pipeline_cache = device
+                .create_pipeline_cache(&vk::PipelineCacheCreateInfo::default(), None)
+                .unwrap();
+
+            let pipeline_shader_info = vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::COMPUTE)
+                .module(shader)
+                .name(CStr::from_bytes_with_nul(b"main\0").unwrap());
+
+            let compute_pipeline_info = vk::ComputePipelineCreateInfo::default()
+                .stage(pipeline_shader_info)
+                .layout(pipeline_layout);
+            let compute_pipeline = device
+                .create_compute_pipelines(pipeline_cache, &[compute_pipeline_info], None)
+                .unwrap()[0];
+
+            // Destruct temporary elements
+            device.destroy_shader_module(shader, None);
+            device.destroy_pipeline_cache(pipeline_cache, None);
+
+            Self {
+                pipeline_layout,
+                pipeline: compute_pipeline,
+                desc_set_layouts,
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
@@ -307,14 +334,11 @@ impl PipelineInfo {
         hasher.finish()
     }
 }
-pub trait PipelineDefinition: Hash {
-    fn generate(self) -> PipelineInfo;
-}
-impl PipelineDefinition for Box<[u32]> {
-    fn generate(self) -> PipelineInfo {
+impl From<Box<[u32]>> for PipelineInfo {
+    fn from(code: Box<[u32]>) -> PipelineInfo {
         let entry_points = spirq::ReflectConfig::new()
             .ref_all_rscs(true)
-            .spv(&*self)
+            .spv(&*code)
             .reflect()
             .unwrap();
         assert_eq!(entry_points.len(), 1);
@@ -378,7 +402,7 @@ impl PipelineDefinition for Box<[u32]> {
         }
 
         PipelineInfo {
-            code: self,
+            code,
             desc_set_layouts: descriptor_sets,
         }
     }

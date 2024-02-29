@@ -14,7 +14,7 @@ pub use ash::{extensions::khr, vk};
 
 use super::physical_device::{self, PhysicalDevice};
 use super::pool::Resource;
-use super::{buffer, image, pool};
+use super::{buffer, image, pipeline, pool};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -78,7 +78,7 @@ pub struct Device {
 
     pub buffer_pool: pool::ResourcePool<buffer::InternalBuffer>,
     pub image_pool: pool::ResourcePool<image::InternalImage>,
-    // pub pipeline_cache: HashMap<u64, >
+    pub pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::InternalPipeline>>>,
 }
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
