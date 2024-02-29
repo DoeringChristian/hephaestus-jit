@@ -56,11 +56,9 @@ impl<'a> PipelineDef for IrGlslDef<'a> {
                 },
             ],
         }];
-        let code = glsl::assemble_ir(self.ir, &self.device_info, self.entry_point)
-            .unwrap()
-            .into_boxed_slice();
+        let code = glsl::assemble_ir(self.ir, &self.device_info, self.entry_point).unwrap().into_boxed_slice();
         PipelineInfo {
-            code,
+            code: code,
             desc_set_layouts: layouts.into(),
         }
     }

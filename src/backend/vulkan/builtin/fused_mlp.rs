@@ -43,7 +43,7 @@ pub struct MLPCompileDef {
     hidden_mat: u32,
 }
 impl PipelineDef for MLPCompileDef {
-    fn generate(&self) -> PipelineInfo {
+    fn generate(self) -> PipelineInfo {
         let MLPCompileDef {
             width,
             n_iters,
@@ -59,7 +59,7 @@ impl PipelineDef for MLPCompileDef {
         let activation = match activation {
             Activation::ReLU => "RELU",
         };
-        (&GlslShaderDef {
+        let code = GlslShaderDef {
             code: include_str!("kernels/fused_mlp_inference.glsl"),
             kind: crate::backend::vulkan::shader_cache::ShaderKind::Compute,
             defines: &[
@@ -75,8 +75,21 @@ impl PipelineDef for MLPCompileDef {
                 ("OUTPUT_LAYOUT", Some(&format!("{output_layout}"))),
                 ("HIDDEN_MAT", Some(&format!("{hidden_mat}"))),
             ],
-        })
-            .generate()
+        }
+        .compile();
+        let desc_set_layouts = [DescSetLayout {
+            bindings: (0..=4)
+                .map(|i| Binding {
+                    binding: i,
+                    count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
+                })
+                .collect::<Vec<_>>(),
+        }];
+        PipelineInfo {
+            code,
+            desc_set_layouts: desc_set_layouts.into(),
+        }
     }
 }
 // impl codegen::CodegenDef for MLPCompileDef {
@@ -155,7 +168,7 @@ pub fn mlp_inference(
 
     let pipeline = Pipeline::create(
         &device,
-        &MLPCompileDef {
+        MLPCompileDef {
             width: width as _,
             n_iters: n_iters as _,
             activation: Activation::ReLU,

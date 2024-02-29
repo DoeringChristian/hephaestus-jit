@@ -56,7 +56,7 @@ pub fn prefix_sum_large(
 
     let prefix_sum_large = Pipeline::create(
         &device,
-        &GlslShaderDef {
+        GlslShaderDef {
             code: &include_str!("kernels/prefix_sum_large.glsl"),
             kind: ShaderKind::Compute,
             defines: &[
@@ -177,7 +177,7 @@ pub fn prefix_sum_scratch_buffer(
 
     let prefix_sum_large_init = Pipeline::create(
         &device,
-        &GlslShaderDef {
+        GlslShaderDef {
             code: &include_str!("kernels/prefix_sum_large_init.glsl"),
             kind: ShaderKind::Compute,
             defines: &[("WORK_GROUP_SIZE", Some(&format!("{block_size}")))],

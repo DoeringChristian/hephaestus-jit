@@ -62,52 +62,8 @@ pub struct GlslShaderDef<'a> {
     pub kind: ShaderKind,
     pub defines: &'a [(&'a str, Option<&'a str>)],
 }
-// impl {
-//     fn from(value: &GlslShaderDef) -> Self {
-//         let compiler = shaderc::Compiler::new().unwrap();
-//         let mut options = shaderc::CompileOptions::new().unwrap();
-//
-//         options.set_target_env(
-//             shaderc::TargetEnv::Vulkan,
-//             shaderc::EnvVersion::Vulkan1_2 as _,
-//         );
-//
-//         for define in value.defines {
-//             options.add_macro_definition(define.0, define.1);
-//         }
-//         let preprocessed = compiler
-//             .preprocess(value.code, "", "main", Some(&options))
-//             .unwrap()
-//             .as_text();
-//         log::trace! {"Compiling shader: \n{preprocessed}"};
-//
-//         let compiler = glslang::Compiler::acquire().unwrap();
-//         let options = glslang::CompilerOptions {
-//             source_language: glslang::SourceLanguage::GLSL,
-//             target: glslang::Target::Vulkan {
-//                 version: glslang::VulkanVersion::Vulkan1_3,
-//                 spirv_version: glslang::SpirvVersion::SPIRV1_5,
-//             },
-//             ..Default::default()
-//         };
-//
-//         let shader_stage = match value.kind {
-//             ShaderKind::Compute => glslang::ShaderStage::Compute,
-//         };
-//
-//         let shader = glslang::ShaderSource::from(preprocessed.as_str());
-//         let shader = glslang::ShaderInput::new(&shader, shader_stage, &options, None).unwrap();
-//         let shader = compiler
-//             .create_shader(shader)
-//             .map_err(|err| anyhow::anyhow!("{err} {preprocessed}"))
-//             .unwrap();
-//         let code = shader.compile().unwrap();
-//         code.into_boxed_slice().into()
-//     }
-// }
-impl<'a> PipelineDef for GlslShaderDef<'a> {
-    #[profiling::function]
-    fn generate(&self) -> PipelineInfo {
+impl<'a> GlslShaderDef<'a> {
+    pub fn compile(self) -> Box<[u32]> {
         let compiler = shaderc::Compiler::new().unwrap();
         let mut options = shaderc::CompileOptions::new().unwrap();
 
@@ -146,6 +102,12 @@ impl<'a> PipelineDef for GlslShaderDef<'a> {
             .map_err(|err| anyhow::anyhow!("{err} {preprocessed}"))
             .unwrap();
         let code = shader.compile().unwrap();
-        code.generate()
+        code.into_boxed_slice()
+    }
+}
+impl<'a> PipelineDef for GlslShaderDef<'a> {
+    #[profiling::function]
+    fn generate(self) -> PipelineInfo {
+        self.compile().generate()
     }
 }

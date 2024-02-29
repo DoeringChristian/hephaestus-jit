@@ -38,7 +38,7 @@ struct CoopMMADef<'a> {
     subgroup_size: u32,
 }
 impl<'a> PipelineDef for CoopMMADef<'a> {
-    fn generate(&self) -> PipelineInfo {
+    fn generate(self) -> PipelineInfo {
         let CoopMMADef {
             lM,
             lN,
@@ -52,7 +52,7 @@ impl<'a> PipelineDef for CoopMMADef<'a> {
             c_type,
             subgroup_size,
         } = self;
-        (&GlslShaderDef {
+        let code = GlslShaderDef {
             code: include_str!("kernels/cooperative_matrix_sh.glsl"),
             kind: ShaderKind::Compute,
             defines: &[
@@ -68,8 +68,22 @@ impl<'a> PipelineDef for CoopMMADef<'a> {
                 ("C_BITS", Some(&format!("{c_bits}"))),
                 ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
             ],
-        })
-            .generate()
+        }
+        .compile();
+
+        let layout = [DescSetLayout {
+            bindings: (0..5)
+                .map(|i| Binding {
+                    binding: i,
+                    count: 1,
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
+                })
+                .collect::<Vec<_>>(),
+        }];
+        PipelineInfo {
+            code,
+            desc_set_layouts: layout.into(),
+        }
     }
 }
 // impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
@@ -167,7 +181,7 @@ pub fn multiply(
 
     let pipeline = Pipeline::create(
         &device,
-        &CoopMMADef {
+        CoopMMADef {
             lM,
             lN,
             lK,

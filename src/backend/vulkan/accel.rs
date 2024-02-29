@@ -174,7 +174,7 @@ impl Accel {
 
         let copy2instances = Pipeline::create(
             &self.device,
-            &inline_spirv::include_spirv!(
+            inline_spirv::include_spirv!(
                 "src/backend/vulkan/builtin/kernels/copy2instances.glsl",
                 comp
             )

@@ -168,7 +168,7 @@ pub fn reduce(
 
     let pipeline = Pipeline::create(
         &device,
-        &GlslShaderDef {
+        GlslShaderDef {
             code: &include_str!("kernels/reduce.glsl"),
             kind: ShaderKind::Compute,
             defines: &[

@@ -55,7 +55,7 @@ pub fn compress_small(
         kind: ShaderKind::Compute,
         defines: &[("WORK_GROUP_SIZE", Some(&work_group_size_str))],
     };
-    let pipeline = Pipeline::create(&device, &def);
+    let pipeline = Pipeline::create(&device, def);
     // let shader = device.get_shader_glsl(
     //     include_str!("kernels/compress_small.glsl"),
     //     ShaderKind::Compute,
@@ -177,7 +177,7 @@ pub fn compress_large(
 
     let compress_large = Pipeline::create(
         &device,
-        &GlslShaderDef {
+        GlslShaderDef {
             code: &include_str!("kernels/compress_large.glsl"),
             kind: ShaderKind::Compute,
             defines: &[

@@ -50,7 +50,7 @@ impl InternalVkDevice {
             entry_point: "main",
             device_info: info,
         };
-        let pipeline = Pipeline::create(&self, &def);
+        let pipeline = Pipeline::create(&self, def);
         pipeline
 
         // self.pipeline_cache

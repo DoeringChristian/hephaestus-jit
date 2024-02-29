@@ -1,10 +1,10 @@
 use std::any::{Any, TypeId};
 // TODO: Unify precompiled and IR Pipeline workflow
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use super::acceleration_structure::AccelerationStructure;
@@ -27,7 +27,7 @@ impl Deref for Pipeline {
 }
 
 impl Pipeline {
-    pub fn create<D: PipelineDef>(device: &Arc<Device>, def: &D) -> Arc<Self> {
+    pub fn create<D: PipelineDef>(device: &Arc<Device>, def: D) -> Arc<Self> {
         let mut hasher = DefaultHasher::new();
         // Any::type_id(def).hash(&mut hasher);
         // TypeId::of::<D>().hash(&mut hasher);
@@ -35,7 +35,7 @@ impl Pipeline {
         let hash = hasher.finish();
 
         let mut cache = device.pipeline_cache.lock().unwrap();
-        let pipeline = cache.entry(hash).or_insert_with(|| {
+        let pipeline = cache.entry(hash).or_insert_with(move || {
             let info = def.generate();
             Arc::new(InternalPipeline::create(device, &info))
         });
@@ -334,10 +334,10 @@ pub struct DescSetLayout {
     pub bindings: Vec<Binding>,
 }
 
-#[derive(Debug, Hash, Clone)]
+#[derive(Debug, Hash)]
 pub struct PipelineInfo {
-    pub code: Rc<[u32]>,
-    pub desc_set_layouts: Rc<[DescSetLayout]>,
+    pub code: Box<[u32]>,
+    pub desc_set_layouts: Box<[DescSetLayout]>,
 }
 impl PipelineInfo {
     pub fn hash(&self) -> u64 {
@@ -347,21 +347,10 @@ impl PipelineInfo {
     }
 }
 pub trait PipelineDef: Hash {
-    fn generate(&self) -> PipelineInfo;
+    fn generate(self) -> PipelineInfo;
 }
 impl PipelineDef for &[u32] {
-    fn generate(&self) -> PipelineInfo {
-        let b = Box::<[u32]>::from(*self);
-        b.generate()
-    }
-}
-impl PipelineDef for PipelineInfo {
-    fn generate(&self) -> PipelineInfo {
-        self.clone()
-    }
-}
-impl PipelineDef for [u32] {
-    fn generate(&self) -> PipelineInfo {
+    fn generate(self) -> PipelineInfo {
         let code: Box<[u32]> = self.into();
         let entry_points = spirq::ReflectConfig::new()
             .ref_all_rscs(true)
@@ -372,6 +361,8 @@ impl PipelineDef for [u32] {
 
         let entry_point = entry_points.into_iter().next().unwrap();
 
+        // Hash set for deduplicating bindings
+        let mut vars = HashMap::new();
         let max_descriptor_sets = entry_point
             .vars
             .iter()
@@ -382,7 +373,10 @@ impl PipelineDef for [u32] {
                     desc_ty,
                     ty,
                     nbind,
-                } => desc_bind.set(),
+                } => {
+                    vars.insert((desc_bind.set(), desc_bind.bind()), var);
+                    desc_bind.set()
+                }
                 _ => todo!(),
             })
             .max()
@@ -411,7 +405,7 @@ impl PipelineDef for [u32] {
             }
         }
 
-        for var in entry_point.vars.iter() {
+        for var in vars.into_values() {
             match var {
                 spirq::var::Variable::Descriptor {
                     name,
