@@ -6,7 +6,7 @@ use vk_sync::AccessType;
 
 use crate::backend::vulkan::builtin::utils::GlslShaderDef;
 // use crate::backend::vulkan::codegen::CodegenDef;
-use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, PipelineDef};
+use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, PipelineDef, ShaderKind};
 use crate::backend::vulkan::{codegen, VulkanDevice};
 use crate::utils::usize;
 use crate::{
@@ -61,7 +61,7 @@ impl PipelineDef for MLPCompileDef {
         };
         let code = GlslShaderDef {
             code: include_str!("kernels/fused_mlp_inference.glsl"),
-            kind: crate::backend::vulkan::shader_cache::ShaderKind::Compute,
+            kind: ShaderKind::Compute,
             defines: &[
                 ("WIDTH", Some(&format!("{width}"))),
                 ("N_ITERS", Some(&format!("{n_iters}"))),

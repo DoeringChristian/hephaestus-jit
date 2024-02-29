@@ -346,6 +346,18 @@ impl PipelineInfo {
         hasher.finish()
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ShaderKind {
+    Compute,
+}
+impl From<ShaderKind> for shaderc::ShaderKind {
+    fn from(value: ShaderKind) -> Self {
+        match value {
+            ShaderKind::Compute => shaderc::ShaderKind::Compute,
+        }
+    }
+}
 pub trait PipelineDef: Hash {
     fn generate(self) -> PipelineInfo;
 }

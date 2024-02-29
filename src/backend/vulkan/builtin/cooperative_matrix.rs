@@ -8,8 +8,7 @@ use crate::backend::vulkan::builtin::utils::{component_type, GlslShaderDef};
 use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
-use crate::backend::vulkan::shader_cache::ShaderKind;
-use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, PipelineDef};
+use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, PipelineDef, ShaderKind};
 use crate::backend::vulkan::{codegen, VulkanDevice};
 use crate::vartype::VarType;
 use crate::{

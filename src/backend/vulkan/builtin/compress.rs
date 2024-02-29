@@ -10,12 +10,12 @@ use super::super::vulkan_core::{
 };
 use super::prefix_sum::prefix_sum_scratch_buffer;
 use super::utils::*;
+use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, ShaderKind};
 use crate::backend::vulkan::VulkanDevice;
 use crate::backend::vulkan::{
     pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet},
     vkdevice::LaunchConfig,
 };
-use crate::backend::vulkan::{shader_cache::ShaderKind, vulkan_core::pipeline::Pipeline};
 use crate::utils;
 
 pub fn compress(

@@ -180,32 +180,6 @@ impl Accel {
             )
             .as_slice(),
         );
-        // let copy2instances = self.device.get_pipeline(&PipelineInfo {
-        //     code: inline_spirv::include_spirv!(
-        //         "src/backend/vulkan/builtin/kernels/copy2instances.glsl",
-        //         comp
-        //     ),
-        //     desc_set_layouts: &[DescSetLayout {
-        //         bindings: &[
-        //             Binding {
-        //                 binding: 0,
-        //                 count: 1,
-        //                 ty: vk::DescriptorType::STORAGE_BUFFER,
-        //             },
-        //             Binding {
-        //                 binding: 1,
-        //                 count: 1,
-        //                 ty: vk::DescriptorType::STORAGE_BUFFER,
-        //             },
-        //             Binding {
-        //                 binding: 2,
-        //                 count: 1,
-        //                 ty: vk::DescriptorType::STORAGE_BUFFER,
-        //             },
-        //         ],
-        //     }],
-        // });
-
         {
             let n_instances = self.info.instances;
             let desc_instance_buffer = desc.instances.clone();

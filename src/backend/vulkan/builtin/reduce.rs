@@ -12,11 +12,12 @@ use super::utils::*;
 use crate::backend::vulkan::{
     pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet},
     vkdevice::LaunchConfig,
+    vulkan_core::pipeline::ShaderKind,
 };
 use crate::backend::vulkan::{vulkan_core::pipeline::Pipeline, VulkanDevice};
+use crate::op::ReduceOp;
 use crate::utils;
 use crate::vartype::VarType;
-use crate::{backend::vulkan::shader_cache::ShaderKind, op::ReduceOp};
 
 pub fn reduce(
     device: &VulkanDevice,

@@ -1,8 +1,7 @@
 use ash::vk;
 
 use crate::backend::vulkan::codegen;
-use crate::backend::vulkan::shader_cache::ShaderKind;
-use crate::backend::vulkan::vulkan_core::pipeline::{self, PipelineDef, PipelineInfo};
+use crate::backend::vulkan::vulkan_core::pipeline::{self, PipelineDef, PipelineInfo, ShaderKind};
 use crate::vartype::VarType;
 
 pub fn glsl_ty(ty: &VarType) -> &'static str {

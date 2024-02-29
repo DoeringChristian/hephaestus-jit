@@ -195,10 +195,3 @@ impl Buffer {
         buffer
     }
 }
-// impl Deref for Buffer {
-//     type Target = InternalBuffer;
-//
-//     fn deref(&self) -> &Self::Target {
-//         &*self.lease
-//     }
-// }

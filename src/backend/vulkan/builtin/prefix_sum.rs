@@ -9,12 +9,12 @@ use super::super::vulkan_core::{
     graph::RGraph,
 };
 use super::utils::*;
+use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, ShaderKind};
 use crate::backend::vulkan::VulkanDevice;
 use crate::backend::vulkan::{
     pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet},
     vkdevice::LaunchConfig,
 };
-use crate::backend::vulkan::{shader_cache::ShaderKind, vulkan_core::pipeline::Pipeline};
 use crate::vartype::VarType;
 
 pub fn prefix_sum(
