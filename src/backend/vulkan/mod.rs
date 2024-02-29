@@ -30,14 +30,7 @@ use self::codegen::{DeviceInfo, IrGlslDef};
 // use self::shader_cache::{ShaderCache, ShaderKind};
 use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, Pipeline, PipelineInfo};
 
-/// TODO: Find better way to chache pipelines
-#[derive(Debug)]
-pub struct InternalVkDevice {
-    device: Arc<Device>,
-    // pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
-    // shader_cache: Mutex<ShaderCache>,
-}
-impl InternalVkDevice {
+impl VulkanDevice {
     fn compile_ir(&self, ir: &IR, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
         let def = IrGlslDef {
             ir,
@@ -48,29 +41,18 @@ impl InternalVkDevice {
         pipeline
     }
 }
-impl std::ops::Deref for InternalVkDevice {
-    type Target = Arc<Device>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.device
-    }
-}
 
 #[derive(Clone, Debug)]
-pub struct VulkanDevice(Arc<InternalVkDevice>);
+pub struct VulkanDevice(Arc<Device>);
 impl VulkanDevice {
     #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
-        Ok(Self(Arc::new(InternalVkDevice {
-            device: Device::create(id).unwrap(),
-            // pipeline_cache: Default::default(),
-            // shader_cache: Default::default(),
-        })))
+        Ok(Self(Device::create(0).unwrap()))
     }
 }
 
 impl std::ops::Deref for VulkanDevice {
-    type Target = InternalVkDevice;
+    type Target = Arc<Device>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -382,9 +364,9 @@ impl backend::BackendDevice for VulkanDevice {
                 | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
             memory_location: MemoryLocation::CpuToGpu,
         };
-        let mut staging = Buffer::create(&self.device, info);
+        let mut staging = Buffer::create(&self, info);
         staging.mapped_slice_mut().copy_from_slice(slice);
-        self.device.submit_global(|device, cb| unsafe {
+        self.submit_global(|device, cb| unsafe {
             let region = vk::BufferCopy {
                 src_offset: 0,
                 dst_offset: 0,

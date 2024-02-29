@@ -167,11 +167,7 @@ pub fn compress_large(
     let block_size = 128;
     let items_per_block = items_per_thread * block_size;
     let block_count = (num + items_per_block - 1) / items_per_block;
-    let warp_size = device
-        .device
-        .physical_device
-        .subgroup_properties
-        .subgroup_size as usize;
+    let warp_size = device.physical_device.subgroup_properties.subgroup_size as usize;
 
     let scratch_items = 1 + warp_size + block_count;
 

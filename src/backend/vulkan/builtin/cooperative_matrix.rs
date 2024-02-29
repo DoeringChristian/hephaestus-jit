@@ -101,14 +101,9 @@ pub fn multiply(
     mat_c: Arc<Buffer>,
     mat_d: Arc<Buffer>,
 ) {
-    let subgroup_size = device
-        .device
-        .physical_device
-        .subgroup_properties
-        .subgroup_size;
+    let subgroup_size = device.physical_device.subgroup_properties.subgroup_size;
 
     let coopmat_type = device
-        .device
         .cooperative_matrix_properties
         .iter()
         .find(|p| {
