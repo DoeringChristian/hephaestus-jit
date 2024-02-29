@@ -22,6 +22,7 @@ pub struct Image {
 }
 
 impl Image {
+    #[profiling::function]
     pub fn create(device: &Arc<Device>, info: ImageInfo) -> Self {
         let lease_info = ImageInfo {
             ty: info.ty,
@@ -55,6 +56,7 @@ pub struct InternalImage {
 impl Resource for InternalImage {
     type Info = ImageInfo;
 
+    #[profiling::function]
     fn create(device: &Device, info: &ImageInfo) -> Self {
         log::trace!("Creating Image with {info:?}");
         let create_info = vk::ImageCreateInfo {

@@ -11,6 +11,24 @@ use crate::utils;
 use super::device::{self, Device};
 use super::pool::{Lease, Resource};
 
+// impl Device {
+//     #[profiling::function]
+//     pub fn create_buffer(self: &Arc<Device>, info: BufferInfo) -> Buffer {
+//         let lease_info = BufferInfo {
+//             size: utils::usize::align_up(info.size, 2),
+//             alignment: info.alignment,
+//             usage: info.usage,
+//             memory_location: info.memory_location,
+//         };
+//         let lease = self.buffer_pool.lease(self, &lease_info);
+//         Buffer {
+//             device: self.clone(),
+//             lease,
+//             info,
+//         }
+//     }
+// }
+
 pub struct Buffer {
     device: Arc<Device>,
     lease: Lease<InternalBuffer>,
@@ -23,7 +41,7 @@ impl Debug for Buffer {
 }
 
 #[derive(Debug)]
-pub(super) struct InternalBuffer {
+pub struct InternalBuffer {
     allocation: Option<Allocation>,
     buffer: vk::Buffer,
 }
@@ -48,8 +66,9 @@ impl Default for BufferInfo {
 impl Resource for InternalBuffer {
     type Info = BufferInfo;
 
+    #[profiling::function]
     fn create(device: &Device, info: &Self::Info) -> Self {
-        let device = device.clone();
+        let device = device;
         let queue_family_indices = [device.physical_device.queue_family_index];
         let buffer_info = vk::BufferCreateInfo::default()
             .size(info.size as _)
@@ -103,23 +122,6 @@ impl Resource for InternalBuffer {
 
         unsafe {
             device.destroy_buffer(self.buffer, None);
-        }
-    }
-}
-
-impl Device {
-    pub fn create_buffer_type<T: Sized>(self: &Arc<Self>, info: BufferInfo) -> Buffer {
-        let lease_info = BufferInfo {
-            size: utils::usize::align_up(info.size, 2),
-            alignment: info.alignment.max(std::mem::align_of::<T>()),
-            usage: info.usage,
-            memory_location: info.memory_location,
-        };
-        let lease = self.buffer_pool.lease(self, &lease_info);
-        Buffer {
-            device: self.clone(),
-            lease,
-            info,
         }
     }
 }

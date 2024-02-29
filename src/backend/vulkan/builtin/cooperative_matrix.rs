@@ -85,41 +85,6 @@ impl<'a> PipelineDef for CoopMMADef<'a> {
         }
     }
 }
-// impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
-//     fn generate(&self) -> Vec<u32> {
-//         let CoopMMADef {
-//             lM,
-//             lN,
-//             lK,
-//             TILE_M,
-//             TILE_N,
-//             TILE_K,
-//             a_bits,
-//             a_type,
-//             c_bits,
-//             c_type,
-//             subgroup_size,
-//         } = self;
-//         GlslShaderDef {
-//             code: include_str!("kernels/cooperative_matrix_sh.glsl"),
-//             kind: ShaderKind::Compute,
-//             defines: &[
-//                 ("lM", Some(&format!("{lM}"))),
-//                 ("lN", Some(&format!("{lN}"))),
-//                 ("lK", Some(&format!("{lK}"))),
-//                 ("TILE_M", Some(&format!("{TILE_M}"))),
-//                 ("TILE_N", Some(&format!("{TILE_N}"))),
-//                 ("TILE_K", Some(&format!("{TILE_K}"))),
-//                 ("A_TYPE", Some(&format!("{a_type}"))),
-//                 ("A_BITS", Some(&format!("{a_bits}"))),
-//                 ("C_TYPE", Some(&format!("{c_type}"))),
-//                 ("C_BITS", Some(&format!("{c_bits}"))),
-//                 ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
-//             ],
-//         }
-//         .generate()
-//     }
-// }
 
 #[allow(non_snake_case)]
 pub fn multiply(

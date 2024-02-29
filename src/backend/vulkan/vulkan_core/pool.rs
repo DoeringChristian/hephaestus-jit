@@ -54,12 +54,10 @@ impl<R: Resource> ResourcePool<R> {
         let cache = resources
             .entry(info.clone())
             .or_insert(Arc::new(Mutex::new(Vec::with_capacity(1))));
-        let resource = cache
-            .lock()
-            .unwrap()
-            .pop()
-            .map(|r| r)
-            .unwrap_or_else(|| R::create(device, &info));
+        let resource = cache.lock().unwrap().pop().map(|r| r).unwrap_or_else(|| {
+            log::trace!("Resource cache miss!");
+            R::create(device, &info)
+        });
 
         Lease {
             resource: Some(resource),
