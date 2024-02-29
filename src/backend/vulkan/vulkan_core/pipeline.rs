@@ -38,9 +38,9 @@ impl Drop for Pipeline {
 }
 
 impl Pipeline {
-    pub fn create<'a>(device: &Arc<Device>, info: &PipelineInfo<'a>) -> Self {
+    pub fn create<'a>(device: &Arc<Device>, info: &PipelineInfo) -> Self {
         unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::default().code(info.code);
+            let shader_info = vk::ShaderModuleCreateInfo::default().code(&info.code);
             let shader = device.create_shader_module(&shader_info, None).unwrap();
 
             // Create Descriptor Pool
@@ -290,21 +290,97 @@ pub struct Binding {
     pub ty: vk::DescriptorType,
 }
 
-#[derive(Debug, Clone, Copy, Hash)]
-pub struct DescSetLayout<'a> {
-    pub bindings: &'a [Binding],
+#[derive(Debug, Hash, Default)]
+pub struct DescSetLayout {
+    pub bindings: Vec<Binding>,
 }
 
-#[derive(Debug, Clone, Copy, Hash)]
-pub struct PipelineInfo<'a> {
-    pub code: &'a [u32],
-    pub desc_set_layouts: &'a [DescSetLayout<'a>],
+#[derive(Debug, Hash)]
+pub struct PipelineInfo {
+    pub code: Box<[u32]>,
+    pub desc_set_layouts: Box<[DescSetLayout]>,
 }
-impl<'a> PipelineInfo<'a> {
+impl PipelineInfo {
     pub fn hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         <Self as Hash>::hash(self, &mut hasher);
         hasher.finish()
+    }
+}
+pub trait PipelineDefinition: Hash {
+    fn generate(self) -> PipelineInfo;
+}
+impl PipelineDefinition for Box<[u32]> {
+    fn generate(self) -> PipelineInfo {
+        let entry_points = spirq::ReflectConfig::new()
+            .ref_all_rscs(true)
+            .spv(&*self)
+            .reflect()
+            .unwrap();
+        assert_eq!(entry_points.len(), 1);
+
+        let entry_point = entry_points[0];
+
+        let max_descriptor_sets = entry_point
+            .vars
+            .iter()
+            .map(|var| match var {
+                spirq::var::Variable::Descriptor {
+                    name,
+                    desc_bind,
+                    desc_ty,
+                    ty,
+                    nbind,
+                } => desc_bind.set(),
+                _ => todo!(),
+            })
+            .max()
+            .unwrap();
+
+        let mut descriptor_sets = (0..max_descriptor_sets)
+            .map(|_| DescSetLayout::default())
+            .collect::<Box<[_]>>();
+
+        fn binding(binding: u32, count: u32, desc_ty: &spirq::ty::DescriptorType) -> Binding {
+            Binding {
+                binding,
+                count,
+                ty: match desc_ty {
+                    spirq::ty::DescriptorType::CombinedImageSampler() => {
+                        vk::DescriptorType::COMBINED_IMAGE_SAMPLER
+                    }
+                    spirq::ty::DescriptorType::StorageBuffer(_) => {
+                        vk::DescriptorType::STORAGE_BUFFER
+                    }
+                    spirq::ty::DescriptorType::AccelStruct() => {
+                        vk::DescriptorType::ACCELERATION_STRUCTURE_KHR
+                    }
+                    _ => todo!(),
+                },
+            }
+        }
+
+        for var in entry_point.vars.iter() {
+            match var {
+                spirq::var::Variable::Descriptor {
+                    name,
+                    desc_bind,
+                    desc_ty,
+                    ty,
+                    nbind,
+                } => {
+                    descriptor_sets[desc_bind.set() as usize]
+                        .bindings
+                        .push(binding(desc_bind.bind(), *nbind, &desc_ty));
+                }
+                _ => todo!(),
+            }
+        }
+
+        PipelineInfo {
+            code: self,
+            desc_set_layouts: descriptor_sets,
+        }
     }
 }
 

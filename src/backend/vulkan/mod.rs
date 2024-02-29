@@ -79,7 +79,7 @@ impl InternalVkDevice {
             })
             .clone()
     }
-    fn get_pipeline<'a>(&'a self, desc: &PipelineInfo<'a>) -> Arc<pipeline::Pipeline> {
+    fn get_pipeline<'a>(&'a self, desc: &PipelineInfo) -> Arc<pipeline::Pipeline> {
         self.pipeline_cache
             .lock()
             .unwrap()
