@@ -105,7 +105,7 @@ impl backend::BackendDevice for VulkanDevice {
         use crate::graph::PassOp;
         let mut rgraph = RGraph::new();
 
-        for (i, pass) in graph.passes.iter().enumerate() {
+        for (i, pass) in graph.passes().iter().enumerate() {
             let to_buffer = |id: crate::graph::ResourceId| {
                 env.buffer(id)
                     .and_then(|buffer| Some(buffer.vulkan()?.buffer.clone()))

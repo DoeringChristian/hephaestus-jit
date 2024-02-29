@@ -126,13 +126,16 @@ impl Env {
 
 #[derive(Debug)]
 pub struct Graph {
-    pub passes: Vec<Pass>,
-    pub resource_descs: Vec<ResourceDesc>,
-    pub resources: Vec<GraphResource>,
-    pub n_outputs: usize,
+    passes: Vec<Pass>,
+    resource_descs: Vec<ResourceDesc>,
+    resources: Vec<GraphResource>,
+    n_outputs: usize,
 }
 
 impl Graph {
+    pub fn passes(&self) -> &[Pass] {
+        &self.passes
+    }
     pub fn buffer_desc(&self, id: ResourceId) -> &BufferDesc {
         match &self.resource_descs[id.0] {
             ResourceDesc::BufferDesc(desc) => desc,
