@@ -8,6 +8,7 @@ use super::vulkan_core::device::Device;
 use super::vulkan_core::graph::RGraph;
 use super::{vulkan_core::acceleration_structure::*, VulkanDevice};
 
+use crate::backend::vulkan::vulkan_core::pipeline::Pipeline;
 use crate::backend::vulkan::vulkan_core::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
@@ -171,31 +172,39 @@ impl Accel {
             .copy_from_slice(bytemuck::cast_slice(&references));
         let references_buffer = Arc::new(references_buffer);
 
-        let copy2instances = self.device.get_pipeline(&PipelineInfo {
-            code: inline_spirv::include_spirv!(
+        let copy2instances = Pipeline::create(
+            &self.device,
+            &inline_spirv::include_spirv!(
                 "src/backend/vulkan/builtin/kernels/copy2instances.glsl",
                 comp
-            ),
-            desc_set_layouts: &[DescSetLayout {
-                bindings: &[
-                    Binding {
-                        binding: 0,
-                        count: 1,
-                        ty: vk::DescriptorType::STORAGE_BUFFER,
-                    },
-                    Binding {
-                        binding: 1,
-                        count: 1,
-                        ty: vk::DescriptorType::STORAGE_BUFFER,
-                    },
-                    Binding {
-                        binding: 2,
-                        count: 1,
-                        ty: vk::DescriptorType::STORAGE_BUFFER,
-                    },
-                ],
-            }],
-        });
+            )
+            .as_slice(),
+        );
+        // let copy2instances = self.device.get_pipeline(&PipelineInfo {
+        //     code: inline_spirv::include_spirv!(
+        //         "src/backend/vulkan/builtin/kernels/copy2instances.glsl",
+        //         comp
+        //     ),
+        //     desc_set_layouts: &[DescSetLayout {
+        //         bindings: &[
+        //             Binding {
+        //                 binding: 0,
+        //                 count: 1,
+        //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+        //             },
+        //             Binding {
+        //                 binding: 1,
+        //                 count: 1,
+        //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+        //             },
+        //             Binding {
+        //                 binding: 2,
+        //                 count: 1,
+        //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+        //             },
+        //         ],
+        //     }],
+        // });
 
         {
             let n_instances = self.info.instances;

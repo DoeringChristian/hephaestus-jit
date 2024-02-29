@@ -10,12 +10,12 @@ use super::super::vulkan_core::{
 };
 use super::prefix_sum::prefix_sum_scratch_buffer;
 use super::utils::*;
-use crate::backend::vulkan::shader_cache::ShaderKind;
 use crate::backend::vulkan::VulkanDevice;
 use crate::backend::vulkan::{
     pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet},
     vkdevice::LaunchConfig,
 };
+use crate::backend::vulkan::{shader_cache::ShaderKind, vulkan_core::pipeline::Pipeline};
 use crate::utils;
 
 pub fn compress(
@@ -49,11 +49,18 @@ pub fn compress_small(
     const ITEMS_PER_THREAD: u32 = 4;
     let thread_count = utils::u32::round_pow2((num + ITEMS_PER_THREAD - 1) / ITEMS_PER_THREAD);
 
-    let shader = device.get_shader_glsl(
-        include_str!("kernels/compress_small.glsl"),
-        ShaderKind::Compute,
-        &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
-    );
+    let work_group_size_str = format!("{thread_count}");
+    let def = GlslShaderDef {
+        code: &include_str!("kernels/compress_small.glsl"),
+        kind: ShaderKind::Compute,
+        defines: &[("WORK_GROUP_SIZE", Some(&work_group_size_str))],
+    };
+    let pipeline = Pipeline::create(&device, &def);
+    // let shader = device.get_shader_glsl(
+    //     include_str!("kernels/compress_small.glsl"),
+    //     ShaderKind::Compute,
+    //     &[("WORK_GROUP_SIZE", Some(&format!("{thread_count}")))],
+    // );
 
     // TODO: in the end we might get the size buffer as an argument when suporting dynamic
     // indices
@@ -73,33 +80,33 @@ pub fn compress_small(
         .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
     let size_buffer = Arc::new(size_buffer);
 
-    let pipeline = device.get_pipeline(&PipelineInfo {
-        code: &shader,
-        desc_set_layouts: &[DescSetLayout {
-            bindings: &[
-                Binding {
-                    binding: 0,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
-                Binding {
-                    binding: 1,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
-                Binding {
-                    binding: 2,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
-                Binding {
-                    binding: 3,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
-            ],
-        }],
-    });
+    // let pipeline = device.get_pipeline(&PipelineInfo {
+    //     code: &shader,
+    //     desc_set_layouts: &[DescSetLayout {
+    //         bindings: &[
+    //             Binding {
+    //                 binding: 0,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //             Binding {
+    //                 binding: 1,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //             Binding {
+    //                 binding: 2,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //             Binding {
+    //                 binding: 3,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //         ],
+    //     }],
+    // });
 
     log::trace!("Counting {num} elements with count_small");
     {
@@ -168,27 +175,39 @@ pub fn compress_large(
 
     let scratch_items = 1 + warp_size + block_count;
 
-    let compress_large = device.get_shader_glsl(
-        include_str!("kernels/compress_large.glsl"),
-        ShaderKind::Compute,
-        &[
-            ("WORK_GROUP_SIZE", Some(&format!("{block_size}"))),
-            ("INIT", Some("")),
-        ],
+    let compress_large = Pipeline::create(
+        &device,
+        &GlslShaderDef {
+            code: &include_str!("kernels/compress_large.glsl"),
+            kind: ShaderKind::Compute,
+            defines: &[
+                ("WORK_GROUP_SIZE", Some(&format!("{block_size}"))),
+                ("INIT", Some("")),
+            ],
+        },
     );
-    let compress_large = device.get_pipeline(&PipelineInfo {
-        code: &compress_large,
-        desc_set_layouts: &[DescSetLayout {
-            bindings: &(0..5)
-                .map(|i| Binding {
-                    binding: i,
-                    count: 1,
 
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                })
-                .collect::<Vec<_>>(),
-        }],
-    });
+    // let compress_large = device.get_shader_glsl(
+    //     include_str!("kernels/compress_large.glsl"),
+    //     ShaderKind::Compute,
+    //     &[
+    //         ("WORK_GROUP_SIZE", Some(&format!("{block_size}"))),
+    //         ("INIT", Some("")),
+    //     ],
+    // );
+    // let compress_large = device.get_pipeline(&PipelineInfo {
+    //     code: &compress_large,
+    //     desc_set_layouts: &[DescSetLayout {
+    //         bindings: &(0..5)
+    //             .map(|i| Binding {
+    //                 binding: i,
+    //                 count: 1,
+    //
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             })
+    //             .collect::<Vec<_>>(),
+    //     }],
+    // });
 
     let size_buffer = size_buffer.unwrap_or_else(|| {
         let mut size_buffer = Buffer::create(

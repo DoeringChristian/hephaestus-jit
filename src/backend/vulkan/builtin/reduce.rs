@@ -9,11 +9,11 @@ use super::super::vulkan_core::{
     graph::RGraph,
 };
 use super::utils::*;
-use crate::backend::vulkan::VulkanDevice;
 use crate::backend::vulkan::{
     pipeline::{Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet},
     vkdevice::LaunchConfig,
 };
+use crate::backend::vulkan::{vulkan_core::pipeline::Pipeline, VulkanDevice};
 use crate::utils;
 use crate::vartype::VarType;
 use crate::{backend::vulkan::shader_cache::ShaderKind, op::ReduceOp};
@@ -166,39 +166,53 @@ pub fn reduce(
 
     let ty = glsl_ty(ty);
 
-    let shader = device.get_shader_glsl(
-        include_str!("kernels/reduce.glsl"),
-        ShaderKind::Compute,
-        &[
-            ("REDUCE", Some(reduction)),
-            ("INIT", Some(init)),
-            ("TYPE", Some(ty)),
-            ("WORK_GROUP_SIZE", Some("32")),
-        ],
-    );
-    let pipeline = device.get_pipeline(&PipelineInfo {
-        code: &shader,
-        desc_set_layouts: &[DescSetLayout {
-            bindings: &[
-                Binding {
-                    binding: 0,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
-                Binding {
-                    binding: 1,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
-                Binding {
-                    binding: 2,
-                    count: 1,
-
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                },
+    let pipeline = Pipeline::create(
+        &device,
+        &GlslShaderDef {
+            code: &include_str!("kernels/reduce.glsl"),
+            kind: ShaderKind::Compute,
+            defines: &[
+                ("REDUCE", Some(reduction)),
+                ("INIT", Some(init)),
+                ("TYPE", Some(ty)),
+                ("WORK_GROUP_SIZE", Some("32")),
             ],
-        }],
-    });
+        },
+    );
+
+    // let shader = device.get_shader_glsl(
+    //     include_str!("kernels/reduce.glsl"),
+    //     ShaderKind::Compute,
+    //     &[
+    //         ("REDUCE", Some(reduction)),
+    //         ("INIT", Some(init)),
+    //         ("TYPE", Some(ty)),
+    //         ("WORK_GROUP_SIZE", Some("32")),
+    //     ],
+    // );
+    // let pipeline = device.get_pipeline(&PipelineInfo {
+    //     code: &shader,
+    //     desc_set_layouts: &[DescSetLayout {
+    //         bindings: &[
+    //             Binding {
+    //                 binding: 0,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //             Binding {
+    //                 binding: 1,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //             Binding {
+    //                 binding: 2,
+    //                 count: 1,
+    //
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             },
+    //         ],
+    //     }],
+    // });
     log::trace!("Created templated pipeline.");
 
     {

@@ -27,80 +27,88 @@ use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
 
-use self::codegen::DeviceInfo;
-use self::shader_cache::{ShaderCache, ShaderKind};
-use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, PipelineInfo};
+use self::codegen::{DeviceInfo, IrGlslDef};
+// use self::shader_cache::{ShaderCache, ShaderKind};
+use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, Pipeline, PipelineInfo};
 
 /// TODO: Find better way to chache pipelines
 #[derive(Debug)]
 pub struct InternalVkDevice {
     device: Arc<Device>,
-    pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
-    shader_cache: Mutex<ShaderCache>,
+    // pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
+    // shader_cache: Mutex<ShaderCache>,
 }
 impl InternalVkDevice {
     fn compile_ir(&self, ir: &IR, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
-        let mut hasher = DefaultHasher::new();
-        ir.internal_hash().hash(&mut hasher);
-        info.hash(&mut hasher);
-        let hash = hasher.finish();
+        // let mut hasher = DefaultHasher::new();
+        // ir.internal_hash().hash(&mut hasher);
+        // info.hash(&mut hasher);
+        // let hash = hasher.finish();
 
-        self.pipeline_cache
-            .lock()
-            .unwrap()
-            .entry(hash)
-            .or_insert_with(|| {
-                let layouts = [DescSetLayout {
-                    bindings: &[
-                        Binding {
-                            binding: 0,
-                            count: ir.n_buffers as u32 + 1,
-                            ty: vk::DescriptorType::STORAGE_BUFFER,
-                        },
-                        Binding {
-                            binding: 1,
-                            count: ir.n_textures as u32,
-                            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                        },
-                        Binding {
-                            binding: 2,
-                            count: ir.n_accels as u32,
-                            ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
-                        },
-                    ],
-                }];
-                let code = codegen::assemble_trace(ir, info, "main");
-                let info = PipelineInfo {
-                    code: &code,
-                    desc_set_layouts: &layouts,
-                };
-                let pipeline = Arc::new(pipeline::Pipeline::create(&self.device, &info));
-                pipeline
-            })
-            .clone()
+        let def = IrGlslDef {
+            ir,
+            entry_point: "main",
+            device_info: info,
+        };
+        let pipeline = Pipeline::create(&self, &def);
+        pipeline
+
+        // self.pipeline_cache
+        //     .lock()
+        //     .unwrap()
+        //     .entry(hash)
+        //     .or_insert_with(|| {
+        //         let layouts = [DescSetLayout {
+        //             bindings: &[
+        //                 Binding {
+        //                     binding: 0,
+        //                     count: ir.n_buffers as u32 + 1,
+        //                     ty: vk::DescriptorType::STORAGE_BUFFER,
+        //                 },
+        //                 Binding {
+        //                     binding: 1,
+        //                     count: ir.n_textures as u32,
+        //                     ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        //                 },
+        //                 Binding {
+        //                     binding: 2,
+        //                     count: ir.n_accels as u32,
+        //                     ty: vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+        //                 },
+        //             ],
+        //         }];
+        //         let code = codegen::assemble_trace(ir, info, "main");
+        //         let info = PipelineInfo {
+        //             code: &code,
+        //             desc_set_layouts: &layouts,
+        //         };
+        //         let pipeline = Arc::new(pipeline::Pipeline::create(&self.device, &info));
+        //         pipeline
+        //     })
+        //     .clone()
     }
-    fn get_pipeline<'a>(&'a self, desc: &PipelineInfo) -> Arc<pipeline::Pipeline> {
-        self.pipeline_cache
-            .lock()
-            .unwrap()
-            .entry(desc.hash())
-            .or_insert_with(|| Arc::new(pipeline::Pipeline::create(&self.device, desc)))
-            .clone()
-    }
-    fn get_shader<I: codegen::CodegenDef + 'static>(&self, input: &I) -> Arc<Vec<u32>> {
-        self.shader_cache.lock().unwrap().get(input)
-    }
-    fn get_shader_glsl(
-        &self,
-        src: &str,
-        kind: ShaderKind,
-        defines: &[(&str, Option<&str>)],
-    ) -> Arc<Vec<u32>> {
-        self.shader_cache
-            .lock()
-            .unwrap()
-            .lease_glsl(src, kind, defines)
-    }
+    // fn get_pipeline<'a>(&'a self, desc: &PipelineInfo) -> Arc<pipeline::Pipeline> {
+    //     self.pipeline_cache
+    //         .lock()
+    //         .unwrap()
+    //         .entry(desc.hash())
+    //         .or_insert_with(|| Arc::new(pipeline::Pipeline::create(&self.device, desc)))
+    //         .clone()
+    // }
+    // fn get_shader<I: codegen::CodegenDef + 'static>(&self, input: &I) -> Arc<Vec<u32>> {
+    //     self.shader_cache.lock().unwrap().get(input)
+    // }
+    // fn get_shader_glsl(
+    //     &self,
+    //     src: &str,
+    //     kind: ShaderKind,
+    //     defines: &[(&str, Option<&str>)],
+    // ) -> Arc<Vec<u32>> {
+    //     self.shader_cache
+    //         .lock()
+    //         .unwrap()
+    //         .lease_glsl(src, kind, defines)
+    // }
 }
 impl std::ops::Deref for InternalVkDevice {
     type Target = Arc<Device>;
@@ -117,8 +125,8 @@ impl VulkanDevice {
     pub fn create(id: usize) -> backend::Result<Self> {
         Ok(Self(Arc::new(InternalVkDevice {
             device: Device::create(id).unwrap(),
-            pipeline_cache: Default::default(),
-            shader_cache: Default::default(),
+            // pipeline_cache: Default::default(),
+            // shader_cache: Default::default(),
         })))
     }
 }

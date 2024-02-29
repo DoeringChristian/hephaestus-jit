@@ -9,6 +9,7 @@ use crate::backend::vulkan::pipeline::{
     Binding, BufferWriteInfo, DescSetLayout, PipelineInfo, WriteSet,
 };
 use crate::backend::vulkan::shader_cache::ShaderKind;
+use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, PipelineDef};
 use crate::backend::vulkan::{codegen, VulkanDevice};
 use crate::vartype::VarType;
 use crate::{
@@ -36,8 +37,8 @@ struct CoopMMADef<'a> {
     c_type: &'a str,
     subgroup_size: u32,
 }
-impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
-    fn generate(&self) -> Vec<u32> {
+impl<'a> PipelineDef for CoopMMADef<'a> {
+    fn generate(&self) -> PipelineInfo {
         let CoopMMADef {
             lM,
             lN,
@@ -51,7 +52,7 @@ impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
             c_type,
             subgroup_size,
         } = self;
-        GlslShaderDef {
+        (&GlslShaderDef {
             code: include_str!("kernels/cooperative_matrix_sh.glsl"),
             kind: ShaderKind::Compute,
             defines: &[
@@ -67,10 +68,45 @@ impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
                 ("C_BITS", Some(&format!("{c_bits}"))),
                 ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
             ],
-        }
-        .generate()
+        })
+            .generate()
     }
 }
+// impl<'a> codegen::CodegenDef for CoopMMADef<'a> {
+//     fn generate(&self) -> Vec<u32> {
+//         let CoopMMADef {
+//             lM,
+//             lN,
+//             lK,
+//             TILE_M,
+//             TILE_N,
+//             TILE_K,
+//             a_bits,
+//             a_type,
+//             c_bits,
+//             c_type,
+//             subgroup_size,
+//         } = self;
+//         GlslShaderDef {
+//             code: include_str!("kernels/cooperative_matrix_sh.glsl"),
+//             kind: ShaderKind::Compute,
+//             defines: &[
+//                 ("lM", Some(&format!("{lM}"))),
+//                 ("lN", Some(&format!("{lN}"))),
+//                 ("lK", Some(&format!("{lK}"))),
+//                 ("TILE_M", Some(&format!("{TILE_M}"))),
+//                 ("TILE_N", Some(&format!("{TILE_N}"))),
+//                 ("TILE_K", Some(&format!("{TILE_K}"))),
+//                 ("A_TYPE", Some(&format!("{a_type}"))),
+//                 ("A_BITS", Some(&format!("{a_bits}"))),
+//                 ("C_TYPE", Some(&format!("{c_type}"))),
+//                 ("C_BITS", Some(&format!("{c_bits}"))),
+//                 ("SUBGROUP_SIZE", Some(&format!("{subgroup_size}"))),
+//             ],
+//         }
+//         .generate()
+//     }
+// }
 
 #[allow(non_snake_case)]
 pub fn multiply(
@@ -129,32 +165,49 @@ pub fn multiply(
     log::trace!("Using cooperative matrix type: {coopmat_type:#?}");
     log::trace!("Dispatch: ( {dispatch_x}, {dispatch_y}, 1 )");
 
-    let code = device.get_shader(&CoopMMADef {
-        lM,
-        lN,
-        lK,
-        TILE_M,
-        TILE_N,
-        TILE_K,
-        a_bits,
-        a_type,
-        c_bits,
-        c_type,
-        subgroup_size,
-    });
+    let pipeline = Pipeline::create(
+        &device,
+        &CoopMMADef {
+            lM,
+            lN,
+            lK,
+            TILE_M,
+            TILE_N,
+            TILE_K,
+            a_bits,
+            a_type,
+            c_bits,
+            c_type,
+            subgroup_size,
+        },
+    );
 
-    let pipeline = device.get_pipeline(&PipelineInfo {
-        code: &code,
-        desc_set_layouts: &[DescSetLayout {
-            bindings: &(0..5)
-                .map(|i| Binding {
-                    binding: i,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                })
-                .collect::<Vec<_>>(),
-        }],
-    });
+    // let code = device.get_shader(&CoopMMADef {
+    //     lM,
+    //     lN,
+    //     lK,
+    //     TILE_M,
+    //     TILE_N,
+    //     TILE_K,
+    //     a_bits,
+    //     a_type,
+    //     c_bits,
+    //     c_type,
+    //     subgroup_size,
+    // });
+
+    // let pipeline = device.get_pipeline(&PipelineInfo {
+    //     code: &code,
+    //     desc_set_layouts: &[DescSetLayout {
+    //         bindings: &(0..5)
+    //             .map(|i| Binding {
+    //                 binding: i,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             })
+    //             .collect::<Vec<_>>(),
+    //     }],
+    // });
 
     let config_buffer = config.unwrap_or_else(|| {
         let mut config_buffer = Buffer::create(

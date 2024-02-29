@@ -5,7 +5,8 @@ use gpu_allocator::MemoryLocation;
 use vk_sync::AccessType;
 
 use crate::backend::vulkan::builtin::utils::GlslShaderDef;
-use crate::backend::vulkan::codegen::CodegenDef;
+// use crate::backend::vulkan::codegen::CodegenDef;
+use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, PipelineDef};
 use crate::backend::vulkan::{codegen, VulkanDevice};
 use crate::utils::usize;
 use crate::{
@@ -41,8 +42,8 @@ pub struct MLPCompileDef {
 
     hidden_mat: u32,
 }
-impl codegen::CodegenDef for MLPCompileDef {
-    fn generate(&self) -> Vec<u32> {
+impl PipelineDef for MLPCompileDef {
+    fn generate(&self) -> PipelineInfo {
         let MLPCompileDef {
             width,
             n_iters,
@@ -58,7 +59,7 @@ impl codegen::CodegenDef for MLPCompileDef {
         let activation = match activation {
             Activation::ReLU => "RELU",
         };
-        GlslShaderDef {
+        (&GlslShaderDef {
             code: include_str!("kernels/fused_mlp_inference.glsl"),
             kind: crate::backend::vulkan::shader_cache::ShaderKind::Compute,
             defines: &[
@@ -74,10 +75,47 @@ impl codegen::CodegenDef for MLPCompileDef {
                 ("OUTPUT_LAYOUT", Some(&format!("{output_layout}"))),
                 ("HIDDEN_MAT", Some(&format!("{hidden_mat}"))),
             ],
-        }
-        .generate()
+        })
+            .generate()
     }
 }
+// impl codegen::CodegenDef for MLPCompileDef {
+//     fn generate(&self) -> Vec<u32> {
+//         let MLPCompileDef {
+//             width,
+//             n_iters,
+//             activation,
+//             inference,
+//             in_width,
+//             out_width,
+//             input_layout,
+//             output_layout,
+//             hidden_mat,
+//         } = self;
+//
+//         let activation = match activation {
+//             Activation::ReLU => "RELU",
+//         };
+//         GlslShaderDef {
+//             code: include_str!("kernels/fused_mlp_inference.glsl"),
+//             kind: crate::backend::vulkan::shader_cache::ShaderKind::Compute,
+//             defines: &[
+//                 ("WIDTH", Some(&format!("{width}"))),
+//                 ("N_ITERS", Some(&format!("{n_iters}"))),
+//                 ("INFERENCE", Some(&format!("{inference}"))),
+//                 ("OUT_T", Some("float16_t")),
+//                 ("ACTIVATION", Some(activation)),
+//                 ("A_BITS", Some("16")),
+//                 ("IN_WIDTH", Some(&format!("{in_width}"))),
+//                 ("OUT_WIDTH", Some(&format!("{out_width}"))),
+//                 ("INPUT_LAYOUT", Some(&format!("{input_layout}"))),
+//                 ("OUTPUT_LAYOUT", Some(&format!("{output_layout}"))),
+//                 ("HIDDEN_MAT", Some(&format!("{hidden_mat}"))),
+//             ],
+//         }
+//         .generate()
+//     }
+// }
 
 pub fn mlp_inference(
     device: &VulkanDevice,
@@ -115,30 +153,44 @@ pub fn mlp_inference(
 
     let blocks = (n_blocks as u32, 1, 1);
 
-    let code = device.get_shader(&MLPCompileDef {
-        width: width as _,
-        n_iters: n_iters as _,
-        activation: Activation::ReLU,
-        inference: true,
-        in_width: in_width as _,
-        out_width: out_width as _,
-        input_layout: 0,
-        output_layout: 0,
-        hidden_mat: (hidden_layers - 1) as _,
-    });
-
-    let pipeline = device.get_pipeline(&PipelineInfo {
-        code: &code,
-        desc_set_layouts: &[DescSetLayout {
-            bindings: &(0..=4)
-                .map(|i| Binding {
-                    binding: i,
-                    count: 1,
-                    ty: vk::DescriptorType::STORAGE_BUFFER,
-                })
-                .collect::<Vec<_>>(),
-        }],
-    });
+    let pipeline = Pipeline::create(
+        &device,
+        &MLPCompileDef {
+            width: width as _,
+            n_iters: n_iters as _,
+            activation: Activation::ReLU,
+            inference: true,
+            in_width: in_width as _,
+            out_width: out_width as _,
+            input_layout: 0,
+            output_layout: 0,
+            hidden_mat: (hidden_layers - 1) as _,
+        },
+    );
+    // let code = device.get_shader(&MLPCompileDef {
+    //     width: width as _,
+    //     n_iters: n_iters as _,
+    //     activation: Activation::ReLU,
+    //     inference: true,
+    //     in_width: in_width as _,
+    //     out_width: out_width as _,
+    //     input_layout: 0,
+    //     output_layout: 0,
+    //     hidden_mat: (hidden_layers - 1) as _,
+    // });
+    //
+    // let pipeline = device.get_pipeline(&PipelineInfo {
+    //     code: &code,
+    //     desc_set_layouts: &[DescSetLayout {
+    //         bindings: &(0..=4)
+    //             .map(|i| Binding {
+    //                 binding: i,
+    //                 count: 1,
+    //                 ty: vk::DescriptorType::STORAGE_BUFFER,
+    //             })
+    //             .collect::<Vec<_>>(),
+    //     }],
+    // });
 
     let config_buffer = config.unwrap_or_else(|| {
         let mut config_buffer = Buffer::create(

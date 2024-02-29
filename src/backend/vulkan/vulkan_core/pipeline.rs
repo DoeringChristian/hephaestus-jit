@@ -1,9 +1,10 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 // TODO: Unify precompiled and IR Pipeline workflow
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::acceleration_structure::AccelerationStructure;
@@ -26,21 +27,22 @@ impl Deref for Pipeline {
 }
 
 impl Pipeline {
-    pub fn create<D: Into<PipelineInfo> + Hash>(device: &Arc<Device>, def: D) -> Self {
+    pub fn create<D: PipelineDef>(device: &Arc<Device>, def: &D) -> Arc<Self> {
         let mut hasher = DefaultHasher::new();
-        TypeId::of::<D>().hash(&mut hasher);
+        // Any::type_id(def).hash(&mut hasher);
+        // TypeId::of::<D>().hash(&mut hasher);
         def.hash(&mut hasher);
         let hash = hasher.finish();
 
         let mut cache = device.pipeline_cache.lock().unwrap();
         let pipeline = cache.entry(hash).or_insert_with(|| {
-            let info = def.into();
+            let info = def.generate();
             Arc::new(InternalPipeline::create(device, &info))
         });
-        Self {
+        Arc::new(Self {
             device: device.clone(),
             pipeline: pipeline.clone(),
-        }
+        })
     }
     pub fn vk(&self) -> vk::Pipeline {
         self.pipeline.pipeline
@@ -308,6 +310,16 @@ impl InternalPipeline {
             }
         }
     }
+    pub fn destroy(&mut self, device: &Device) {
+        unsafe {
+            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_pipeline(self.pipeline, None);
+            // self.device.destroy_descriptor_pool(self.desc_pool, None);
+            for desc_set_layout in self.desc_set_layouts.iter() {
+                device.destroy_descriptor_set_layout(*desc_set_layout, None);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
@@ -322,10 +334,10 @@ pub struct DescSetLayout {
     pub bindings: Vec<Binding>,
 }
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Hash, Clone)]
 pub struct PipelineInfo {
-    pub code: Box<[u32]>,
-    pub desc_set_layouts: Box<[DescSetLayout]>,
+    pub code: Rc<[u32]>,
+    pub desc_set_layouts: Rc<[DescSetLayout]>,
 }
 impl PipelineInfo {
     pub fn hash(&self) -> u64 {
@@ -334,8 +346,23 @@ impl PipelineInfo {
         hasher.finish()
     }
 }
-impl From<Box<[u32]>> for PipelineInfo {
-    fn from(code: Box<[u32]>) -> PipelineInfo {
+pub trait PipelineDef: Hash {
+    fn generate(&self) -> PipelineInfo;
+}
+impl PipelineDef for &[u32] {
+    fn generate(&self) -> PipelineInfo {
+        let b = Box::<[u32]>::from(*self);
+        b.generate()
+    }
+}
+impl PipelineDef for PipelineInfo {
+    fn generate(&self) -> PipelineInfo {
+        self.clone()
+    }
+}
+impl PipelineDef for [u32] {
+    fn generate(&self) -> PipelineInfo {
+        let code: Box<[u32]> = self.into();
         let entry_points = spirq::ReflectConfig::new()
             .ref_all_rscs(true)
             .spv(&*code)
@@ -343,7 +370,7 @@ impl From<Box<[u32]>> for PipelineInfo {
             .unwrap();
         assert_eq!(entry_points.len(), 1);
 
-        let entry_point = entry_points[0];
+        let entry_point = entry_points.into_iter().next().unwrap();
 
         let max_descriptor_sets = entry_point
             .vars
@@ -361,7 +388,7 @@ impl From<Box<[u32]>> for PipelineInfo {
             .max()
             .unwrap();
 
-        let mut descriptor_sets = (0..max_descriptor_sets)
+        let mut descriptor_sets = (0..max_descriptor_sets + 1)
             .map(|_| DescSetLayout::default())
             .collect::<Box<[_]>>();
 
@@ -407,7 +434,6 @@ impl From<Box<[u32]>> for PipelineInfo {
         }
     }
 }
-
 #[derive(Debug, Clone, Copy)]
 pub struct BufferWriteInfo<'a> {
     pub buffer: &'a Buffer,

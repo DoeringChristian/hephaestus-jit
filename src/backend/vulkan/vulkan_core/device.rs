@@ -299,6 +299,7 @@ impl Device {
 
                 buffer_pool: Default::default(),
                 image_pool: Default::default(),
+                pipeline_cache: Mutex::new(Default::default()),
             }))
         }
     }
@@ -347,6 +348,9 @@ impl Drop for Device {
             // Clear pools:
             self.buffer_pool.clear(self);
             self.image_pool.clear(self);
+            for pipeline in self.pipeline_cache.lock().unwrap().values_mut() {
+                Arc::get_mut(pipeline).unwrap().destroy(self);
+            }
 
             self.device_wait_idle().unwrap();
 
