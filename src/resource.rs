@@ -1,5 +1,6 @@
 use crate::backend::{Accel, Buffer, Device, Texture};
 pub use crate::backend::{AccelDesc, BufferDesc, TextureDesc};
+use crate::op;
 use crate::vartype::VarType;
 // TODO: maybe move to backend?
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -92,6 +93,14 @@ impl Resource {
         match self {
             Self::Accel(accel) => Some(accel),
             _ => None,
+        }
+    }
+    pub fn op(&self) -> op::Op {
+        match self {
+            Resource::Buffer(_) => op::Op::Buffer,
+            Resource::Texture(_) => op::Op::Texture,
+            Resource::Accel(_) => op::Op::Accel,
+            _ => todo!(),
         }
     }
 }

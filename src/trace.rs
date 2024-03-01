@@ -148,6 +148,29 @@ impl Trace {
             self.dec_rc(dep);
         }
     }
+    pub(crate) fn set_resource(&mut self, id: VarId, resource: Resource){
+        let var = &mut self.vars[id.0];
+
+        var.op = resource.op();
+        var.data = resource;
+
+        let deps = std::mem::take(&mut var.deps);
+
+        for dep in deps {
+            self.dec_rc(dep);
+        }
+    }
+    ///
+    /// Some operations such as [Op::ScatterPhi] are a transpatent view of a buffer.
+    /// This function gives the id of the variable that is actually holding the buffer.
+    ///
+    pub fn resource_var(&self, id: VarId) -> VarId{
+        let var = self.var(id);
+        match var.op{
+            Op::ScatterPhi => self.resource_var(var.deps[0]),
+            _ => id
+        }
+    }
     ///
     /// Decrement the reference count of an entry in the trace.
     /// If the [Entry::rc] reaches 0, delte the variable and decrement the [Entry::rc] values of
@@ -1027,7 +1050,7 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&scatter, dst],
+            [dst, &scatter],
         );
         *dst = phi;
     }

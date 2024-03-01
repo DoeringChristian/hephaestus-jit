@@ -72,6 +72,7 @@ impl GraphBuilder {
         trace: &trace::Trace,
         id: trace::VarId,
     ) -> Option<ResourceId> {
+        let id = trace.resource_var(id);
         if let Some(id) = self.resources.get_index_of(&id) {
             Some(ResourceId(id))
         } else {
@@ -233,20 +234,15 @@ impl Graph {
                         if let Some(var) = trace.get_var_mut(*id) {
                             if let Some(var_resource_desc) = var.resource_desc() {
                                 if &var_resource_desc == desc {
-                                    var.data = res;
+                                    trace.set_resource(*id, res);
                                 }
                             }
                         }
                     });
                 }
                 GraphResource::Output { idx } => {
+                    let op = res.op();
                     // Create a new variable for all output variables
-                    let op = match res {
-                        Resource::Buffer(_) => op::Op::Buffer,
-                        Resource::Texture(_) => op::Op::Texture,
-                        Resource::Accel(_) => op::Op::Accel,
-                        _ => todo!(),
-                    };
                     let (ty, extent) = match desc {
                         ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
                         ResourceDesc::TextureDesc(desc) => (
@@ -542,10 +538,10 @@ pub fn compile(
             next_frontier.clear();
         }
 
-        // Advance all resource variables to the state after evaluation
-        for (&id, _) in graph_builder.resources.iter() {
-            trace.advance(id);
-        }
+        // // Advance all resource variables to the state after evaluation
+        // for (&id, _) in graph_builder.resources.iter() {
+        //     trace.advance(id);
+        // }
 
         let resources = graph_builder
             .resources

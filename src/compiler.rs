@@ -91,7 +91,7 @@ impl Compiler {
                 // When we hit a ref, we just load it as a ref
                 self.collect_data(trace, trace.deps(id)[0])
             }
-            Op::Buffer => {
+            Op::Buffer | Op::ScatterPhi => {
                 // When we hit a buffer directly we want to access the elements directly
                 let data = self.collect_data(trace, id);
                 let idx = self.push_var(

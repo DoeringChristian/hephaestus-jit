@@ -1560,11 +1560,13 @@ fn ssa() {
 
     value.scatter(&mut dst, &idx);
 
-    dst.schedule();
+    let b = dst.add(&tr::literal(1));
+
+    b.schedule();
 
     let graph = tr::compile();
     dbg!(&graph);
     graph.launch(&device);
 
-    dbg!(dst2.to_vec::<i32>(..));
+    dbg!(b.to_vec::<i32>(..));
 }
