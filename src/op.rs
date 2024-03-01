@@ -149,6 +149,7 @@ pub enum Op {
     Accel,
     DeviceOp(DeviceOp),
     KernelOp(KernelOp),
+    ScatterPhi,
 }
 impl Op {
     pub fn is_device_op(self) -> bool {

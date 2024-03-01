@@ -19,10 +19,10 @@ fn simple1() {
 
     let device = backend::Device::vulkan(0).unwrap();
 
-    let i = tr::sized_index(10);
+    let mut i = tr::sized_index(10);
     let j = tr::sized_index(5);
 
-    j.add(&tr::literal(1u32)).scatter(&i, &j);
+    j.add(&tr::literal(1u32)).scatter(&mut i, &j);
 
     j.schedule();
 
@@ -88,9 +88,9 @@ fn simple_f16() {
 fn scatter_chain1() {
     let device = backend::Device::vulkan(0).unwrap();
 
-    let b0 = tr::sized_literal(0, 5);
+    let mut b0 = tr::sized_literal(0, 5);
 
-    tr::literal(1).scatter(&b0, &tr::sized_index(10));
+    tr::literal(1).scatter(&mut b0, &tr::sized_index(10));
 
     let b1 = b0.add(&tr::literal(1));
     b1.schedule();
@@ -113,9 +113,9 @@ fn scatter_chain1() {
 fn scatter_chain2() {
     let device = backend::Device::vulkan(0).unwrap();
 
-    let a = tr::sized_literal(0, 5);
+    let mut a = tr::sized_literal(0, 5);
     let b = a.add(&tr::literal(1));
-    tr::literal(1).scatter(&a, &tr::sized_index(5));
+    tr::literal(1).scatter(&mut a, &tr::sized_index(5));
 
     b.schedule();
 
@@ -977,13 +977,13 @@ fn example() {
     let n = 128;
 
     // Create random values and mask
-    let a = tr::array(
+    let mut a = tr::array(
         &(0..n)
             .map(|_| rand::thread_rng().gen_range(0f32..1f32))
             .collect::<Vec<_>>(),
         &device,
     );
-    let mask = tr::sized_literal(true, n);
+    let mut mask = tr::sized_literal(true, n);
 
     let mut f = tr::record(|| {
         // Compress wavefront
@@ -995,8 +995,8 @@ fn example() {
         let new_mask = b.gt(&tr::literal(0.1f32));
 
         // Write wavefront back to arrays
-        new_mask.scatter(&mask, &indices);
-        b.scatter(&a, &indices);
+        new_mask.scatter(&mut mask, &indices);
+        b.scatter(&mut a, &indices);
 
         a.schedule();
     });
@@ -1005,6 +1005,7 @@ fn example() {
     for _ in 0..10 {
         f(&device, ());
     }
+    drop(f);
 
     // Read data back to CPU and print it
     dbg!(a.to_vec::<f32>(..));
@@ -1015,8 +1016,8 @@ fn record() {
 
     let device = vulkan(0);
 
-    let f = tr::record(|a: VarRef| {
-        a.add(&tr::literal(1)).scatter(&a, &tr::sized_index(3));
+    let f = tr::record(|mut a: VarRef| {
+        a.add(&tr::literal(1)).scatter(&mut a, &tr::sized_index(3));
     });
 
     let a = tr::array(&[1, 2, 3], &device);
@@ -1106,8 +1107,8 @@ fn record_scatter() {
 
     let device = vulkan(0);
 
-    let f = tr::record(|a: VarRef| {
-        tr::sized_literal(1, 3).scatter(&a, &tr::index());
+    let f = tr::record(|mut a: VarRef| {
+        tr::sized_literal(1, 3).scatter(&mut a, &tr::index());
     });
 
     let a = tr::sized_literal(0, 3);
@@ -1347,10 +1348,10 @@ fn loop_record_side_effect() {
 
     let mut i = tr::sized_literal(0, 1);
     let mut c = tr::literal(true);
-    let dst = tr::sized_literal(0, 10);
+    let mut dst = tr::sized_literal(0, 10);
 
     loop_record!([i] while c {
-        tr::literal(1).scatter(&dst, &i);
+        tr::literal(1).scatter(&mut dst, &i);
 
         i = i.add(&tr::literal(1));
         c = c.and(&i.lt(&tr::literal(4)));
@@ -1546,4 +1547,22 @@ fn fused_mlp() {
             .all(|(&a, &b)| (a - b).abs() < f16::from_f32(10.0)),
         "lhs = {output:?}\n is not equal to rhs = {reference:?}\n"
     );
+}
+#[test]
+fn ssa() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    let mut dst = tr::sized_literal(0, 10);
+    let idx = tr::sized_index(10);
+    let value = tr::literal(1);
+
+    value.scatter(&mut dst, &idx);
+
+    dst.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    dbg!(dst.to_vec::<i32>(..));
 }

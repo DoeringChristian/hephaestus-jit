@@ -30,6 +30,11 @@ impl Traverse for &VarRef {
         [*self].into_iter()
     }
 }
+impl Traverse for &mut VarRef {
+    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
+        [&**self].into_iter()
+    }
+}
 impl Construct for VarRef {
     fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self {
         iter.next().unwrap()
@@ -215,9 +220,9 @@ macro_rules! impl_recordable {
         where
             $($param: Traverse + Clone + 'static,)*
             Output: Traverse + Construct + Clone + 'static,
-            Fin: Fn($($param,)*) -> Output,
+            Fin: FnMut($($param,)*) -> Output,
         {
-            fn record(self) -> impl Fn(&backend::Device, ($($param,)*)) -> Output {
+            fn record(mut self) -> impl Fn(&backend::Device, ($($param,)*)) -> Output {
                 let func = Func::new(move |input: ($($param,)*)| {
                     let ($($param,)*) = input;
                     self($($param),*)

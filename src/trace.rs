@@ -999,12 +999,10 @@ impl VarRef {
     }
     // WARN: keep in mind, that we should also update `scatter_if`, `scatter_reduce` and
     // `scatter_reduce_if`
-    pub fn scatter(&self, dst: &Self, idx: &Self) {
-        dst.schedule();
-        schedule_eval();
+    pub fn scatter(&self, dst: &mut Self, idx: &Self) {
         let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter),
                 ty: vartype::void(),
@@ -1013,9 +1011,17 @@ impl VarRef {
             },
             [&dst_ref, self, idx],
         );
-        dst.mark_dirty();
-        res.schedule(); // Auto schedule
-                        // res
+
+        let ty = dst.ty();
+        let extent = dst.extent();
+        let phi = push_var(Var{
+            op: Op::ScatterPhi,
+            ty,
+            extent,
+            ..Default::default()
+        }, [dst, &scatter]);
+        *dst = phi;
+        
     }
     pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) {
         dst.schedule();
