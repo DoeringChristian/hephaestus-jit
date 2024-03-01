@@ -189,7 +189,7 @@ where
                 TS.with(|s| {
                     let mut s = s.borrow_mut();
                     let ts = std::mem::take(&mut (*s));
-                    graph::compile(&ts, &input_vec, &output_vec)
+                    graph::compile(ts, &input_vec, &output_vec)
                 }),
             );
         }

@@ -438,7 +438,7 @@ pub fn compile() -> graph::Graph {
     TS.with(|s| {
         let mut ts = s.borrow_mut();
         let ts = std::mem::take(&mut (*ts));
-        let graph = graph::compile(&ts, &[], &[]);
+        let graph = graph::compile(ts, &[], &[]);
         graph
     })
 }
@@ -1019,7 +1019,7 @@ impl VarRef {
             ty,
             extent,
             ..Default::default()
-        }, [dst, &scatter]);
+        }, [&scatter, dst]);
         *dst = phi;
         
     }

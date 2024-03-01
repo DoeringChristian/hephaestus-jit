@@ -1,13 +1,15 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Range;
 
 use crate::extent::Extent;
 use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::vartype::AsVarType;
 use crate::{backend, vartype};
 use crate::{compiler, ir, op, trace};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
+use itertools::Itertools;
 
 ///
 /// Specifies a Graph Resource.
@@ -323,147 +325,225 @@ pub enum PassOp {
 ///
 #[profiling::function]
 pub fn compile(
-    ts: &trace::ThreadState,
+    ts: trace::ThreadState,
     input: &[&trace::VarRef],
     output: &[&trace::VarRef],
 ) -> Graph {
-    // TODO: Not sure if we should lock the graph for the whole compilation?
-    trace::with_trace(|trace| {
-        let mut graph_builder = GraphBuilder::default();
-        for r in input.iter().chain(output.iter()) {
-            graph_builder.try_push_resource(&trace, r.id());
-        }
+    let mut graph_builder = GraphBuilder::default();
 
-        let input = input
-            .into_iter()
-            .enumerate()
-            .map(|(i, r)| (r.id(), i))
-            .collect::<HashMap<_, _>>();
-        let output = output
-            .into_iter()
-            .enumerate()
-            .map(|(i, r)| (r.id(), i))
-            .collect::<HashMap<_, _>>();
+    let input = input
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (r.id(), i))
+        .collect::<HashMap<_, _>>();
+    let output = output
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (r.id(), i))
+        .collect::<HashMap<_, _>>();
 
-        let n_outputs = output.len();
+    let n_outputs = output.len();
 
-        // Get scheduled variables from thread state in order
-        let mut vars = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
-        let groups = ts.groups.clone();
+    fn groups_by_extent(
+        trace: &mut trace::Trace,
+        vars: &mut [trace::VarId],
+    ) -> Vec<std::ops::Range<usize>> {
+        vars.sort_by(|id0, id1| {
+            trace
+                .var(*id0)
+                .extent
+                .partial_cmp(&trace.var(*id1).extent)
+                .unwrap()
+        });
 
-        // Subdivide groups by extent
-        let groups = groups
-            .iter()
-            .flat_map(|group| {
-                vars[group.clone()].sort_by(|id0, id1| {
-                    trace
-                        .var(*id0)
-                        .extent
-                        .partial_cmp(&trace.var(*id1).extent)
-                        .unwrap()
-                });
-
-                let mut groups = vec![];
-                let mut size = Extent::default();
-                let mut start = group.start;
-
-                for i in group.clone() {
-                    if trace.var(vars[i]).extent != size {
-                        let end = i + 1;
-                        if start != end {
-                            groups.push(start..end);
-                        }
-                        size = trace.var(vars[i]).extent.clone();
-                        start = end;
-                    }
-                }
-                let end = group.end;
+        let mut groups = vec![];
+        let mut extent = Extent::default();
+        let mut start = 0;
+        for i in 0..vars.len() {
+            let var = trace.var(vars[i]);
+            if var.extent != extent || var.op.is_device_op() || matches!(var.op, op::Op::ScatterPhi)
+            {
+                let end = i + 1;
                 if start != end {
                     groups.push(start..end);
                 }
-                groups
-            })
-            .collect::<Vec<_>>();
-
-        // We can now insert the variables as well as the
-        for group in groups.iter() {
-            let first_id = vars[group.start];
-            let first_var = trace.var(first_id);
-            // Note: we know, that all variables in a group have the same size
-            // TODO: validate, that the the size_buffer is a buffer
-            let size_buffer = match first_var.extent {
-                Extent::DynSize { size: size_dep, .. } => {
-                    graph_builder.try_push_resource(trace, size_dep)
-                }
-                _ => None,
-            };
-
-            let pass = if first_var.op.is_device_op() {
-                // Handle Device Ops (precompiled)
-                assert_eq!(group.len(), 1);
-                let id = vars[group.start];
-
-                let var = trace.var(id);
-                match var.op {
-                    op::Op::DeviceOp(op) => {
-                        let deps = trace.deps(id).to_vec();
-
-                        // TODO: Improve the readability here. atm. we are pushing all the
-                        // dependenceis into multiple vecs starting with [id]
-                        let resources = [id]
-                            .iter()
-                            .chain(deps.iter())
-                            .flat_map(|id| graph_builder.try_push_resource(trace, *id))
-                            .collect::<Vec<_>>();
-
-                        Pass {
-                            resources,
-                            size_buffer,
-                            op: PassOp::DeviceOp(op),
-                        }
-                    }
-                    _ => todo!(),
-                }
-            } else {
-                // Handle Kernel Ops (compile)
-                thread_local! {
-                    static COMPILER: RefCell<compiler::Compiler> = Default::default();
-                };
-                let (resources, ir) = COMPILER.with(|compiler| {
-                    let mut compiler = compiler.borrow_mut();
-                    compiler.clear();
-
-                    compiler.compile(trace, &vars[group.clone()]);
-
-                    let resources = compiler
-                        .buffers
-                        .iter()
-                        .chain(compiler.textures.iter())
-                        .chain(compiler.accels.iter())
-                        .flat_map(|&id| graph_builder.try_push_resource(trace, id))
-                        .collect::<Vec<_>>();
-
-                    let ir = std::mem::take(&mut compiler.ir);
-                    (resources, ir)
-                });
-                let size = trace.var(vars[group.start]).extent.capacity();
-                Pass {
-                    resources,
-                    size_buffer,
-                    op: PassOp::Kernel { ir, size },
-                }
-            };
-
-            graph_builder.push_pass(pass);
-            // Put the variables in this group into their evaluated state, removing dependencies and
-            // changing the op type.
-            for i in group.clone() {
-                let id = vars[i];
-                trace.advance(id);
+                extent = trace.var(vars[i]).extent.clone();
+                start = end;
             }
         }
+        groups
+    }
 
-        // Collect descriptors and input resources
+    #[derive(Debug)]
+    struct Var {
+        id: trace::VarId,
+        deps: Range<usize>,
+        dc: usize,
+    }
+
+    fn topo_sort(
+        trace: &trace::Trace,
+        visited: &mut HashMap<trace::VarId, usize>,
+        vars: &mut Vec<Var>,
+        deps: &mut Vec<usize>,
+        id: trace::VarId,
+    ) -> usize {
+        let i = if visited.contains_key(&id) {
+            let i = visited[&id];
+            i
+        } else {
+            let d = trace
+                .var(id)
+                .deps
+                .iter()
+                .map(|id| topo_sort(trace, visited, vars, deps, *id))
+                .collect::<Vec<_>>();
+
+            let start = deps.len();
+            deps.extend(d.into_iter());
+            let end = deps.len();
+
+            let i = vars.len();
+            vars.push(Var {
+                id,
+                deps: start..end,
+                dc: 0,
+            });
+            visited.insert(id, i);
+            i
+        };
+        // For all dependencies of this variable, increment its
+        // dependant count
+        for i in vars[i].deps.clone().map(|i| deps[i]) {
+            vars[i].dc += 1;
+        }
+        i
+    }
+
+    let schedule = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
+
+    trace::with_trace(|trace| {
+        let mut visited = HashMap::new();
+        let mut deps: Vec<usize> = vec![];
+        let mut vars: Vec<Var> = vec![];
+
+        // Topo sort the whole graph starting at the schedule
+        for id in &schedule {
+            topo_sort(trace, &mut visited, &mut vars, &mut deps, *id);
+        }
+
+        let mut frontier = vars
+            .iter()
+            .filter(|var| var.dc == 0)
+            .map(|var| var.id)
+            .collect::<Vec<_>>();
+        let mut next_frontier = vec![];
+
+        // dbg!(&frontier);
+
+        while !frontier.is_empty() {
+            let groups = groups_by_extent(trace, &mut frontier);
+            for group in groups {
+                let first_id = frontier[group.start];
+                let first_var = trace.var(first_id);
+
+                // Note: we know, that all variables in a group have the same size
+                // TODO: validate, that the the size_buffer is a buffer
+                let size_buffer = match first_var.extent {
+                    Extent::DynSize { size: size_dep, .. } => {
+                        graph_builder.try_push_resource(trace, size_dep)
+                    }
+                    _ => None,
+                };
+
+                let deps = if first_var.op.is_device_op() {
+                    // Handle Device Ops (precompiled)
+                    assert_eq!(group.len(), 1);
+                    let id = frontier[group.start];
+
+                    let var = trace.var(id);
+                    match var.op {
+                        op::Op::DeviceOp(op) => {
+                            let deps = trace.deps(id).to_vec();
+
+                            // TODO: Improve the readability here. atm. we are pushing all the
+                            // dependenceis into multiple vecs starting with [id]
+                            let resources = [id]
+                                .iter()
+                                .chain(deps.iter())
+                                .flat_map(|id| graph_builder.try_push_resource(trace, *id))
+                                .collect::<Vec<_>>();
+
+                            graph_builder.push_pass(Pass {
+                                resources,
+                                size_buffer,
+                                op: PassOp::DeviceOp(op),
+                            });
+                            deps
+                        }
+                        _ => todo!(),
+                    }
+                } else if matches!(first_var.op, op::Op::ScatterPhi) {
+                    assert_eq!(group.len(), 1);
+                    let var = trace.var(frontier[group.start]);
+                    var.deps.clone()
+                } else {
+                    let mut compiler = compiler::Compiler::default();
+
+                    let deps = compiler.compile(trace, &frontier[group.clone()]);
+
+                    let resources = [
+                        compiler.buffers.iter(),
+                        compiler.textures.iter(),
+                        compiler.accels.iter(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|&id| graph_builder.try_push_resource(trace, id))
+                    .collect::<Vec<_>>();
+
+                    let ir = std::mem::take(&mut compiler.ir);
+                    let size = trace.var(frontier[group.start]).extent.capacity();
+
+                    graph_builder.push_pass(Pass {
+                        resources,
+                        size_buffer,
+                        op: PassOp::Kernel { ir, size },
+                    });
+                    deps
+                };
+
+                // Add dependencies to next frontier
+                // If their dependant count is 0
+                // otherwise decrement it.
+                for i in deps.iter().map(|id| visited[id]) {
+                    vars[i].dc -= 1;
+                }
+                next_frontier.extend(deps.into_iter().map(|id| visited[&id]).filter_map(|i| {
+                    if vars[i].dc == 0 {
+                        Some(vars[i].id)
+                    } else {
+                        None
+                    }
+                }));
+                dbg!(&next_frontier);
+
+                // graph_builder.push_pass(pass);
+                // Put the variables in this group into their evaluated state, removing dependencies and
+                // changing the op type.
+                // for i in group.clone() {
+                //     let id = frontier[i];
+                //     trace.advance(id);
+                // }
+            }
+            std::mem::swap(&mut frontier, &mut next_frontier);
+            next_frontier.clear();
+        }
+
+        // Advance all resource variables to the state after evaluation
+        for (&id, _) in graph_builder.resources.iter() {
+            trace.advance(id);
+        }
 
         let resources = graph_builder
             .resources
@@ -495,6 +575,9 @@ pub fn compile(
             .into_iter()
             .map(|(_, desc)| desc)
             .collect::<Vec<_>>();
+
+        // Reverse passes, as they have been generated in reverse
+        graph_builder.passes.reverse();
 
         let graph = Graph {
             passes: graph_builder.passes,

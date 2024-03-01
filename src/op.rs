@@ -166,6 +166,7 @@ impl Op {
             Op::Accel => Op::Accel,
             Op::KernelOp(_) => Op::Buffer,
             Op::DeviceOp(dop) => dop.resulting_op(),
+            Op::ScatterPhi => Op::Buffer,
             _ => todo!(),
         }
     }

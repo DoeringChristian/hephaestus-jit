@@ -1554,6 +1554,7 @@ fn ssa() {
     let device = vulkan(0);
 
     let mut dst = tr::sized_literal(0, 10);
+    let dst2 = dst.clone();
     let idx = tr::sized_index(10);
     let value = tr::literal(1);
 
@@ -1562,7 +1563,8 @@ fn ssa() {
     dst.schedule();
 
     let graph = tr::compile();
+    dbg!(&graph);
     graph.launch(&device);
 
-    dbg!(dst.to_vec::<i32>(..));
+    dbg!(dst2.to_vec::<i32>(..));
 }
