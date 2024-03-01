@@ -31,11 +31,13 @@ pub enum GraphResource {
     // Using strong reference for captured variables
     Captured {
         r: trace::VarRef,
+        // refs: Vec<trace::VarRef>,
         out_idx: Option<usize>, // NOTE: might also be returned
     },
     // Using weak reference for internal variables
     Internal {
         id: trace::VarId,
+        // refs: Vec<trace::VarRef>,
     },
 }
 // Have to implement debug for snapshot tests to work

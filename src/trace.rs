@@ -773,10 +773,16 @@ pub fn fused_mlp_inference(
 
     let ty = f16::var_ty();
     let size = input.size();
-    
+
     push_var(
         Var {
-            op: Op::DeviceOp(DeviceOp::FusedMlpInference { width, in_width, out_width, hidden_layers, max_batch_size: batch_size}),
+            op: Op::DeviceOp(DeviceOp::FusedMlpInference {
+                width,
+                in_width,
+                out_width,
+                hidden_layers,
+                max_batch_size: batch_size,
+            }),
             ty,
             extent: Extent::Size(size),
             ..Default::default()
@@ -1014,14 +1020,16 @@ impl VarRef {
 
         let ty = dst.ty();
         let extent = dst.extent();
-        let phi = push_var(Var{
-            op: Op::ScatterPhi,
-            ty,
-            extent,
-            ..Default::default()
-        }, [&scatter, dst]);
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [&scatter, dst],
+        );
         *dst = phi;
-        
     }
     pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) {
         dst.schedule();
