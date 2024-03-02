@@ -293,6 +293,7 @@ impl Graph {
                 _ => {}
             });
 
+        dbg!(&output);
         let output = output.into_iter().collect::<Option<Vec<_>>>().unwrap();
 
         Some((report, output))
@@ -361,7 +362,7 @@ pub fn compile(
                 .var(*id0)
                 .extent
                 .partial_cmp(&trace.var(*id1).extent)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Less)
         });
 
         let mut groups = vec![];
@@ -369,7 +370,12 @@ pub fn compile(
         let mut start = 0;
         for i in 0..vars.len() {
             let var = trace.var(vars[i]);
-            if var.extent != extent || var.op.is_device_op() || matches!(var.op, op::Op::ScatterPhi)
+            if var.extent != extent
+                || var.op.is_device_op()
+                || matches!(
+                    var.op,
+                    op::Op::ScatterPhi | op::Op::Buffer | op::Op::Texture | op::Op::Accel
+                )
             {
                 let end = i + 1;
                 if start != end {
@@ -439,6 +445,9 @@ pub fn compile(
         for id in &schedule {
             topo_sort(trace, &mut visited, &mut vars, &mut deps, *id);
         }
+        // dbg!(&vars);
+        // dbg!(&deps);
+        // dbg!(vars.iter().map(|var| trace.var(var.id)).collect::<Vec<_>>());
 
         let mut frontier = vars
             .iter()
@@ -491,7 +500,10 @@ pub fn compile(
                         }
                         _ => todo!(),
                     }
-                } else if matches!(first_var.op, op::Op::ScatterPhi) {
+                } else if matches!(
+                    first_var.op,
+                    op::Op::ScatterPhi | op::Op::Buffer | op::Op::Texture | op::Op::Accel
+                ) {
                     assert_eq!(group.len(), 1);
                     graph_builder.try_push_resource(trace, first_id);
                     let var = trace.var(frontier[group.start]);
@@ -525,6 +537,7 @@ pub fn compile(
                 // Add dependencies to next frontier
                 // If their dependant count is 0
                 // otherwise decrement it.
+                // dbg!(&deps);
                 for i in deps.iter().map(|id| visited[id]) {
                     vars[i].dc -= 1;
                 }
@@ -535,7 +548,7 @@ pub fn compile(
                         None
                     }
                 }));
-                dbg!(&next_frontier);
+                // dbg!(&next_frontier);
 
                 // graph_builder.push_pass(pass);
                 // Put the variables in this group into their evaluated state, removing dependencies and
@@ -553,11 +566,6 @@ pub fn compile(
         // for (&id, _) in graph_builder.resources.iter() {
         //     trace.advance(id);
         // }
-        for (_, (_, ids)) in graph_builder.resources.iter() {
-            for &id in ids {
-                trace.advance(id);
-            }
-        }
 
         let resources = graph_builder
             .resources

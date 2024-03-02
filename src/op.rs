@@ -149,6 +149,7 @@ pub enum Op {
     Accel,
     DeviceOp(DeviceOp),
     KernelOp(KernelOp),
+    // TODO: just use [Op::Buffer]
     ScatterPhi,
 }
 impl Op {

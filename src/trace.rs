@@ -137,27 +137,27 @@ impl Trace {
     /// the evaluated type.
     ///
     pub fn advance(&mut self, id: VarId) {
-        let var = &mut self.vars[id.0];
+        if let Some(var) = self.vars.get_mut(id.0){
+            var.op = var.op.resulting_op();
 
-        var.op = var.op.resulting_op();
+            // Clear dependencies:
+            let deps = std::mem::take(&mut var.deps);
 
-        // Clear dependencies:
-        let deps = std::mem::take(&mut var.deps);
-
-        for dep in deps {
-            self.dec_rc(dep);
+            for dep in deps {
+                self.dec_rc(dep);
+            }
         }
     }
     pub(crate) fn set_resource(&mut self, id: VarId, resource: Resource){
-        let var = &mut self.vars[id.0];
+        if let Some(var) = self.vars.get_mut(id.0){
+            var.op = resource.op();
+            var.data = resource;
 
-        var.op = resource.op();
-        var.data = resource;
+            let deps = std::mem::take(&mut var.deps);
 
-        let deps = std::mem::take(&mut var.deps);
-
-        for dep in deps {
-            self.dec_rc(dep);
+            for dep in deps {
+                self.dec_rc(dep);
+            }
         }
     }
     ///
@@ -330,25 +330,22 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
 ///
 pub(crate) fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
-    let is_device_op = v.op.is_device_op();
+    // let is_device_op = v.op.is_device_op();
     let deps = deps
         .into_iter()
         .map(|r| {
-            if is_device_op {
-                r.schedule();
-            }
             r.id()
         })
         .collect::<Vec<_>>();
 
     // Schedule the current group for evaluation if the variable is a device wide operation or it
     // depends on a variable marked dirty
-    if is_device_op {
-        schedule_eval();
-    }
-    if with_trace(|trace| deps.iter().any(|id| trace.var(*id).dirty)) {
-        schedule_eval();
-    }
+    // if is_device_op {
+    //     schedule_eval();
+    // }
+    // if with_trace(|trace| deps.iter().any(|id| trace.var(*id).dirty)) {
+    //     schedule_eval();
+    // }
 
     // // Set scope as max between thread state and dependencies
     // v.scope = [TS.with(|s| s.borrow().scope())]
@@ -367,10 +364,10 @@ pub(crate) fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef
     // Push actual variable
     let res = with_trace(|t| t.push_var(v));
     // Auto schedule and schedule evaluation if device op
-    if is_device_op {
-        res.schedule();
-        schedule_eval();
-    }
+    // if is_device_op {
+    //     res.schedule();
+    //     schedule_eval();
+    // }
     // TODO: maybe mark variables dirty that have been referenced with RefMut
     res
 }
@@ -1054,12 +1051,10 @@ impl VarRef {
         );
         *dst = phi;
     }
-    pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) {
-        dst.schedule();
-        schedule_eval();
+    pub fn scatter_if(&self, dst: &mut Self, idx: &Self, active: &Self) {
         let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter),
                 ty: vartype::void(),
@@ -1068,16 +1063,24 @@ impl VarRef {
             },
             [&dst_ref, self, idx, active],
         );
-        dst.mark_dirty();
-        res.schedule(); // Auto schedule
-                        // res
+
+        let ty = dst.ty();
+        let extent = dst.extent();
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [dst, &scatter],
+        );
+        *dst = phi;
     }
-    pub fn scatter_reduce(&self, dst: &Self, idx: &Self, op: ReduceOp) {
-        dst.schedule();
-        schedule_eval();
+    pub fn scatter_reduce(&self, dst: &mut Self, idx: &Self, op: ReduceOp) {
         let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterReduce(op)),
                 ty: vartype::void(),
@@ -1086,16 +1089,24 @@ impl VarRef {
             },
             [&dst_ref, self, idx],
         );
-        dst.mark_dirty();
-        res.schedule(); // Auto schedule
-                        // res
+
+        let ty = dst.ty();
+        let extent = dst.extent();
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [dst, &scatter],
+        );
+        *dst = phi;
     }
-    pub fn scatter_reduce_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) {
-        dst.schedule();
-        schedule_eval();
+    pub fn scatter_reduce_if(&self, dst: &mut Self, idx: &Self, active: &Self, op: ReduceOp) {
         let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterReduce(op)),
                 ty: vartype::void(),
@@ -1104,17 +1115,26 @@ impl VarRef {
             },
             [&dst_ref, self, idx, active],
         );
-        dst.mark_dirty();
-        res.schedule(); // Auto schedule
-                        // res
+
+        let ty = dst.ty();
+        let extent = dst.extent();
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [dst, &scatter],
+        );
+        *dst = phi;
+        
     }
-    pub fn scatter_atomic(&self, dst: &Self, idx: &Self, op: ReduceOp) -> Self {
-        dst.schedule();
-        schedule_eval();
+    pub fn scatter_atomic(&self, dst: &mut Self, idx: &Self, op: ReduceOp) -> Self {
         let ty = self.ty();
         let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterAtomic(op)),
                 ty,
@@ -1123,17 +1143,27 @@ impl VarRef {
             },
             [&dst_ref, self, idx],
         );
-        dst.mark_dirty();
-        // NOTE: do not schedule result of scatter_atomic
-        res
+
+        let ty = dst.ty();
+        let extent = dst.extent();
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [dst, &scatter],
+        );
+        *dst = phi;
+        
+        scatter
     }
-    pub fn scatter_atomic_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) -> Self {
-        dst.schedule();
-        schedule_eval();
+    pub fn scatter_atomic_if(&self, dst: &mut Self, idx: &Self, active: &Self, op: ReduceOp) -> Self {
         let ty = self.ty();
         let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterAtomic(op)),
                 ty,
@@ -1142,20 +1172,30 @@ impl VarRef {
             },
             [&dst_ref, self, idx, active],
         );
-        dst.mark_dirty();
-        // NOTE: do not schedule result of scatter_atomic
-        res
+
+        let ty = dst.ty();
+        let extent = dst.extent();
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [dst, &scatter],
+        );
+        *dst = phi;
+        
+        scatter
     }
-    pub fn atomic_inc(self: &Self, idx: &Self, active: &Self) -> Self {
+    pub fn atomic_inc(self: &mut Self, idx: &Self, active: &Self) -> Self {
         // Destination is self
-        self.schedule();
-        schedule_eval();
         let ty = self.ty();
         let extent = resulting_extent([active].into_iter());
         assert!(matches!(idx.extent(), Extent::None));
 
         let dst_ref = self.get_mut();
-        let res = push_var(
+        let scatter = push_var(
             Var {
                 op: Op::KernelOp(KernelOp::AtomicInc),
                 ty,
@@ -1164,9 +1204,21 @@ impl VarRef {
             },
             [&dst_ref, idx, active],
         );
-        self.mark_dirty();
-        // NOTE: do not schedule result of scatter_atomic
-        res
+        
+        let ty = self.ty();
+        let extent = self.extent();
+        let phi = push_var(
+            Var {
+                op: Op::ScatterPhi,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [self, &scatter],
+        );
+        *self = phi;
+        
+        scatter
     }
     pub fn fma(&self, b: &Self, c: &Self) -> Self {
         let extent = resulting_extent([self, b, c]);
