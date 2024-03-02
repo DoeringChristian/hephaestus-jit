@@ -1257,7 +1257,10 @@ impl VarRef {
         let end = end_bytes / dst_ty_size;
 
         with_trace(|t| {
-            t.var(self.id())
+            // TODO: Consider ssa repr
+            let id = self.id();
+            // let id = t.resource_var(self.id());
+            t.var(id)
                 .data
                 .buffer()
                 .unwrap()
