@@ -831,6 +831,12 @@ impl VarRef {
     pub fn dirty(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).dirty)
     }
+    pub fn resource_var(&self) -> Self{
+        with_trace(|trace|{
+            let id = trace.resource_var(self.id());
+            trace.ref_borrow(id)
+        })
+    }
     /// Schedule the variable for execution in the current group
     // pub fn schedule(&self) {
     //     // We should not be able to schedule already evaluated variables as well as ones who's
@@ -1283,7 +1289,8 @@ impl VarRef {
         self.to_vec(0..1)[0]
     }
     pub fn to_vec<T: AsVarType>(&self, range: impl std::ops::RangeBounds<usize>) -> Vec<T> {
-        let size = match self.extent() {
+        let s = self.resource_var();
+        let size = match s.extent() {
             Extent::Size(size) => size,
             Extent::DynSize { size: size_dep, .. } => {
                 VarRef::borrow(size_dep).to_vec::<i32>(0..1)[0] as usize
@@ -1297,7 +1304,7 @@ impl VarRef {
         }
         assert!(range.start <= range.end);
 
-        let ty = self.ty();
+        let ty = s.ty();
         let start_bytes = range.start * ty.size();
         let end_bytes = range.end * ty.size();
 
@@ -1310,7 +1317,7 @@ impl VarRef {
 
         with_trace(|t| {
             // TODO: Consider ssa repr
-            let id = self.id();
+            let id = s.id();
             // let id = t.resource_var(self.id());
             t.var(id)
                 .data

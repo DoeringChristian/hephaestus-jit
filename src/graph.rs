@@ -31,13 +31,11 @@ pub enum GraphResource {
     // Using strong reference for captured variables
     Captured {
         r: trace::VarRef,
-        refs: Vec<trace::VarRef>,
         out_idx: Option<usize>, // NOTE: might also be returned
     },
     // Using weak reference for internal variables
     Internal {
         id: trace::VarId,
-        ids: Vec<trace::VarId>,
     },
 }
 // Have to implement debug for snapshot tests to work
@@ -62,7 +60,7 @@ impl Debug for GraphResource {
 ///
 #[derive(Debug, Default)]
 pub struct GraphBuilder {
-    resources: IndexMap<trace::VarId, (ResourceDesc, HashSet<trace::VarId>)>,
+    resources: IndexMap<trace::VarId, ResourceDesc>,
     passes: Vec<Pass>,
 }
 
@@ -75,7 +73,6 @@ impl GraphBuilder {
         // Get the id of the variable holding the actual resource
         let rid = trace.resource_var(id);
         if let Some(rid) = self.resources.get_index_of(&rid) {
-            self.resources[rid].1.insert(id);
             Some(ResourceId(rid))
         } else {
             let var = trace.var(rid);
@@ -96,11 +93,7 @@ impl GraphBuilder {
                 op::Op::Accel => ResourceDesc::AccelDesc(var.extent.accel_desc().clone()),
                 _ => return None,
             };
-            Some(ResourceId(
-                self.resources
-                    .insert_full(rid, (desc, HashSet::from([(id)])))
-                    .0,
-            ))
+            Some(ResourceId(self.resources.insert_full(rid, desc).0))
         }
     }
     pub fn push_pass(&mut self, pass: Pass) -> PassId {
@@ -232,7 +225,7 @@ impl Graph {
             .zip(self.resources.iter())
             .zip(self.resource_descs.iter())
             .for_each(|((res, gres), desc)| match gres {
-                GraphResource::Internal { id, ids } => {
+                GraphResource::Internal { id } => {
                     // Set resource (only if descriptors match) this way the resource desc of
                     // the variable never
                     // changes
@@ -241,9 +234,7 @@ impl Graph {
                         if let Some(var) = trace.get_var_mut(*id) {
                             if let Some(var_resource_desc) = var.resource_desc() {
                                 if &var_resource_desc == desc {
-                                    for id in ids {
-                                        trace.set_resource(*id, res.clone());
-                                    }
+                                    trace.set_resource(*id, res.clone());
                                 }
                             }
                         }
@@ -282,10 +273,8 @@ impl Graph {
                     // Use input variable for output
                     output[*out_idx] = Some(inputs[*idx].clone());
                 }
-                GraphResource::Captured { r, refs, out_idx } => trace::with_trace(|trace| {
-                    for r in refs {
-                        trace.set_resource(r.id(), res.clone());
-                    }
+                GraphResource::Captured { r, out_idx } => trace::with_trace(|trace| {
+                    trace.set_resource(r.id(), res.clone());
                     if let Some(out_idx) = *out_idx {
                         output[out_idx] = Some(r.clone());
                     }
@@ -562,15 +551,10 @@ pub fn compile(
             next_frontier.clear();
         }
 
-        // // Advance all resource variables to the state after evaluation
-        // for (&id, _) in graph_builder.resources.iter() {
-        //     trace.advance(id);
-        // }
-
         let resources = graph_builder
             .resources
             .iter()
-            .map(|(id, (_, ids))| {
+            .map(|(id, _)| {
                 if input.contains_key(&id) {
                     GraphResource::Input {
                         idx: input[&id],
@@ -582,16 +566,12 @@ pub fn compile(
                 ) {
                     GraphResource::Captured {
                         r: trace.ref_borrow(*id),
-                        refs: ids.iter().map(|id| trace.ref_borrow(*id)).collect(),
                         out_idx: output.get(id).cloned(),
                     }
                 } else if output.contains_key(&id) {
                     GraphResource::Output { idx: output[&id] }
                 } else {
-                    GraphResource::Internal {
-                        id: *id,
-                        ids: ids.iter().cloned().collect(),
-                    }
+                    GraphResource::Internal { id: *id }
                 }
             })
             .collect::<Vec<_>>();
@@ -599,7 +579,7 @@ pub fn compile(
         let resource_descs = graph_builder
             .resources
             .into_iter()
-            .map(|(_, (desc, _))| desc)
+            .map(|(_, desc)| desc)
             .collect::<Vec<_>>();
 
         // Reverse passes, as they have been generated in reverse
