@@ -54,11 +54,14 @@ pub enum KernelOp {
     Index,
     Literal,
 
-    Extract(usize),
+    Extract(u32),
     DynExtract,
     Construct,
 
     Select,
+
+    LoopStart,
+    LoopEnd,
 
     TexLookup,
     TraceRay,
@@ -66,12 +69,12 @@ pub enum KernelOp {
     Bop(Bop),
     Uop(Uop),
 
-    MatFMA,
+    FMA,
 
     // Operations that are only available in IR
     BufferRef,
     TextureRef {
-        dim: usize,
+        dim: u32,
     }, // not sure if it's a good idea to put it here
     AccelRef,
 }
@@ -93,8 +96,27 @@ pub enum ReduceOp {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DeviceOp {
     ReduceOp(ReduceOp),
-    PrefixSum { inclusive: bool },
+    PrefixSum {
+        inclusive: bool,
+    },
     Compress, // TODO: determine if return or return by ref is better
+
+    // Cooperative Matrix Multiply Add
+    // multiply a matrix A of size [result_height]x[depth] with B of size [depth]x[result_width]
+    // and add C of size [result_height]x[result_width]
+    // TODO: make size variable to allow for dynamic batch sizes
+    MatMul {
+        max_n: usize,
+        max_m: usize,
+        max_k: usize,
+    },
+    FusedMlpInference {
+        width: usize,
+        in_width: usize,
+        out_width: usize,
+        hidden_layers: usize,
+        max_batch_size: usize,
+    },
     Buffer2Texture,
     BuildAccel,
 }
@@ -104,8 +126,10 @@ impl DeviceOp {
             DeviceOp::ReduceOp(_) => Op::Buffer,
             DeviceOp::Compress => Op::Nop,
             DeviceOp::PrefixSum { .. } => Op::Buffer,
+            DeviceOp::MatMul { .. } => Op::Buffer,
             DeviceOp::Buffer2Texture => Op::Texture,
             DeviceOp::BuildAccel => Op::Accel,
+            DeviceOp::FusedMlpInference { .. } => Op::Buffer,
         }
     }
 }

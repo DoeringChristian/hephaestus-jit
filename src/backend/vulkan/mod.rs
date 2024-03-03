@@ -1,10 +1,9 @@
 mod accel;
 mod builtin;
 mod codegen;
-mod pipeline;
-mod shader_cache;
 #[cfg(test)]
 mod test;
+mod utils;
 mod vkdevice;
 mod vulkan_core;
 
@@ -14,85 +13,57 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
+use crate::backend;
+use crate::backend::vulkan::builtin::{cooperative_matrix, fused_mlp};
 use crate::backend::vulkan::vulkan_core::graph::RGraph;
 use crate::ir::IR;
 use crate::op::DeviceOp;
-use crate::vartype::AsVarType;
-use crate::{backend, utils};
+use crate::vartype::{AsVarType, FusedMlpConfig};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
+use once_cell::sync::Lazy;
 use vk_sync::AccessType;
 use vulkan_core::buffer::{Buffer, BufferInfo};
 use vulkan_core::device::Device;
 use vulkan_core::image::{Image, ImageInfo};
 
-use self::codegen::CompileInfo;
-use self::pipeline::PipelineDesc;
-use self::shader_cache::{ShaderCache, ShaderKind};
+use self::codegen::{DeviceInfo, IrGlslDef};
+// use self::shader_cache::{ShaderCache, ShaderKind};
+use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, Pipeline, PipelineInfo};
 
-/// TODO: Find better way to chache pipelines
-#[derive(Debug)]
-pub struct InternalVkDevice {
-    device: Device,
-    pipeline_cache: Mutex<HashMap<u64, Arc<pipeline::Pipeline>>>,
-    shader_cache: Mutex<ShaderCache>,
-}
-impl InternalVkDevice {
-    fn compile_ir(&self, ir: &IR, info: &CompileInfo) -> Arc<pipeline::Pipeline> {
-        let mut hasher = DefaultHasher::new();
-        ir.internal_hash().hash(&mut hasher);
-        info.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        self.pipeline_cache
-            .lock()
-            .unwrap()
-            .entry(hash)
-            .or_insert_with(|| Arc::new(pipeline::Pipeline::from_ir(&self.device, ir, info)))
-            .clone()
-    }
-    fn get_pipeline<'a>(&'a self, desc: &PipelineDesc<'a>) -> Arc<pipeline::Pipeline> {
-        self.pipeline_cache
-            .lock()
-            .unwrap()
-            .entry(desc.hash())
-            .or_insert_with(|| Arc::new(pipeline::Pipeline::create(&self.device, desc)))
-            .clone()
-    }
-    fn get_shader_glsl(
-        &self,
-        src: &str,
-        kind: ShaderKind,
-        defines: &[(&str, Option<&str>)],
-    ) -> Arc<Vec<u32>> {
-        self.shader_cache
-            .lock()
-            .unwrap()
-            .lease_glsl(src, kind, defines)
+impl VulkanDevice {
+    fn compile_ir(&self, ir: &IR, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
+        let def = IrGlslDef {
+            ir,
+            entry_point: "main",
+            device_info: info,
+        };
+        let pipeline = Pipeline::create(&self, def);
+        pipeline
     }
 }
-impl std::ops::Deref for InternalVkDevice {
-    type Target = Device;
 
-    fn deref(&self) -> &Self::Target {
-        &self.device
-    }
-}
+pub static DEVICES: Lazy<Mutex<HashMap<usize, Arc<Device>>>> =
+    Lazy::new(|| Mutex::new(Default::default()));
 
 #[derive(Clone, Debug)]
-pub struct VulkanDevice(Arc<InternalVkDevice>);
+pub struct VulkanDevice(Arc<Device>);
 impl VulkanDevice {
+    #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
-        Ok(Self(Arc::new(InternalVkDevice {
-            device: Device::create(id),
-            pipeline_cache: Default::default(),
-            shader_cache: Default::default(),
-        })))
+        Ok(Self(
+            DEVICES
+                .lock()
+                .unwrap()
+                .entry(id)
+                .or_insert_with(|| Device::create(0).unwrap())
+                .clone(),
+        ))
     }
 }
 
 impl std::ops::Deref for VulkanDevice {
-    type Target = InternalVkDevice;
+    type Target = Arc<Device>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -107,10 +78,10 @@ impl backend::BackendDevice for VulkanDevice {
     fn create_buffer(&self, size: usize) -> backend::Result<Self::Buffer> {
         // WARN: compress and prefix_sum rely on the buffer being divisible by 16
         // Therefore we allocate with powers of 2
-        let size = utils::u64::round_pow2(size as _);
+        let size = crate::utils::u64::round_pow2(size as _);
         let info = BufferInfo {
             size: size as usize,
-            alignment: 0,
+            alignment: 8,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER
@@ -125,6 +96,7 @@ impl backend::BackendDevice for VulkanDevice {
         })
     }
 
+    #[profiling::function]
     fn execute_graph(
         &self,
         graph: &crate::graph::Graph,
@@ -133,7 +105,19 @@ impl backend::BackendDevice for VulkanDevice {
         use crate::graph::PassOp;
         let mut rgraph = RGraph::new();
 
-        for pass in graph.passes.iter() {
+        for (i, pass) in graph.passes().iter().enumerate() {
+            let to_buffer = |id: crate::graph::ResourceId| {
+                env.buffer(id)
+                    .and_then(|buffer| Some(buffer.vulkan()?.buffer.clone()))
+            };
+            let to_image = |id: crate::graph::ResourceId| {
+                env.texture(id)
+                    .and_then(|image| Some(image.vulkan()?.image.clone()))
+            };
+            let to_accel = |id: crate::graph::ResourceId| {
+                env.accel(id)
+                    .and_then(|accel| Some(accel.vulkan()?.accel.clone()))
+            };
             let buffers = pass
                 .resources
                 .iter()
@@ -155,7 +139,7 @@ impl backend::BackendDevice for VulkanDevice {
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
                     let size = *size;
-                    let compile_info = CompileInfo {
+                    let compile_info = DeviceInfo {
                         work_group_size: 128,
                     };
                     let pipeline = self.compile_ir(ir, &compile_info);
@@ -191,7 +175,7 @@ impl backend::BackendDevice for VulkanDevice {
                         .collect::<Vec<_>>();
 
                     // Create a render pass on the graph, pushing all it's resource accesses
-                    let mut rpass = rgraph.pass("JIT Kernel");
+                    let mut rpass = rgraph.pass(format!("JIT Kernel {i}"));
                     for buffer in &buffers {
                         rpass = rpass.read(&buffer, AccessType::ComputeShaderReadOther);
                         rpass = rpass.write(&buffer, AccessType::ComputeShaderWrite);
@@ -208,12 +192,13 @@ impl backend::BackendDevice for VulkanDevice {
                             rpass = rpass.read(&blas, AccessType::ComputeShaderReadOther);
                         }
                     }
+                    let tlases = accels.iter().map(|a| a.tlas.clone()).collect::<Vec<_>>();
 
                     let grid_size = (size + compile_info.work_group_size as usize - 1)
                         / compile_info.work_group_size as usize;
 
                     rpass.record(move |device, cb, pool| {
-                        pipeline.submit_to_cbuffer(cb, pool, grid_size, &buffers, &images, &accels);
+                        pipeline.submit_to_cbuffer(cb, pool, grid_size, &buffers, &images, &tlases);
                     });
                 }
                 PassOp::DeviceOp(op) => match op {
@@ -240,9 +225,11 @@ impl backend::BackendDevice for VulkanDevice {
                         );
                     }
                     DeviceOp::Compress => {
-                        let index_out = buffers[0].clone();
-                        let out_count = buffers[1].clone();
-                        let src = buffers[2].clone();
+                        let index_out = to_buffer(pass.resources[0]).unwrap();
+                        let out_count = to_buffer(pass.resources[1]).unwrap();
+                        let src = to_buffer(pass.resources[2]).unwrap();
+
+                        let size_buffer = pass.size_buffer.and_then(to_buffer);
 
                         let num = graph.buffer_desc(pass.resources[2]).size;
 
@@ -250,9 +237,66 @@ impl backend::BackendDevice for VulkanDevice {
                             &self,
                             &mut rgraph,
                             num,
+                            size_buffer,
                             &out_count,
                             &src,
                             &index_out,
+                        );
+                    }
+                    DeviceOp::MatMul {
+                        max_n,
+                        max_m,
+                        max_k,
+                    } => {
+                        let mat_d = to_buffer(pass.resources[0]).unwrap();
+                        let mat_a = to_buffer(pass.resources[1]).unwrap();
+                        let mat_b = to_buffer(pass.resources[2]).unwrap();
+                        let mat_c = to_buffer(pass.resources[3]).unwrap();
+                        let config = pass.resources.get(4).cloned().and_then(to_buffer);
+
+                        let a_type = &graph.buffer_desc(pass.resources[1]).ty;
+                        let c_type = &graph.buffer_desc(pass.resources[3]).ty;
+
+                        cooperative_matrix::multiply(
+                            &self,
+                            &mut rgraph,
+                            a_type,
+                            c_type,
+                            *max_n as _,
+                            *max_m as _,
+                            *max_k as _,
+                            config,
+                            mat_a,
+                            mat_b,
+                            mat_c,
+                            mat_d,
+                        );
+                    }
+                    DeviceOp::FusedMlpInference {
+                        width,
+                        in_width,
+                        out_width,
+                        hidden_layers,
+                        max_batch_size,
+                    } => {
+                        let output = to_buffer(pass.resources[0]).unwrap();
+                        let input = to_buffer(pass.resources[1]).unwrap();
+                        let weights = to_buffer(pass.resources[2]).unwrap();
+                        let config = pass.resources.get(3).cloned().and_then(to_buffer);
+                        fused_mlp::mlp_inference(
+                            &self,
+                            &mut rgraph,
+                            input,
+                            weights,
+                            output,
+                            config,
+                            FusedMlpConfig {
+                                batch_size: *max_batch_size as _,
+                            },
+                            *width,
+                            *in_width,
+                            *out_width,
+                            *hidden_layers,
                         );
                     }
                     DeviceOp::Buffer2Texture => {
@@ -268,39 +312,33 @@ impl backend::BackendDevice for VulkanDevice {
                 _ => todo!(),
             }
         }
-        let pass_report = rgraph.submit(self);
+        let execution_report = rgraph.submit(self);
 
         Ok(backend::Report {
-            passes: pass_report,
+            exec: execution_report,
         })
     }
 
-    fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {
-        let dim = shape.iter().take_while(|d| **d > 0).count();
+    fn create_texture(&self, desc: &backend::TextureDesc) -> backend::Result<Self::Texture> {
+        let dim = desc.shape.iter().take_while(|d| **d > 0).count();
         assert!(
             dim >= 1 && dim <= 3,
             "{dim} dimensional textures are not supported.
                 Only 1, 2 and 3 dimensional textures are supported!",
-            dim = shape.len()
+            dim = desc.shape.len()
         );
-        assert!(channels <= 4);
+        assert!(desc.channels <= 4);
 
-        let width = shape[0].max(1) as _;
-        let height = shape[1].max(1) as _;
-        let depth = shape[2].max(1) as _;
+        let width = desc.shape[0].max(1) as _;
+        let height = desc.shape[1].max(1) as _;
+        let depth = desc.shape[2].max(1) as _;
         let ty = match dim {
             1 => vk::ImageType::TYPE_1D,
             2 => vk::ImageType::TYPE_2D,
             3 => vk::ImageType::TYPE_3D,
             _ => todo!(),
         };
-        let format = match channels {
-            1 => vk::Format::R32_SFLOAT,
-            2 => vk::Format::R32G32_SFLOAT,
-            3 => vk::Format::R32G32B32_SFLOAT,
-            4 => vk::Format::R32G32B32A32_SFLOAT,
-            _ => todo!(),
-        };
+        let format = utils::channels_ty_to_format(desc.channels, desc.format);
 
         let image = Arc::new(Image::create(
             self,
@@ -329,7 +367,7 @@ impl backend::BackendDevice for VulkanDevice {
 
         let info = BufferInfo {
             size,
-            alignment: 0,
+            alignment: 8,
             usage: vk::BufferUsageFlags::TRANSFER_SRC
                 | vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER
@@ -337,9 +375,9 @@ impl backend::BackendDevice for VulkanDevice {
                 | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
             memory_location: MemoryLocation::CpuToGpu,
         };
-        let mut staging = Buffer::create(&self.device, info);
+        let mut staging = Buffer::create(&self, info);
         staging.mapped_slice_mut().copy_from_slice(slice);
-        self.device.submit_global(|device, cb| unsafe {
+        self.submit_global(|device, cb| unsafe {
             let region = vk::BufferCopy {
                 src_offset: 0,
                 dst_offset: 0,
@@ -387,7 +425,7 @@ impl backend::BackendBuffer for VulkanBuffer {
 
         let info = BufferInfo {
             size,
-            alignment: 0,
+            alignment: std::mem::align_of::<T>(),
             usage: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
             memory_location: MemoryLocation::GpuToCpu,
         };

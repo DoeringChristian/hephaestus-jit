@@ -262,8 +262,8 @@ as_var_type! {
 }
 
 /// Instance Type used for Ray Tracing
-#[derive(Default, Debug, Clone, Copy)]
 #[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Instance {
     pub transform: [f32; 12],
     pub geometry: u32,
@@ -280,6 +280,7 @@ impl AsVarType for Instance {
 }
 
 /// Ray Intersection
+#[repr(C)]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Intersection {
     pub bx: f32,
@@ -297,6 +298,33 @@ impl AsVarType for Intersection {
         from_ty::<Self>(|| VarType::Struct {
             tys: vec![f32_ty, f32_ty, u32_ty, u32_ty, u32_ty],
         })
+    }
+}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MatMulConfig {
+    pub M: u32,
+    pub N: u32,
+    pub K: u32,
+}
+impl AsVarType for MatMulConfig {
+    fn var_ty() -> &'static VarType {
+        let u32_ty = u32::var_ty();
+        composite(&[&u32_ty, &u32_ty, &u32_ty])
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+pub struct FusedMlpConfig {
+    pub batch_size: u32,
+}
+impl AsVarType for FusedMlpConfig {
+    fn var_ty() -> &'static VarType {
+        let u32_ty = u32::var_ty();
+        composite(&[&u32_ty, &u32_ty])
     }
 }
 

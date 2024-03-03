@@ -35,7 +35,7 @@ impl BackendDevice for CudaDevice {
         todo!()
     }
 
-    fn create_texture(&self, shape: [usize; 3], channels: usize) -> backend::Result<Self::Texture> {
+    fn create_texture(&self, desc: &backend::TextureDesc) -> backend::Result<Self::Texture> {
         todo!()
     }
 

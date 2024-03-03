@@ -1,44 +1,68 @@
 use half::f16;
 
-use super::CompileInfo;
+use super::DeviceInfo;
 use crate::ir::{VarId, IR};
 use crate::vartype::{self, AsVarType, VarType};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Write};
 
-pub fn assemble_ir(ir: &IR, info: &CompileInfo, entry_point: &str) -> Option<Vec<u32>> {
+pub fn assemble_ir(ir: &IR, info: &DeviceInfo, entry_point: &str) -> Option<Vec<u32>> {
     let mut s = String::new();
     assemble_entry_point(&mut s, ir, info, entry_point).unwrap();
 
     log::trace!("\n{s}");
 
-    let mut options = shaderc::CompileOptions::new().unwrap();
-    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-    options.set_hlsl_offsets(true);
-    options.set_target_env(
-        shaderc::TargetEnv::Vulkan,
-        shaderc::EnvVersion::Vulkan1_3 as _,
-    );
-    options.set_target_spirv(shaderc::SpirvVersion::V1_5);
-    let compiler = shaderc::Compiler::new().unwrap();
+    // // Compile with glslang
+    // let compiler = glslang::Compiler::acquire().unwrap();
+    // let options = glslang::CompilerOptions {
+    //     source_language: glslang::SourceLanguage::GLSL,
+    //     target: glslang::Target::Vulkan {
+    //         version: glslang::VulkanVersion::Vulkan1_3,
+    //         spirv_version: glslang::SpirvVersion::SPIRV1_6,
+    //     },
+    //     ..Default::default()
+    // };
+    //
+    // let shader = glslang::ShaderSource::from(s.as_str());
+    // let shader =
+    //     glslang::ShaderInput::new(&shader, glslang::ShaderStage::Compute, &options, None).unwrap();
+    // let shader = compiler.create_shader(shader).unwrap();
+    // let code = shader.compile().unwrap();
 
-    let artefact = compiler
-        .compile_into_spirv(
-            &s,
-            shaderc::ShaderKind::Compute,
-            "",
-            entry_point,
-            Some(&options),
-        )
-        .unwrap();
+    // Compile with shaderc
+    {
+        profiling::scope!("Compiling with shaderc");
+        let mut options = shaderc::CompileOptions::new().unwrap();
+        options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+        options.set_hlsl_offsets(true);
+        options.set_target_env(
+            shaderc::TargetEnv::Vulkan,
+            shaderc::EnvVersion::Vulkan1_3 as _,
+        );
+        options.set_target_spirv(shaderc::SpirvVersion::V1_5);
+        let compiler = shaderc::Compiler::new().unwrap();
 
-    Some(artefact.as_binary().to_vec())
+        let artefact = compiler
+            .compile_into_spirv(
+                &s,
+                shaderc::ShaderKind::Compute,
+                "",
+                entry_point,
+                Some(&options),
+            )
+            .map_err(|err| anyhow::anyhow!("{err}: {s}"))
+            .unwrap();
+        let code = artefact.as_binary().to_vec();
+
+        Some(code)
+    }
 }
 
+#[profiling::function]
 pub fn assemble_entry_point(
     s: &mut String,
     ir: &IR,
-    info: &CompileInfo,
+    info: &DeviceInfo,
     entry_point: &str,
 ) -> std::fmt::Result {
     let mut b = GlslBuilder::new(ir);
@@ -119,7 +143,7 @@ pub fn assemble_entry_point(
 pub struct GlslBuilder {
     n_buffers: usize,
     buffer_types: HashSet<&'static VarType>,
-    samplers: HashSet<usize>,
+    samplers: HashSet<(u32, &'static VarType)>,
     composite_types: HashSet<&'static VarType>,
     ray_query: bool,
 }
@@ -172,14 +196,31 @@ impl GlslBuilder {
         }
         Ok(())
     }
-    pub fn sampler_binding(&mut self, s: &mut String, ir: &IR, dim: usize) -> std::fmt::Result {
+    pub fn sampler_binding(
+        &mut self,
+        s: &mut String,
+        ir: &IR,
+        dim: u32,
+        ty: &'static VarType,
+    ) -> std::fmt::Result {
         let n_samplers = ir.n_textures;
-        if !self.samplers.contains(&dim) {
+        if !self.samplers.contains(&(dim, ty)) {
+            let type_prefix = match ty {
+                VarType::I8 | VarType::I16 | VarType::I32 | VarType::I64 => "i",
+                VarType::U8 | VarType::U16 | VarType::U32 | VarType::U64 => "u",
+                VarType::F16 | VarType::F32 | VarType::F64 => "",
+                _ => todo!(),
+            };
+            let glsl_type = GlslTypeName(ty);
             writeln!(
                 s,
-                "layout(set = 0, binding = 1) uniform sampler{dim}D samplers[{n_samplers}];"
+                "layout(set = 0, binding = 1) uniform {type_prefix}sampler{dim}D samplers{dim}D{glsl_type}[{n_samplers}];"
             )?;
-            self.samplers.insert(dim);
+            // writeln!(
+            //     s,
+            //     "layout(set = 0, binding = 1, rgba32f) uniform readonly {type_prefix}image{dim}D images[{n_samplers}];"
+            // )?;
+            self.samplers.insert((dim, ty));
         }
         Ok(())
     }
@@ -192,7 +233,7 @@ impl GlslBuilder {
                     self.buffer_binding(s, memory_type)?;
                 }
                 crate::op::KernelOp::TextureRef { dim } => {
-                    self.sampler_binding(s, ir, dim)?;
+                    self.sampler_binding(s, ir, dim, var.ty)?;
                 }
                 crate::op::KernelOp::AccelRef => {
                     let n_accels = ir.n_accels;
@@ -292,6 +333,16 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
         let ty = var.ty;
         let glsl_ty = GlslTypeName(ty);
         // let ty = GlslTypeName(var.ty);
+
+        writeln!(s, "")?;
+        // writeln!(
+        //     s,
+        //     "\t// var id={id}, scope={scope} op={op:?}",
+        //     id = id.0,
+        //     scope = var.scope.0,
+        //     op = var.op,
+        // )?;
+        writeln!(s, "\t// var id={id}, op={op:?}", id = id.0, op = var.op,)?;
 
         match var.op {
             crate::op::KernelOp::Nop => {
@@ -473,7 +524,11 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
 
                 if let Some(cond) = cond {
                     let cond = Reg(*cond);
-                    writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
+                    if zeroable(ty) {
+                        writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}(0);", dst = Reg(id))?;
+                    } else {
+                        writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
+                    }
                     match ty {
                         VarType::Bool => {
                             let memory_type = GlslTypeName(u8::var_ty());
@@ -629,15 +684,37 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let false_val = Reg(deps[2]);
                 writeln!(s, "\t{glsl_ty} {dst} = {cond} ? {true_val} : {false_val};")?;
             }
+            crate::op::KernelOp::LoopStart => {
+                let loop_state = Reg(id);
+                let init = Reg(deps[0]);
+                writeln!(s, "\t{glsl_ty} {loop_state} = {init};")?;
+                writeln!(s, "\twhile({loop_state}.e0){{")?
+            }
+            crate::op::KernelOp::LoopEnd => {
+                let dst = Reg(id);
+                let loop_state = Reg(deps[0]);
+                let iresult = Reg(deps[1]);
+
+                writeln!(s, "\t{loop_state} = {iresult};")?;
+                writeln!(s, "\t}}")?;
+                writeln!(s, "\t{glsl_ty} {dst} = {loop_state};")?;
+            }
             crate::op::KernelOp::TexLookup => {
-                let sampler_idx = ir.var(deps[0]).data;
+                let tex_ref = ir.var(deps[0]);
+                let dim = match tex_ref.op {
+                    crate::op::KernelOp::TextureRef { dim } => dim,
+                    _ => todo!(),
+                };
+                let tex_type = GlslTypeName(tex_ref.ty);
+
+                let sampler_idx = tex_ref.data;
                 let coord = Reg(deps[1]);
 
                 let dst = Reg(id);
 
                 writeln!(
                     s,
-                    "\t{glsl_ty} {dst} = texture(samplers[{sampler_idx}], {coord});"
+                    "\t{glsl_ty} {dst} = texture(samplers{dim}D{tex_type}[{sampler_idx}], {coord});"
                 )?;
             }
             crate::op::KernelOp::TraceRay => {
@@ -790,96 +867,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::Uop::Log2 => writeln!(s, "\t{glsl_ty} {dst} = log2({src});"),
                 }?;
             }
-            crate::op::KernelOp::MatFMA => {
-                let a = deps[0];
-                let b = deps[1];
-                let c = deps[2];
-
-                let a_ty = ir.var(a).ty;
-                let b_ty = ir.var(a).ty;
-                let c_ty = ir.var(a).ty;
-
-                dbg!(a_ty);
-                let (a_cty, a_rows, a_cols) = match a_ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-                let (b_cty, b_rows, b_cols) = match b_ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-                let (c_cty, c_rows, c_cols) = match c_ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-                let (dst_cty, dst_rows, dst_cols) = match ty {
-                    VarType::Array { ty, num: rows } => match ty {
-                        VarType::Array { ty, num: cols } => (ty, rows, cols),
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                };
-
-                writeln!(
-                    s,
-                    "\t{glsl_ty} {dst};",
-                    glsl_ty = GlslTypeName(ty),
-                    dst = Reg(id)
-                )?;
-                writeln!(s, "\t{{")?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{dst_cty}, gl_ScopeSubgroup, {dst_rows}, {dst_cols}, gl_MatrixUseAccumulator> dst;",
-                    dst_cty = GlslTypeName(dst_cty)
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{a_cty}, gl_ScopeSubgroup, {a_rows}, {a_cols}, gl_MatrixUseA> A;",
-                    a_cty = GlslTypeName(a_cty)
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{b_cty}, gl_ScopeSubgroup, {b_rows}, {b_cols}, gl_MatrixUseB> B;",
-                    b_cty = GlslTypeName(b_cty)
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopmat<{c_cty}, gl_ScopeSubgroup, {c_rows}, {c_cols}, gl_MatrixUseAccumulator> C;",
-                    c_cty = GlslTypeName(c_cty)
-                )?;
-
-                writeln!(
-                    s,
-                    "\t\tcoopMatLoad(A, {reg}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);",
-                    reg = Reg(a),
-                    stride = a_rows * a_cty.size()
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopMatLoad(B, {reg}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);",
-                    reg = Reg(b),
-                    stride = b_rows * b_cty.size()
-                )?;
-                writeln!(
-                    s,
-                    "\t\tcoopMatLoad(C, {reg}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);",
-                    reg = Reg(c),
-                    stride = c_rows * c_cty.size()
-                )?;
-                writeln!(s, "\t\tdst = coopMatMulAdd(A, B, C);")?;
-                writeln!(s, "\t\tcoopMatStore(dst, {dst}, 0, {stride}, gl_CooperativeMatrixLayoutRowMajor);", dst = Reg(id), stride = dst_rows * dst_cty.size())?;
-
-                writeln!(s, "\t}}")?;
-            }
+            crate::op::KernelOp::FMA => {}
             _ => {}
         }
     }
@@ -993,4 +981,24 @@ fn assemble_cast(
     assemble_cast_inline(s, Reg(src), dst_ty, src_ty)?;
     writeln!(s, ";")?;
     Ok(())
+}
+
+pub fn zeroable(ty: &VarType) -> bool {
+    matches!(
+        ty,
+        VarType::Bool
+            | VarType::I8
+            | VarType::U8
+            | VarType::I16
+            | VarType::U16
+            | VarType::I32
+            | VarType::U32
+            | VarType::I64
+            | VarType::U64
+            | VarType::F16
+            | VarType::F32
+            | VarType::F64
+            | VarType::Vec { .. }
+            | VarType::Mat { .. }
+    )
 }

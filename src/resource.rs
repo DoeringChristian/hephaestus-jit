@@ -1,18 +1,8 @@
-use crate::backend::{Accel, AccelDesc, Buffer, Device, Texture};
+use crate::backend::{Accel, Buffer, Device, Texture};
+pub use crate::backend::{AccelDesc, BufferDesc, TextureDesc};
 use crate::vartype::VarType;
 // TODO: maybe move to backend?
-
-#[derive(Debug, Clone)]
-pub struct BufferDesc {
-    pub size: usize,
-    pub ty: &'static VarType,
-}
-#[derive(Debug, Clone)]
-pub struct TextureDesc {
-    pub shape: [usize; 3],
-    pub channels: usize,
-}
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum ResourceDesc {
     BufferDesc(BufferDesc),
     TextureDesc(TextureDesc),
@@ -38,7 +28,7 @@ impl Resource {
                 Resource::Buffer(device.create_buffer(desc.size * desc.ty.size()).unwrap())
             }
             ResourceDesc::TextureDesc(desc) => {
-                Resource::Texture(device.create_texture(desc.shape, desc.channels).unwrap())
+                Resource::Texture(device.create_texture(desc).unwrap())
             }
             ResourceDesc::AccelDesc(desc) => Resource::Accel(device.create_accel(desc).unwrap()),
         }

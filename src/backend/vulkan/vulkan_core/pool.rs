@@ -3,16 +3,18 @@ use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
+use super::device::{self, Device};
+
 type Cache<R> = Arc<Mutex<Vec<R>>>;
 
 pub trait Resource {
     type Info: Hash + Eq + Clone;
-    type Context;
-    fn create(context: &Self::Context, info: Self::Info) -> Self;
+    fn create(device: &Device, info: &Self::Info) -> Self;
+    fn destroy(&mut self, device: &device::Device) {}
 }
 
 pub struct ResourcePool<R: Resource> {
-    pub resources: HashMap<R::Info, Cache<R>>,
+    pub resources: Mutex<HashMap<R::Info, Cache<R>>>,
 }
 
 pub struct Lease<R: Resource> {
@@ -47,21 +49,27 @@ impl<R: Resource> Default for ResourcePool<R> {
 }
 
 impl<R: Resource> ResourcePool<R> {
-    pub fn lease(&mut self, context: &R::Context, info: &R::Info) -> Lease<R> {
-        let cache = self
-            .resources
+    pub fn lease(&self, device: &Device, info: &R::Info) -> Lease<R> {
+        let mut resources = self.resources.lock().unwrap();
+        let cache = resources
             .entry(info.clone())
             .or_insert(Arc::new(Mutex::new(Vec::with_capacity(1))));
-        let resource = cache
-            .lock()
-            .unwrap()
-            .pop()
-            .map(|r| r)
-            .unwrap_or_else(|| R::create(context, info.clone()));
+        let resource = cache.lock().unwrap().pop().map(|r| r).unwrap_or_else(|| {
+            log::trace!("Resource cache miss!");
+            R::create(device, &info)
+        });
 
         Lease {
             resource: Some(resource),
             cache: cache.clone(),
+        }
+    }
+    pub fn clear(&self, device: &device::Device) {
+        for cache in self.resources.lock().unwrap().values() {
+            for res in cache.lock().unwrap().iter_mut() {
+                res.destroy(device);
+            }
+            cache.lock().unwrap().clear();
         }
     }
 }

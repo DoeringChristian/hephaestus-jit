@@ -1,6 +1,9 @@
 mod cuda;
 mod vulkan;
+use std::borrow::Cow;
 use std::fmt::Debug;
+use std::ops::Range;
+use std::sync::Arc;
 
 use cuda::{CudaBuffer, CudaDevice};
 use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
@@ -10,6 +13,7 @@ use crate::graph::Graph;
 use crate::ir::IR;
 use crate::trace;
 use crate::vartype::AsVarType;
+use crate::vartype::VarType;
 
 use self::vulkan::VulkanAccel;
 
@@ -62,12 +66,12 @@ impl Device {
             }
         })
     }
-    pub fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Texture> {
+    pub fn create_texture(&self, desc: &TextureDesc) -> Result<Texture> {
         match self {
             Device::CudaDevice(_) => todo!(),
-            Device::VulkanDevice(device) => Ok(Texture::VulkanTexture(
-                device.create_texture(shape, channels)?,
-            )),
+            Device::VulkanDevice(device) => {
+                Ok(Texture::VulkanTexture(device.create_texture(desc)?))
+            }
         }
     }
     pub fn create_accel(&self, desc: &AccelDesc) -> Result<Accel> {
@@ -77,10 +81,14 @@ impl Device {
         }
     }
     pub fn execute_graph(&self, graph: &Graph, env: &Env) -> Result<Report> {
-        match self {
+        let report = match self {
             Device::CudaDevice(_) => todo!(),
             Device::VulkanDevice(device) => device.execute_graph(graph, env),
-        }
+        };
+        if let Ok(report) = &report {
+            report.submit_to_profiler();
+        };
+        report
     }
 }
 
@@ -91,12 +99,6 @@ pub enum Buffer {
     VulkanBuffer(VulkanBuffer),
 }
 impl Buffer {
-    // pub fn size(&self) -> usize {
-    //     match self {
-    //         Buffer::CudaBuffer(buffer) => buffer.size(),
-    //         Buffer::VulkanBuffer(buffer) => buffer.size(),
-    //     }
-    // }
     pub fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>> {
         match self {
             Self::CudaBuffer(buffer) => Ok(buffer.to_host(range)?),
@@ -150,13 +152,17 @@ impl Accel {
     }
 }
 
+///
+/// This trait represents an interface to a device.
+/// It has to be implemented for the device.
+///
 pub trait BackendDevice: Clone + Send + Sync {
     type Buffer: BackendBuffer;
     type Texture: BackendTexture;
     type Accel: BackendAccel;
     fn create_buffer(&self, size: usize) -> Result<Self::Buffer>;
     fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Self::Buffer>;
-    fn create_texture(&self, shape: [usize; 3], channels: usize) -> Result<Self::Texture>;
+    fn create_texture(&self, desc: &TextureDesc) -> Result<Self::Texture>;
     fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
     fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<Report> {
         todo!()
@@ -187,7 +193,7 @@ pub trait BackendAccel: Clone + Send + Sync {
     type Device: BackendDevice;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GeometryDesc {
     Triangles {
         // TODO: add stride
@@ -195,40 +201,104 @@ pub enum GeometryDesc {
         n_vertices: usize,
     },
 }
-// #[derive(Debug, Clone, PartialEq)]
-// pub struct InstanceDesc {
-//     pub geometry: usize,
-//     pub transform: [f32; 12],
-// }
-/// TODO: At some point we should probably rename this to AccelExtent and have a unified instance
-/// descriptor on the device.
-/// This would allow us to change instance transforms on the fly (necessary for differentiable
-/// rendering)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccelDesc {
-    pub geometries: Vec<GeometryDesc>,
+    pub geometries: Arc<[GeometryDesc]>,
     pub instances: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BufferDesc {
+    pub size: usize,
+    pub ty: &'static VarType,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TextureDesc {
+    pub shape: [usize; 3],
+    pub channels: usize,
+    pub format: &'static VarType,
 }
 
 pub struct PassReport {
     pub name: String,
+    pub start: std::time::Duration, // duration since start of frame
     pub duration: std::time::Duration,
 }
 
-pub struct Report {
+pub struct ExecReport {
+    pub cpu_start: std::time::SystemTime,
+    pub cpu_duration: std::time::Duration,
     pub passes: Vec<PassReport>,
+}
+
+pub struct Report {
+    pub exec: ExecReport,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Passes:")?;
-        for pass in self.passes.iter() {
+        for pass in self.exec.passes.iter() {
             writeln!(
                 f,
-                "\t{name: <50} {duration:?}",
+                "\t{name: <50} {duration:?} @ {start:?}",
                 name = pass.name,
-                duration = pass.duration
+                duration = pass.duration,
+                start = pass.start,
             )?;
         }
         Ok(())
+    }
+}
+impl Report {
+    pub fn submit_to_profiler(&self) {
+        #[cfg(feature = "profile-with-puffin")]
+        {
+            use profiling::puffin;
+            let start_ns = self
+                .exec
+                .cpu_start
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as i64;
+            // let start_ns = puffin::now_ns();
+            let mut stream = puffin::Stream::default();
+
+            let scope_details = self
+                .exec
+                .passes
+                .iter()
+                .map(|pass| puffin::ScopeDetails::from_scope_name(pass.name.clone()))
+                .collect::<Vec<_>>();
+
+            let ids = puffin::GlobalProfiler::lock().register_user_scopes(&scope_details);
+
+            for (pass, id) in self.exec.passes.iter().zip(ids.into_iter()) {
+                let start = stream.begin_scope(|| start_ns + pass.start.as_nanos() as i64, id, "");
+                stream.end_scope(
+                    start.0,
+                    start_ns + (pass.start.as_nanos() + pass.duration.as_nanos()) as i64,
+                );
+            }
+            // let stream_info = puffin::StreamInfo::parse(stream).unwrap();
+            puffin::GlobalProfiler::lock().report_user_scopes(
+                puffin::ThreadInfo {
+                    start_time_ns: None,
+                    name: "gpu".into(),
+                },
+                &puffin::StreamInfo {
+                    stream,
+                    num_scopes: 0,
+                    depth: 1,
+                    range_ns: (
+                        start_ns,
+                        start_ns
+                            + (self.exec.passes.last().unwrap().start.as_nanos()
+                                + self.exec.passes.last().unwrap().duration.as_nanos())
+                                as i64,
+                    ),
+                }
+                .as_stream_into_ref(), //& stream_info.as_stream_into_ref(),
+            );
+        }
     }
 }

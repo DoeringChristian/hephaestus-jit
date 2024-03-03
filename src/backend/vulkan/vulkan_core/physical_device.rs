@@ -4,18 +4,20 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+use super::{Error, Result};
 use ash;
+use ash::extensions::khr;
 use ash::vk;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    VkResult(#[from] vk::Result),
-    #[error("Could not find a Queue Family, supporting the required features!")]
-    QueueFamilyNotFound,
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+// #[derive(thiserror::Error, Debug)]
+// pub enum Error {
+//     #[error("{0}")]
+//     VkResult(#[from] vk::Result),
+//     #[error("Could not find a Queue Family, supporting the required features!")]
+//     QueueFamilyNotFound,
+// }
+//
+// pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct PhysicalDevice {
     pub physical_device: vk::PhysicalDevice,
@@ -48,6 +50,7 @@ pub struct PhysicalDevice {
     pub supports_index_type_uint8: bool,
     pub supports_ray_query: bool,
     pub supports_ray_trace: bool,
+    pub supports_cooperative_matrix: bool,
 }
 
 impl Debug for PhysicalDevice {
@@ -76,8 +79,8 @@ impl PhysicalDevice {
             .push_next(&mut features_v1_1)
             .push_next(&mut features_v1_2)
             .push_next(&mut acceleration_structure_features)
-            .push_next(&mut ray_query_features);
-        // .push_next(&mut cooperative_matrix_features);
+            .push_next(&mut ray_query_features)
+            .push_next(&mut cooperative_matrix_features);
 
         unsafe { instance.get_physical_device_features2(physical_device, &mut features2) };
 
@@ -95,8 +98,8 @@ impl PhysicalDevice {
             .push_next(&mut properties_v1_1)
             .push_next(&mut properties_v1_2)
             .push_next(&mut acceleration_structure_properties)
-            .push_next(&mut subgroup_properties);
-        // .push_next(&mut cooperative_matrix_properties);
+            .push_next(&mut subgroup_properties)
+            .push_next(&mut cooperative_matrix_properties);
 
         unsafe { instance.get_physical_device_properties2(physical_device, &mut properties2) };
 
@@ -129,6 +132,8 @@ impl PhysicalDevice {
         let supports_index_type_uint8 = extension_names.contains(vk::ExtIndexTypeUint8Fn::NAME);
         let supports_ray_query = extension_names.contains(vk::KhrRayQueryFn::NAME);
         let supports_ray_trace = extension_names.contains(vk::KhrRayTracingPipelineFn::NAME);
+        let supports_cooperative_matrix =
+            extension_names.contains(vk::KhrCooperativeMatrixFn::NAME);
 
         let queue_family_index = unsafe {
             instance
@@ -136,7 +141,8 @@ impl PhysicalDevice {
                 .iter()
                 .enumerate()
                 .find_map(|(index, info)| {
-                    let valid = info.queue_flags.contains(vk::QueueFlags::COMPUTE);
+                    let valid = info.queue_flags.contains(vk::QueueFlags::COMPUTE)
+                        && info.timestamp_valid_bits != 0;
                     if valid {
                         Some(index as u32)
                     } else {
@@ -177,6 +183,7 @@ impl PhysicalDevice {
                 supports_ray_trace,
                 supports_accel_struct,
                 supports_index_type_uint8,
+                supports_cooperative_matrix,
             })
         }
     }

@@ -124,15 +124,6 @@ Graph {
                             data: 1,
                         },
                         Var {
-                            ty: U32,
-                            op: Index,
-                            deps: (
-                                0,
-                                0,
-                            ),
-                            data: 0,
-                        },
-                        Var {
                             ty: Bool,
                             op: Gather,
                             deps: (
@@ -156,7 +147,7 @@ Graph {
                             3,
                         ),
                         VarId(
-                            4,
+                            2,
                         ),
                         VarId(
                             0,
@@ -168,7 +159,7 @@ Graph {
                             2,
                         ),
                         VarId(
-                            5,
+                            4,
                         ),
                     ],
                     n_buffers: 2,
@@ -200,14 +191,7 @@ Graph {
     ],
     resources: [
         Internal,
-        Captured {
-            resource: Buffer(
-                VulkanBuffer(
-                    VulkanBuffer {
-                        size: 16,
-                    },
-                ),
-            ),
-        },
+        Captured,
     ],
+    n_outputs: 0,
 }

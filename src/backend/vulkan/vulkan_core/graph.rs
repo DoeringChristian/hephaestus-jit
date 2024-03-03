@@ -1,14 +1,20 @@
+use super::utils::RangeGroupBy;
 use ash::vk;
 use indexmap::IndexMap;
+use itertools::Itertools;
+use slice_group_by::GroupBy;
 
-use crate::backend::PassReport;
+use crate::backend::vulkan::vulkan_core::profiler::TimedScope;
+use crate::backend::{self, PassReport};
 
 use super::acceleration_structure::AccelerationStructure;
 use super::buffer::Buffer;
 use super::device::Device;
 use super::image::Image;
 use super::profiler::Profiler;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Range;
 use std::sync::Arc;
 use vk_sync::cmd::pipeline_barrier;
 use vk_sync::{AccessType, ImageLayout};
@@ -74,12 +80,12 @@ impl Barriers {
             })
             .collect::<Vec<_>>();
 
-        let global_barrier = vk_sync::GlobalBarrier {
-            previous_accesses: &self.prev,
-            next_accesses: &self.next,
-        };
+        let global_barrier =
+            (self.prev.is_empty() && self.next.is_empty()).then(|| vk_sync::GlobalBarrier {
+                previous_accesses: &self.prev,
+                next_accesses: &self.next,
+            });
         log::trace!("Barrier with Global {global_barrier:?}, Buffer {buffer_barriers:?}, and Image {image_barriers:?}");
-        let global_barrier = Some(global_barrier);
 
         pipeline_barrier(
             device,
@@ -201,9 +207,9 @@ impl RGraph {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceId(usize);
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct PassId(usize);
 
 ///
@@ -218,6 +224,7 @@ pub struct Pass {
 impl Debug for Pass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pass")
+            .field("name", &self.name)
             .field("read", &self.read)
             .field("write", &self.write)
             .finish()
@@ -230,7 +237,7 @@ impl Debug for Pass {
 /// * `read`: Read accesses
 /// * `write`: Write accesses
 pub struct PassBuilder<'a> {
-    name: &'a str,
+    name: String,
     graph: &'a mut RGraph,
     read: Vec<(ResourceId, AccessType)>,
     write: Vec<(ResourceId, AccessType)>,
@@ -261,7 +268,7 @@ impl<'a> PassBuilder<'a> {
     ) -> PassId {
         let id = PassId(self.graph.passes.len());
         self.graph.passes.push(Pass {
-            name: self.name.into(),
+            name: self.name,
             read: self.read,
             write: self.write,
             render_fn: Some(Box::new(f)),
@@ -273,13 +280,13 @@ impl<'a> PassBuilder<'a> {
 /// A Resource Pool for temporary resources such as image views or descriptor sets
 #[derive(Debug)]
 pub struct RGraphPool {
-    pub device: Device,
+    pub device: Arc<Device>,
     pub desc_sets: Vec<vk::DescriptorSet>,
     pub desc_pools: Vec<vk::DescriptorPool>,
 }
 
 impl RGraphPool {
-    pub fn new(device: &Device) -> Self {
+    pub fn new(device: &Arc<Device>) -> Self {
         Self {
             device: device.clone(),
             // image_views: vec![],
@@ -337,15 +344,116 @@ impl Drop for RGraphPool {
 }
 
 impl RGraph {
-    pub fn pass<'a>(&'a mut self, name: &'a str) -> PassBuilder<'a> {
+    pub fn pass<'a>(&'a mut self, name: impl Into<String>) -> PassBuilder<'a> {
         PassBuilder {
-            name,
+            name: name.into(),
             graph: self,
             read: vec![],
             write: vec![],
         }
     }
-    pub fn submit(self, device: &Device) -> Vec<PassReport> {
+    #[profiling::function]
+    pub fn submit(self, device: &Arc<Device>) -> backend::ExecReport {
+        // Passes are already in topological order
+        //
+        log::trace!("Passes: {passes:#?}", passes = self.passes);
+
+        // Compute inter-pass dependencies and dependant count
+        let mut deps: Vec<PassId> = vec![];
+        // Index into [deps], listing dependencies for each pass
+        let mut pass_deps = vec![];
+        // The number of passes, directly depending on a pass
+        let mut dep_counts = vec![0u32; self.passes.len()];
+
+        // PassId of the last pass, that has written to this resource
+        let mut last_writes = vec![None; self.resources.len()];
+
+        {
+            profiling::scope!("Compute pass dependencies");
+            for id in (0..self.passes.len()).map(|i| PassId(i)) {
+                let pass = &self.passes[id.0];
+                let start = deps.len();
+
+                // Get the passes this pass is depending on.
+                deps.extend(
+                    pass.read
+                        .iter()
+                        .map(|(id, _)| *id)
+                        .chain(pass.write.iter().map(|(id, _)| *id))
+                        .unique()
+                        .flat_map(|r| last_writes[r.0]),
+                );
+                let range = start..deps.len();
+                pass_deps.push(range.clone());
+
+                // Increment dependant count for this pass
+                for dep in &deps[range] {
+                    dep_counts[dep.0] += 1;
+                }
+
+                // Update the last_writes field
+                for (r, _) in &pass.write {
+                    last_writes[r.0] = Some(id);
+                }
+            }
+        }
+
+        // The passes, which have no dependant passes
+        let mut frontier = dep_counts
+            .iter()
+            .enumerate()
+            .filter(|(i, count)| **count == 0)
+            .map(|(i, _)| PassId(i))
+            .collect::<Vec<_>>();
+        let mut new_frontier: Vec<PassId> = vec![];
+
+        // Passes
+        let mut passes = vec![];
+        // groups of passes, that can be executed in parallel
+        let mut groups = vec![];
+
+        {
+            profiling::scope!("Group passes");
+            while passes.len() < self.passes.len() {
+                // Iterate through all dependencies of all variables in the frontier
+                for &id in frontier
+                    .iter()
+                    .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
+                {
+                    dep_counts[id.0] -= 1;
+                }
+                // Collect the new frontier by searching for all 0 dependant variables
+                // These have to be among the dependencies of the current frontier
+                // TODO: the call to unique allocates memory, and could maybe be optimized
+                new_frontier.extend(
+                    frontier
+                        .iter()
+                        .flat_map(|id| deps[pass_deps[id.0].clone()].iter())
+                        .filter(|id| dep_counts[id.0] == 0)
+                        .unique(),
+                );
+
+                let start = passes.len();
+                passes.extend(frontier.drain(..));
+                groups.push(start..passes.len());
+
+                // Swap out the now empty frontier with the new frontier
+                std::mem::swap(&mut frontier, &mut new_frontier);
+                assert!(new_frontier.is_empty());
+            }
+        }
+
+        // Use pass ids to gather passes from graph
+        let mut prev_passes = self
+            .passes
+            .into_iter()
+            .map(|pass| Some(pass))
+            .collect::<Vec<_>>();
+        let mut passes = passes
+            .into_iter()
+            .map(|id| prev_passes[id.0].take().unwrap())
+            .collect::<Vec<_>>();
+
         let mut resource_accesses = self
             .resources
             .iter()
@@ -360,57 +468,95 @@ impl RGraph {
 
         let mut tmp_resource_pool = RGraphPool::new(device);
 
-        let mut profiler = Profiler::new(device, self.passes.len());
+        let mut profiler = Profiler::new(device, passes.len());
         let mut pass_names = vec![];
 
-        device.submit_global(|device, cb| {
+        let (cpu_start, cpu_duration) = device.submit_global(|device, cb| {
+            profiling::scope!("Record commad buffer");
             profiler.begin_frame(cb);
-            for pass in self.passes {
+
+            // NOTE: that, since we did BFS in from the top down, groups and passes are in reverse
+            // order.
+            // We could flip both, but since passes within a group are per definition
+            // interchangable, we only have to reverse the group order.
+            for group in groups.into_iter().rev() {
                 let scope = profiler.begin_scope(cb);
 
+                let group_name = Itertools::intersperse(
+                    passes[group.clone()]
+                        .into_iter()
+                        .map(|pass| pass.name.as_str()),
+                    ", ",
+                )
+                .collect::<String>();
+
+                log::trace!(
+                    "Recording passes {passes:?} in group \"{group_name}\"",
+                    passes = group.clone()
+                );
+
                 // Transition resources
-                log::trace!("Recording {pass:?} to command buffer");
+                // TODO: Improved barrier placement
+                // Also verify correcness especially for write after write
+                // Could also make the rg use ssa to optimize?
+                // log::trace!("Recording {pass:?} to command buffer");
 
                 let mut barriers = Barriers::default();
 
-                for (id, access) in pass.read.iter().chain(pass.write.iter()) {
-                    let prev = resource_accesses[id.0];
-                    if prev != *access {
-                        resources[id.0].transition(&mut barriers, prev, *access);
+                // Record barriers for all the passes in a group by transitioning their states
+                for (id, access) in passes[group.clone()]
+                    .iter()
+                    .flat_map(|pass| pass.read.iter())
+                    .chain(
+                        passes[group.clone()]
+                            .iter()
+                            .flat_map(|pass| pass.write.iter()),
+                    )
+                {
+                    let prev = &mut resource_accesses[id.0];
+                    if *prev != *access {
+                        resources[id.0].transition(&mut barriers, *prev, *access);
                         log::trace!(
                             "\tTransition Resource {resource:?} {prev:?} -> {read:?}",
                             resource = id.0,
                             read = access
                         );
+                        *prev = *access;
                     }
                 }
                 barriers.record(device, cb);
 
                 // Record content of pass
-                let render_fn = pass.render_fn.unwrap();
-                render_fn(device, cb, &mut tmp_resource_pool);
+                for pass in &mut passes[group] {
+                    let render_fn = pass.render_fn.take().unwrap();
+                    render_fn(device, cb, &mut tmp_resource_pool);
+                }
 
                 profiler.end_scope(cb, scope);
 
-                // Modify resource_accesses when writing
-                for (id, access) in pass.write.iter() {
-                    resource_accesses[id.0] = *access;
-                }
-
-                pass_names.push(pass.name);
+                pass_names.push(group_name);
             }
+
             profiler.end_frame(cb);
         });
 
-        let report = profiler
+        let passes = profiler
             .report()
             .into_iter()
             .zip(pass_names)
-            .map(|(duration, name)| PassReport { name, duration })
+            .map(|(TimedScope { start, duration }, name)| PassReport {
+                name,
+                start,
+                duration,
+            })
             .collect::<Vec<_>>();
 
         drop(tmp_resource_pool);
 
-        report
+        backend::ExecReport {
+            cpu_start,
+            cpu_duration,
+            passes,
+        }
     }
 }

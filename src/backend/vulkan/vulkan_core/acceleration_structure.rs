@@ -141,7 +141,7 @@ pub struct AccelerationStructure {
     pub(crate) buffer: Buffer, // Buffer to store AccelerationStructure
     pub accel: vk::AccelerationStructureKHR,
 
-    device: Device,
+    device: Arc<Device>,
 
     sizes: vk::AccelerationStructureBuildSizesInfoKHR<'static>,
     pub info: AccelerationStructureInfo,
@@ -152,7 +152,7 @@ impl AccelerationStructure {
     pub fn device(&self) -> &Device {
         &self.device
     }
-    pub fn create(device: &Device, info: AccelerationStructureInfo) -> Self {
+    pub fn create(device: &Arc<Device>, info: AccelerationStructureInfo) -> Self {
         log::trace!("Creating AccelerationStructure with {info:#?}");
         let (geometries, max_primitive_counts): (Vec<_>, Vec<_>) = info
             .geometries
@@ -226,12 +226,21 @@ impl AccelerationStructure {
             info,
         }
     }
+    /// Build the acceleration structure
+    ///
+    /// * `rgraph`: The current render graph
+    /// * `info`: AccelerationStructureInfo
+    /// * `dependencies`: dependencies of this acceleration structure, used to resolve render graph
+    /// * `buffer_dependencies`: dependencies of this acceleration structure, used to resolve render graph
+    /// TODO: somehow remove dependencies and buffer dependencies by submitting them through the
+    /// info struct
     pub fn build(
         self: &Arc<Self>,
         rgraph: &mut RGraph,
         info: &AccelerationStructureInfo,
         // TODO: not shure if I should handle dependencies like this:
         dependencies: &[Arc<AccelerationStructure>],
+        buffer_dependencies: &[Arc<Buffer>],
     ) {
         log::trace!("Building AccelerationStructure with {info:#?}");
         // TODO: pool
@@ -239,7 +248,12 @@ impl AccelerationStructure {
             &self.device,
             BufferInfo {
                 size: self.sizes.build_scratch_size as _,
-                alignment: 0,
+                alignment: self
+                    .device
+                    .physical_device
+                    .acceleration_structure_properties
+                    .min_acceleration_structure_scratch_offset_alignment
+                    as _,
                 usage: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                     | vk::BufferUsageFlags::STORAGE_BUFFER,
                 memory_location: MemoryLocation::GpuOnly,
@@ -277,6 +291,9 @@ impl AccelerationStructure {
             .read(&scratch_buffer, AccessType::AccelerationStructureBuildRead)
             .write(&scratch_buffer, AccessType::AccelerationStructureBuildWrite);
         for dep in dependencies {
+            pass = pass.read(dep, AccessType::AccelerationStructureBuildRead);
+        }
+        for dep in buffer_dependencies {
             pass = pass.read(dep, AccessType::AccelerationStructureBuildRead);
         }
         pass.write(self, AccessType::AccelerationStructureBuildWrite)

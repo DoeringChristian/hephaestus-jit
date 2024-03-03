@@ -2,15 +2,16 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Range;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
 
 use crate::extent::Extent;
-use crate::graph;
 use crate::op::{Bop, DeviceOp, KernelOp, Op, ReduceOp, Uop};
-use crate::resource::Resource;
+use crate::resource::{Resource, ResourceDesc};
 use crate::vartype::{self, AsVarType, Instance, Intersection, VarType};
 use crate::{backend, utils};
+use crate::{graph, resource};
+use half::f16;
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
@@ -33,12 +34,17 @@ pub struct ThreadState {
     // TODO: maybe use IndexSet
     pub scheduled: IndexMap<VarId, VarRef>,
     // Groups of scheduled variables, that can be compiled into the same kernel
-    pub groups: Vec<Range<usize>>, 
+    pub groups: Vec<Range<usize>>,
     // Start of the next group
     pub start: usize,
 
     // Represents the current scope
     pub scope: usize,
+
+    // Keeps a stack of side effect variables for recording loops.
+    // These will be made dependencies of the loop.
+    pub recorded_se_start: Vec<usize>,
+    pub recorded_se: Vec<VarRef>,
 }
 impl ThreadState {
     pub fn new_group(&mut self) {
@@ -56,7 +62,7 @@ impl ThreadState {
     pub fn scope(&self) -> ScopeId {
         ScopeId(self.scope)
     }
-    pub fn new_scope(&mut self) -> ScopeId{
+    pub fn new_scope(&mut self) -> ScopeId {
         self.scope = with_trace(|trace| trace.new_scope()).0;
         self.scope()
     }
@@ -68,6 +74,8 @@ impl Default for ThreadState {
             groups: Default::default(),
             start: Default::default(),
             scope: with_trace(|trace| trace.new_scope()).0,
+            recorded_se_start: Default::default(),
+            recorded_se: Default::default(),
         }
     }
 }
@@ -94,8 +102,14 @@ impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
         &self.vars[id.0]
     }
-    pub fn var_mut(&mut self, id: VarId) -> &mut Var {
-        &mut self.vars[id.0]
+    // pub fn var_mut(&mut self, id: VarId) -> &mut Var {
+    //     &mut self.vars[id.0]
+    // }
+    pub fn mark_dirty(&mut self, id: VarId) {
+        self.vars[id.0].dirty = true;
+    }
+    pub fn clear_dirty(&mut self, id: VarId) {
+        self.vars[id.0].dirty = false;
     }
     pub fn deps(&self, id: VarId) -> &[VarId] {
         &self.vars[id.0].deps
@@ -103,19 +117,36 @@ impl Trace {
     pub fn get_var(&mut self, id: VarId) -> Option<&Var> {
         self.vars.get(id.0)
     }
+    // TODO: remove this
     pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
         self.vars.get_mut(id.0)
     }
-    pub fn push_var(&mut self, mut var: Var) -> VarId {
+    pub fn push_var(&mut self, mut var: Var) -> VarRef {
         for id in var.deps.iter().chain(var.extent.get_dynamic().as_ref()) {
             self.inc_rc(*id);
         }
         var.rc = 1;
         let id = VarId(self.vars.insert(var));
-        id
+        VarRef { id }
     }
     pub fn inc_rc(&mut self, id: VarId) {
         self.vars[id.0].rc += 1;
+    }
+    ///
+    /// Put variable into it's evaluated state, removing dependencies and chaning its op type to
+    /// the evaluated type.
+    ///
+    pub fn advance(&mut self, id: VarId) {
+        let var = &mut self.vars[id.0];
+
+        var.op = var.op.resulting_op();
+
+        // Clear dependencies:
+        let deps = std::mem::take(&mut var.deps);
+
+        for dep in deps {
+            self.dec_rc(dep);
+        }
     }
     ///
     /// Decrement the reference count of an entry in the trace.
@@ -137,9 +168,7 @@ impl Trace {
     }
     pub fn ref_borrow(&mut self, id: VarId) -> VarRef {
         self.inc_rc(id);
-        VarRef {
-            id,
-        }
+        VarRef { id }
     }
     pub fn is_empty(&self) -> bool {
         self.vars.is_empty()
@@ -169,7 +198,7 @@ pub struct VarId(DefaultKey);
 
 /// TODO: maybe make non-null
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScopeId(usize);
+pub struct ScopeId(pub(crate) usize);
 
 ///
 /// This is a wrapper over the [VarId] id struct.
@@ -193,9 +222,7 @@ impl VarRef {
 impl Clone for VarRef {
     fn clone(&self) -> Self {
         with_trace(|t| t.inc_rc(self.id()));
-        Self {
-            id: self.id,
-        }
+        Self { id: self.id }
     }
 }
 impl Drop for VarRef {
@@ -215,8 +242,7 @@ pub struct Var {
     pub ty: &'static VarType,
     pub extent: Extent, // Extent of the variable
 
-    pub scope: ScopeId,
-
+    // pub scope: ScopeId,
     pub dirty: bool,
 
     pub data: Resource,
@@ -224,13 +250,38 @@ pub struct Var {
     pub(crate) deps: Vec<VarId>,
     pub(crate) rc: usize,
 }
+impl Var {
+    pub fn resource_desc(&self) -> Option<resource::ResourceDesc> {
+        match &self.extent {
+            Extent::Size(size) => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc {
+                size: *size,
+                ty: self.ty,
+            })),
+            Extent::DynSize { capacity, .. } => {
+                Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc {
+                    size: *capacity,
+                    ty: self.ty,
+                }))
+            }
+            Extent::Texture { shape, channels } => {
+                Some(resource::ResourceDesc::TextureDesc(resource::TextureDesc {
+                    shape: *shape,
+                    channels: *channels,
+                    format: self.ty,
+                }))
+            }
+            Extent::Accel(desc) => Some(resource::ResourceDesc::AccelDesc(desc.clone())),
+            _ => None,
+        }
+    }
+}
 impl Default for Var {
     fn default() -> Self {
         Self {
             op: Default::default(),
             ty: vartype::void(),
             extent: Default::default(),
-            scope: Default::default(),
+            // scope: Default::default(),
             dirty: Default::default(),
             data: Default::default(),
             deps: Default::default(),
@@ -254,7 +305,7 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
 /// - scheduling evaluation of the previous group if the variable depends on 'dirty' variables
 /// - scheduling evaluation of the current group if the variable represents a device wide operation
 ///
-fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
+pub(crate) fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
     let deps = deps
@@ -276,14 +327,22 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
         schedule_eval();
     }
 
-    // Push actual variable
+    // // Set scope as max between thread state and dependencies
+    // v.scope = [TS.with(|s| s.borrow().scope())]
+    //     .into_iter()
+    //     .chain(
+    //         deps.iter()
+    //             .map(|id| with_trace(|trace| trace.var(*id).scope)),
+    //     )
+    //     .max()
+    //     .unwrap();
+
+    // Set dependencies
+
     v.deps = deps;
-    v.scope = TS.with(|s|{
-        s.borrow().scope()
-    });
-    let res = with_trace(|t| VarRef {
-        id: t.push_var(v),
-    });
+
+    // Push actual variable
+    let res = with_trace(|t| t.push_var(v));
     // Auto schedule and schedule evaluation if device op
     if is_device_op {
         res.schedule();
@@ -292,18 +351,94 @@ fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRe
     // TODO: maybe mark variables dirty that have been referenced with RefMut
     res
 }
+pub fn new_scope() -> ScopeId {
+    TS.with(|ts| ts.borrow_mut().new_scope())
+}
+
+// Loop stuff
+///
+/// Constructs the start of a recorded loop.
+/// The state of the loop is handled through a construct.
+/// We could introduce a 'namespace' cosntruct type, that would allow us to not actually use spir-v
+/// variables.
+///
+pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, Vec<VarRef>) {
+    let state = composite(state_vars);
+
+    let ty = state.ty();
+    let extent = state.extent();
+
+    // Start a new group of recorded side effects, to be used by loop_end
+    TS.with(|ts| {
+        let mut ts = ts.borrow_mut();
+        let start = ts.recorded_se.len();
+        ts.recorded_se_start.push(start);
+    });
+
+    let loop_start = push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::LoopStart),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        [&state],
+    );
+
+    let state = state_vars
+        .iter()
+        .enumerate()
+        .map(|(i, _)| loop_start.extract(i))
+        .collect::<Vec<_>>();
+
+    (loop_start, state)
+}
+pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef> {
+    let state = composite(state_vars);
+
+    let ty = state.ty();
+    let extent = state.extent();
+
+    // Get side effects of this loop
+    let side_effects = TS.with(|ts| {
+        let mut ts = ts.borrow_mut();
+        let start = ts.recorded_se_start.pop().unwrap();
+        dbg!(start);
+        ts.recorded_se.drain(start..).collect::<Vec<_>>()
+    });
+
+    let deps = [loop_start, &state].into_iter().chain(side_effects.iter());
+
+    let loop_end = push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::LoopEnd),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        deps,
+    );
+
+    let state = state_vars
+        .iter()
+        .enumerate()
+        .map(|(i, _)| loop_end.extract(i))
+        .collect::<Vec<_>>();
+
+    state
+}
 
 ///
-/// Compiles the currently scheduled variables (see [Schedule]) into a [graph::Graph], which can be
+/// Compiles the current thread state (see [ThreadState]) into a [graph::Graph], which can be
 /// launched on any device.
 /// This captures the current environment (variables which are already evaluated).
 ///
 pub fn compile() -> graph::Graph {
     schedule_eval();
     TS.with(|s| {
-        let mut s = s.borrow_mut();
-        let schedule = std::mem::take(&mut (*s));
-        let graph = with_trace(|t| graph::compile(t, &schedule, &[]));
+        let mut ts = s.borrow_mut();
+        let ts = std::mem::take(&mut (*ts));
+        let graph = graph::compile(&ts, &[], &[]);
         graph
     })
 }
@@ -322,7 +457,22 @@ pub fn schedule_eval() {
 ///
 /// Returns a variable that represents a global index within a kernel.
 ///
-pub fn index(size: usize) -> VarRef {
+pub fn index() -> VarRef {
+    push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::Index),
+            ty: u32::var_ty(),
+            extent: Extent::None,
+            ..Default::default()
+        },
+        [],
+    )
+}
+///
+/// Returns a variable that represents a global index within a kernel, while enforcing a minimum
+/// size.
+///
+pub fn sized_index(size: usize) -> VarRef {
     push_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),
@@ -561,7 +711,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
                 }
             }
         })
-        .collect::<Vec<_>>();
+        .collect::<Arc<[_]>>();
     let create_desc = backend::AccelDesc {
         geometries,
         instances: desc.instances.size(),
@@ -578,29 +728,95 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
     )
 }
 
+#[allow(non_snake_case)]
+pub fn matfma(
+    mat_a: &VarRef,
+    mat_b: &VarRef,
+    mat_c: &VarRef,
+    M: usize,
+    N: usize,
+    K: usize,
+) -> VarRef {
+    assert_eq!(mat_a.ty(), mat_b.ty());
+    let c_type = mat_c.ty();
+
+    let mat_c = push_var(
+        Var {
+            op: Op::DeviceOp(DeviceOp::MatMul {
+                max_n: N,
+                max_m: M,
+                max_k: K,
+            }),
+            ty: c_type,
+            extent: Extent::Size(N * M),
+            ..Default::default()
+        },
+        [mat_a, mat_b, mat_c],
+    );
+
+    mat_c
+}
+
+pub fn fused_mlp_inference(
+    input: &VarRef,
+    weights: &VarRef,
+    width: usize,
+    in_width: usize,
+    out_width: usize,
+    hidden_layers: usize,
+    batch_size: usize,
+) -> VarRef {
+    assert_eq!(width, in_width);
+    assert_eq!(width, out_width);
+    assert_eq!(input.ty(), f16::var_ty());
+    assert_eq!(weights.ty(), f16::var_ty());
+
+    let ty = f16::var_ty();
+    let size = input.size();
+    
+    push_var(
+        Var {
+            op: Op::DeviceOp(DeviceOp::FusedMlpInference { width, in_width, out_width, hidden_layers, max_batch_size: batch_size}),
+            ty,
+            extent: Extent::Size(size),
+            ..Default::default()
+        },
+        [input, weights],
+    )
+}
+
 impl VarRef {
     pub fn borrow(id: VarId) -> Self {
         with_trace(|trace| {
             trace.inc_rc(id);
         });
-        Self {
-            id,
-        }
+        Self { id }
     }
     pub fn mark_dirty(&self) {
         with_trace(|trace| {
-            trace.var_mut(self.id()).dirty = true;
+            trace.mark_dirty(self.id());
         })
     }
     fn clear_dirty(&self) {
         with_trace(|trace| {
-            trace.var_mut(self.id()).dirty = false;
+            trace.clear_dirty(self.id());
         })
     }
     pub fn dirty(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).dirty)
     }
     /// Schedule the variable for execution in the current group
+    // pub fn schedule(&self) {
+    //     // We should not be able to schedule already evaluated variables as well as ones who's
+    //     // extent is unsized
+    //     if self.is_evaluated() || self.is_unsized() {
+    //         return;
+    //     }
+    //     TS.with(|s| {
+    //         let mut s = s.borrow_mut();
+    //         s.scheduled.entry(self.id()).or_insert_with(|| self.clone());
+    //     })
+    // }
     pub fn schedule(&self) {
         // We should not be able to schedule already evaluated variables as well as ones who's
         // extent is unsized
@@ -608,8 +824,14 @@ impl VarRef {
             return;
         }
         TS.with(|s| {
-            let mut s = s.borrow_mut();
-            s.scheduled.entry(self.id()).or_insert_with(||self.clone());
+            let mut ts = s.borrow_mut();
+            if !ts.recorded_se_start.is_empty() && self.ty() == vartype::void() {
+                ts.recorded_se.push(self.clone());
+            } else {
+                ts.scheduled
+                    .entry(self.id())
+                    .or_insert_with(|| self.clone());
+            }
         })
     }
     pub fn is_evaluated(&self) -> bool {
@@ -707,7 +929,6 @@ impl VarRef {
     uop!(log2);
 
     pub fn cast(&self, ty: &'static VarType) -> Self {
-
         let extent = resulting_extent([self]);
 
         push_var(
@@ -731,7 +952,6 @@ impl VarRef {
     // }
 
     pub fn bitcast(&self, ty: &'static VarType) -> Self {
-
         let extent = resulting_extent([self]);
 
         push_var(
@@ -911,13 +1131,13 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn mat_fma(&self, b: &Self, c: &Self) -> Self {
+    pub fn fma(&self, b: &Self, c: &Self) -> Self {
         let extent = resulting_extent([self, b, c]);
         let ty = self.ty();
 
         push_var(
             Var {
-                op: Op::KernelOp(KernelOp::MatFMA),
+                op: Op::KernelOp(KernelOp::FMA),
                 extent,
                 ty,
                 ..Default::default()
@@ -966,6 +1186,9 @@ impl VarRef {
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
     }
+    // pub fn scope(&self) -> ScopeId {
+    //     with_trace(|t| t.var(self.id()).scope)
+    // }
     pub fn item<T: AsVarType>(&self) -> T {
         assert_eq!(self.size(), 1);
         self.to_vec(0..1)[0]
@@ -1016,7 +1239,7 @@ impl VarRef {
         };
         push_var(
             Var {
-                op: Op::KernelOp(KernelOp::Extract(elem)),
+                op: Op::KernelOp(KernelOp::Extract(elem as u32)),
                 ty,
                 extent,
                 ..Default::default()
@@ -1097,7 +1320,7 @@ impl VarRef {
 
         let size = self.size();
         assert_eq!(shape.iter().fold(1, |a, b| a * b) * channels, size);
-        assert_eq!(self.ty(), f32::var_ty());
+        // assert_eq!(self.ty(), f32::var_ty());
 
         let shape = [
             *shape.get(0).unwrap_or(&0),
@@ -1106,10 +1329,12 @@ impl VarRef {
         ];
         log::trace!("Recording Texture with {shape:?}");
 
+        let ty = self.ty();
+
         push_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::Buffer2Texture),
-                ty: f32::var_ty(),
+                ty,
                 extent: Extent::Texture { shape, channels },
                 ..Default::default()
             },

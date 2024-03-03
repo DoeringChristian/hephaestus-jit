@@ -1,5 +1,6 @@
 use crate::backend::vulkan::pipeline::{Binding, BufferWriteInfo, DescSetLayout, WriteSet};
-use crate::backend::{self, Buffer};
+use crate::backend::{self, Buffer, TextureDesc};
+use crate::vartype::AsVarType;
 use crate::vartype::VarType;
 use crate::vulkan;
 
@@ -7,7 +8,13 @@ use crate::vulkan;
 fn image() {
     let device = backend::Device::vulkan(0).unwrap();
 
-    let tex = device.create_texture([100, 100, 100], 4).unwrap();
+    let tex = device
+        .create_texture(&TextureDesc {
+            shape: [100, 100, 100],
+            channels: 4,
+            format: f32::var_ty(),
+        })
+        .unwrap();
 }
 
 // // #[test]
