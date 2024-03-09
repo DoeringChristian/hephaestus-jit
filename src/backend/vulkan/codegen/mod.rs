@@ -1,6 +1,7 @@
 use std::hash::Hash;
 
 use ash::vk;
+use comemo::Prehashed;
 
 use crate::ir::IR;
 
@@ -31,7 +32,7 @@ pub struct DeviceInfo {
 
 #[derive(Hash)]
 pub struct IrGlslDef<'a> {
-    pub ir: &'a IR,
+    pub ir: &'a Prehashed<IR>,
     pub entry_point: &'a str,
     pub device_info: &'a DeviceInfo,
 }

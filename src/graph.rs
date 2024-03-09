@@ -7,6 +7,7 @@ use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::vartype::AsVarType;
 use crate::{backend, vartype};
 use crate::{compiler, ir, op, trace};
+use comemo::Prehashed;
 use indexmap::IndexMap;
 
 ///
@@ -307,7 +308,7 @@ pub enum PassOp {
     #[default]
     None,
     Kernel {
-        ir: ir::IR,
+        ir: Prehashed<ir::IR>,
         size: usize,
     },
     DeviceOp(op::DeviceOp),
@@ -439,6 +440,7 @@ pub fn compile(
                     .collect::<Vec<_>>();
 
                 let ir = compiler.ir;
+                let ir = Prehashed::new(ir);
 
                 let size = trace.var(vars[group.start]).extent.capacity();
                 Pass {
