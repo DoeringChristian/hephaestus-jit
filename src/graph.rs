@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::extent::Extent;
+use crate::prehashed::Prehashed;
 use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::vartype::AsVarType;
 use crate::{backend, vartype};
 use crate::{compiler, ir, op, trace};
-use comemo::Prehashed;
 use indexmap::IndexMap;
 
 ///

@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
+use crate::prehashed::Prehashed;
 use ash::vk;
-use comemo::Prehashed;
 
 use crate::ir::IR;
 

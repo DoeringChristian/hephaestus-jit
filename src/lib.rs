@@ -6,6 +6,7 @@ mod extent;
 mod graph;
 pub mod ir;
 mod op;
+mod prehashed;
 
 #[macro_use]
 pub mod record;
