@@ -426,26 +426,20 @@ pub fn compile(
                 }
             } else {
                 // Handle Kernel Ops (compile)
-                thread_local! {
-                    static COMPILER: RefCell<compiler::Compiler> = Default::default();
-                };
-                let (resources, ir) = COMPILER.with(|compiler| {
-                    let mut compiler = compiler.borrow_mut();
-                    compiler.clear();
+                let mut compiler = compiler::Compiler::default();
 
-                    compiler.compile(trace, &vars[group.clone()]);
+                compiler.compile(trace, &vars[group.clone()]);
 
-                    let resources = compiler
-                        .buffers
-                        .iter()
-                        .chain(compiler.textures.iter())
-                        .chain(compiler.accels.iter())
-                        .flat_map(|&id| graph_builder.try_push_resource(trace, id))
-                        .collect::<Vec<_>>();
+                let resources = compiler
+                    .buffers
+                    .iter()
+                    .chain(compiler.textures.iter())
+                    .chain(compiler.accels.iter())
+                    .flat_map(|&id| graph_builder.try_push_resource(trace, id))
+                    .collect::<Vec<_>>();
 
-                    let ir = std::mem::take(&mut compiler.ir);
-                    (resources, ir)
-                });
+                let ir = compiler.ir;
+
                 let size = trace.var(vars[group.start]).extent.capacity();
                 Pass {
                     resources,
