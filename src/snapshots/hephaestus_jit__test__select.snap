@@ -119,11 +119,6 @@ Graph {
                     n_buffers: 2,
                     n_textures: 0,
                     n_accels: 0,
-                    hash: Mutex {
-                        data: None,
-                        poisoned: false,
-                        ..
-                    },
                 },
                 size: 2,
             },

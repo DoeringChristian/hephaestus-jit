@@ -20,6 +20,7 @@ use crate::ir::IR;
 use crate::op::DeviceOp;
 use crate::vartype::{AsVarType, FusedMlpConfig};
 use ash::vk;
+use comemo::Prehashed;
 use gpu_allocator::MemoryLocation;
 use once_cell::sync::Lazy;
 use vk_sync::AccessType;
@@ -32,7 +33,7 @@ use self::codegen::{DeviceInfo, IrGlslDef};
 use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, Pipeline, PipelineInfo};
 
 impl VulkanDevice {
-    fn compile_ir(&self, ir: &IR, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
+    fn compile_ir(&self, ir: &Prehashed<IR>, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
         let def = IrGlslDef {
             ir,
             entry_point: "main",
