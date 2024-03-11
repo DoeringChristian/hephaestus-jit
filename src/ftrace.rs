@@ -8,7 +8,7 @@ use crate::ir::IR;
 use crate::op::{DeviceOp, KernelOp, Op};
 use crate::prehashed::Prehashed;
 use crate::vartype::{self, VarType};
-use crate::AsVarType;
+use crate::{compiler, AsVarType};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct Var(usize);
@@ -204,10 +204,10 @@ impl Graph {
                 let var = schedule[group.start];
                 let entry = ftrace.entry(var);
 
+                    let size_buffer = None;
+
                 let pass = if entry.op.is_device_op(){
                     assert_eq!(group.len(), 1);
-
-                    let size_buffer = None;
 
                     match entry.op {
                         Op::DeviceOp(op) => {
@@ -230,6 +230,31 @@ impl Graph {
                         _ => todo!(),
                     }
                 }else{
+                    let mut compiler = compiler::Compiler::default();
+
+                    compiler.compile(ftrace, &schedule[group.clone()]);
+
+                    let resources = compiler
+                        .buffers
+                        .iter()
+                        .chain(compiler.textures.iter())
+                        .chain(compiler.accels.iter())
+                        .flat_map(|&var| push_resource(var))
+                        .collect::<Vec<_>>();
+
+                    let ir = compiler.ir;
+
+                    let size = ftrace.entry(schedule[group.start]).extent.capacity();
+                    let ir = Prehashed::new(ir);
+
+                    Pass{
+                        resources,
+                        size_buffer,
+                        op: PassOp::Kernel{ir, size}
+                    };
+
+                        
+                    
                     todo!()
                 }
                 todo!();
