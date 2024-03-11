@@ -19,6 +19,7 @@ pub mod vartype;
 mod test;
 
 pub use trace as tr;
+mod ftrace;
 
 pub use backend::vulkan;
 pub use graph::Graph;
