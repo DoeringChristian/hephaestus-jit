@@ -206,15 +206,15 @@ impl backend::BackendDevice for VulkanDevice {
                     DeviceOp::ReduceOp(op) => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
-                        let ty = &graph.buffer_desc(pass.resources[0]).ty;
-                        let num = graph.buffer_desc(pass.resources[1]).size;
+                        let ty = &graph.array_desc(pass.resources[0]).ty;
+                        let num = graph.array_desc(pass.resources[1]).size;
                         builtin::reduce::reduce(&self, &mut rgraph, *op, ty, num, &src, &dst);
                     }
                     DeviceOp::PrefixSum { inclusive } => {
                         let dst = buffers[0].clone();
                         let src = buffers[1].clone();
-                        let ty = &graph.buffer_desc(pass.resources[0]).ty;
-                        let num = graph.buffer_desc(pass.resources[1]).size;
+                        let ty = &graph.array_desc(pass.resources[0]).ty;
+                        let num = graph.array_desc(pass.resources[1]).size;
                         builtin::prefix_sum::prefix_sum(
                             &self,
                             &mut rgraph,
@@ -232,7 +232,7 @@ impl backend::BackendDevice for VulkanDevice {
 
                         let size_buffer = pass.size_buffer.and_then(to_buffer);
 
-                        let num = graph.buffer_desc(pass.resources[2]).size;
+                        let num = graph.array_desc(pass.resources[2]).size;
 
                         builtin::compress::compress(
                             &self,
@@ -255,8 +255,8 @@ impl backend::BackendDevice for VulkanDevice {
                         let mat_c = to_buffer(pass.resources[3]).unwrap();
                         let config = pass.resources.get(4).cloned().and_then(to_buffer);
 
-                        let a_type = &graph.buffer_desc(pass.resources[1]).ty;
-                        let c_type = &graph.buffer_desc(pass.resources[3]).ty;
+                        let a_type = &graph.array_desc(pass.resources[1]).ty;
+                        let c_type = &graph.array_desc(pass.resources[3]).ty;
 
                         cooperative_matrix::multiply(
                             &self,

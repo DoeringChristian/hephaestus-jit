@@ -2,6 +2,7 @@
 
 use indexmap::IndexMap;
 
+use crate::backend::{AccelDesc, ArrayDesc};
 use crate::extent::Extent;
 use crate::ftrace::{with_ftrace, Var};
 use crate::ir::IR;
@@ -73,6 +74,21 @@ impl Env {
 }
 
 impl Graph {
+    pub fn passes(&self) -> &[Pass] {
+        &self.passes
+    }
+    pub fn array_desc(&self, id: ResourceId) -> ArrayDesc {
+        match &self.resources[id.0] {
+            ResourceDesc::ArrayDesc(desc) => desc.clone(),
+            _ => todo!(),
+        }
+    }
+    pub fn accel_desc(&self, id: ResourceId) -> AccelDesc {
+        match &self.resources[id.0] {
+            ResourceDesc::AccelDesc(desc) => desc.clone(),
+            _ => todo!(),
+        }
+    }
     pub fn launch(&self, device: &backend::Device, input: &[Resource]) -> Vec<Resource> {
         let mut env = Env {
             resources: vec![None; self.resources.len()],
@@ -89,7 +105,14 @@ impl Graph {
         // Launch graph on device
 
         device.execute_graph(&self, &env);
-        todo!()
+
+        let output = self
+            .output
+            .iter()
+            .map(|id| env.resources[id.0].clone())
+            .collect::<Option<Vec<_>>>();
+
+        output.unwrap()
     }
     pub fn compile(input: &[Var], output: &[Var]) -> Self {
         with_ftrace(|ftrace| {
@@ -110,11 +133,13 @@ impl Graph {
             let input = input
                 .into_iter()
                 .map(|var| push_resource(*var))
-                .collect::<Vec<_>>();
+                .collect::<Option<Vec<_>>>()
+                .unwrap();
             let output = output
                 .into_iter()
                 .map(|var| push_resource(*var))
-                .collect::<Vec<_>>();
+                .collect::<Option<Vec<_>>>()
+                .unwrap();
 
             let groups = ftrace.groups.clone();
             let mut schedule = ftrace.scheduled.clone();
@@ -211,7 +236,7 @@ impl Graph {
                 for i in group.clone() {
                     let var = schedule[i];
                     // TODO: advance
-                    let mut entry = ftrace.entry(var);
+                    let entry = ftrace.entry_mut(var);
                     entry.op = entry.op.resulting_op();
                 }
             }

@@ -11,7 +11,7 @@ use vulkan::{VulkanBuffer, VulkanDevice, VulkanTexture};
 use crate::graph::Env;
 use crate::graph::Graph;
 use crate::ir::IR;
-use crate::trace;
+// use crate::trace;
 use crate::vartype::AsVarType;
 use crate::vartype::VarType;
 

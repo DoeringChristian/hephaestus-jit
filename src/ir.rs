@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::op::KernelOp;
-use crate::tr::ScopeId;
+// use crate::tr::ScopeId;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;

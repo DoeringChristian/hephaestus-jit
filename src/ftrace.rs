@@ -26,18 +26,21 @@ pub struct Entry {
 }
 impl Entry {
     pub fn desc(&self) -> ResourceDesc {
-        match self.extent {
-            Extent::Size(size) => ResourceDesc::ArrayDesc(ArrayDesc { size, ty: self.ty }),
-            Extent::DynSize { capacity, size } => ResourceDesc::ArrayDesc(ArrayDesc {
-                size: capacity,
+        match &self.extent {
+            Extent::Size(size) => ResourceDesc::ArrayDesc(ArrayDesc {
+                size: *size,
                 ty: self.ty,
             }),
+            // Extent::DynSize { capacity, size } => ResourceDesc::ArrayDesc(ArrayDesc {
+            //     size: capacity,
+            //     ty: self.ty,
+            // }),
             Extent::Texture { shape, channels } => ResourceDesc::TextureDesc(TextureDesc {
-                shape,
-                channels,
+                shape: *shape,
+                channels: *channels,
                 format: self.ty,
             }),
-            Extent::Accel(desc) => ResourceDesc::AccelDesc(desc),
+            Extent::Accel(desc) => ResourceDesc::AccelDesc(desc.clone()),
             _ => todo!(),
         }
     }
@@ -69,6 +72,9 @@ impl FTrace {
     }
     pub fn entry(&self, var: Var) -> &Entry {
         &self.entries[var.0]
+    }
+    pub fn entry_mut(&mut self, var: Var) -> &mut Entry {
+        &mut self.entries[var.0]
     }
 }
 
