@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 
 use crate::backend::{AccelDesc, ArrayDesc};
 use crate::extent::Extent;
-use crate::ftrace::{with_ftrace, Var};
+use crate::ftrace::{with_ftrace, FTrace, Var};
 use crate::ir::IR;
 use crate::op::{DeviceOp, Op};
 use crate::prehashed::Prehashed;
@@ -119,7 +119,7 @@ impl Graph {
             let mut resources: IndexMap<Var, ()> = IndexMap::default();
             let mut passes = vec![];
 
-            let mut push_resource = |var: Var| {
+            let mut push_resource = |ftrace: &mut FTrace, var: Var| {
                 if let Some(id) = resources.get_index_of(&var) {
                     Some(ResourceId(id))
                 } else {
@@ -132,12 +132,12 @@ impl Graph {
             // Add input/output resources
             let input = input
                 .into_iter()
-                .map(|var| push_resource(*var))
+                .map(|var| push_resource(ftrace, *var))
                 .collect::<Option<Vec<_>>>()
                 .unwrap();
             let output = output
                 .into_iter()
-                .map(|var| push_resource(*var))
+                .map(|var| push_resource(ftrace, *var))
                 .collect::<Option<Vec<_>>>()
                 .unwrap();
 
@@ -190,14 +190,14 @@ impl Graph {
 
                     match entry.op {
                         Op::DeviceOp(op) => {
-                            let deps = &entry.deps;
+                            let deps = &entry.deps.clone();
 
                             // TODO: Improve the readability here. atm. we are pushing all the
                             // dependenceis into multiple vecs starting with [id]
                             let resources = [var]
                                 .iter()
                                 .chain(deps.iter())
-                                .flat_map(|var| push_resource(*var))
+                                .flat_map(|var| push_resource(ftrace, *var))
                                 .collect::<Vec<_>>();
 
                             Pass {
@@ -218,7 +218,7 @@ impl Graph {
                         .iter()
                         .chain(compiler.textures.iter())
                         .chain(compiler.accels.iter())
-                        .flat_map(|&var| push_resource(var))
+                        .flat_map(|&var| push_resource(ftrace, var))
                         .collect::<Vec<_>>();
 
                     let ir = compiler.ir;
