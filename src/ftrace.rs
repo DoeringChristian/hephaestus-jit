@@ -14,7 +14,7 @@ use crate::{backend, compiler, AsVarType};
 use self::backend::{AccelDesc, ArrayDesc, TextureDesc};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct Var(usize);
+pub struct Var(pub(crate) usize);
 
 #[derive(Debug)]
 pub struct Entry {

@@ -43,11 +43,6 @@ pub struct Graph {
     output: Vec<ResourceId>,
 }
 
-// #[derive(Debug)]
-// pub enum GraphResource {
-//     Internal,
-// }
-
 #[derive(Debug, Default, Clone)]
 pub struct Env {
     resources: Vec<Option<Resource>>,
@@ -115,9 +110,11 @@ impl Graph {
         output.unwrap()
     }
     pub fn compile(input: &[Var], output: &[Var]) -> Self {
-        with_ftrace(|ftrace| {
+        with_ftrace(|trace| {
             let mut resources: IndexMap<Var, ()> = IndexMap::default();
             let mut passes = vec![];
+
+            let schedule = output;
 
             let mut push_resource = |ftrace: &mut FTrace, var: Var| {
                 if let Some(id) = resources.get_index_of(&var) {
@@ -132,117 +129,155 @@ impl Graph {
             // Add input/output resources
             let input = input
                 .into_iter()
-                .map(|var| push_resource(ftrace, *var))
+                .map(|var| push_resource(trace, *var))
                 .collect::<Option<Vec<_>>>()
                 .unwrap();
             let output = output
                 .into_iter()
-                .map(|var| push_resource(ftrace, *var))
+                .map(|var| push_resource(trace, *var))
                 .collect::<Option<Vec<_>>>()
                 .unwrap();
 
-            let groups = ftrace.groups.clone();
-            let mut schedule = ftrace.scheduled.clone();
+            fn groups_by_extent(
+                trace: &mut FTrace,
+                vars: &mut [Var],
+            ) -> Vec<std::ops::Range<usize>> {
+                vars.sort_by(|id0, id1| {
+                    trace
+                        .entry(*id0)
+                        .extent
+                        .partial_cmp(&trace.entry(*id1).extent)
+                        .unwrap_or(std::cmp::Ordering::Less)
+                });
 
-            // Subdivide groups by extent
-            let groups = groups
-                .iter()
-                .flat_map(|group| {
-                    schedule[group.clone()].sort_by(|v0, v1| {
-                        ftrace
-                            .entry(*v0)
-                            .extent
-                            .partial_cmp(&ftrace.entry(*v1).extent)
-                            .unwrap()
-                    });
-
-                    let mut groups = vec![];
-                    let mut size = Extent::default();
-                    let mut start = group.start;
-
-                    for i in group.clone() {
-                        if ftrace.entry(schedule[i]).extent != size {
-                            let end = i + 1;
-                            if start != end {
-                                groups.push(start..end);
-                            }
-                            size = ftrace.entry(schedule[i]).extent.clone();
-                            start = end;
+                let mut groups = vec![];
+                let mut extent = Extent::default();
+                let mut start = 0;
+                for i in 0..vars.len() {
+                    let var = trace.entry(vars[i]);
+                    if var.extent != extent
+                        || var.op.is_device_op()
+                        || matches!(var.op, Op::Buffer | Op::Texture | Op::Accel)
+                    {
+                        let end = i + 1;
+                        if start != end {
+                            groups.push(start..end);
                         }
+                        extent = trace.entry(vars[i]).extent.clone();
+                        start = end;
                     }
-                    let end = group.end;
-                    if start != end {
-                        groups.push(start..end);
-                    }
-                    groups
-                })
-                .collect::<Vec<_>>();
+                }
+                groups
+            }
 
-            // Compile the graph
-            for group in groups.iter() {
-                let var = schedule[group.start];
-                let entry = ftrace.entry(var);
+            let mut depcount = vec![0; trace.entries.len()];
 
-                let size_buffer = None;
-
-                let pass = if entry.op.is_device_op() {
-                    assert_eq!(group.len(), 1);
-
-                    match entry.op {
-                        Op::DeviceOp(op) => {
-                            let deps = &entry.deps.clone();
-
-                            // TODO: Improve the readability here. atm. we are pushing all the
-                            // dependenceis into multiple vecs starting with [id]
-                            let resources = [var]
-                                .iter()
-                                .chain(deps.iter())
-                                .flat_map(|var| push_resource(ftrace, *var))
-                                .collect::<Vec<_>>();
-
-                            Pass {
-                                resources,
-                                size_buffer,
-                                op: PassOp::DeviceOp(op),
-                            }
-                        }
-                        _ => todo!(),
-                    }
-                } else {
-                    let mut compiler = compiler::Compiler::default();
-
-                    compiler.compile(ftrace, &schedule[group.clone()]);
-
-                    let resources = compiler
-                        .buffers
-                        .iter()
-                        .chain(compiler.textures.iter())
-                        .chain(compiler.accels.iter())
-                        .flat_map(|&var| push_resource(ftrace, var))
-                        .collect::<Vec<_>>();
-
-                    let ir = compiler.ir;
-
-                    let size = ftrace.entry(schedule[group.start]).extent.capacity();
-                    let ir = Prehashed::new(ir);
-
-                    Pass {
-                        resources,
-                        size_buffer,
-                        op: PassOp::Kernel { ir, size },
-                    }
-                };
-                passes.push(pass);
-                for i in group.clone() {
-                    let var = schedule[i];
-                    // TODO: advance
-                    let entry = ftrace.entry_mut(var);
-                    entry.op = entry.op.resulting_op();
+            for entry in &trace.entries {
+                for dep in &entry.deps {
+                    depcount[dep.0] += 1;
                 }
             }
+
+            let mut frontier = schedule.to_vec();
+            let mut next_frontier = vec![];
+
+            while !frontier.is_empty() {
+                let groups = groups_by_extent(trace, &mut frontier);
+                for group in groups {
+                    let first_var = frontier[group.start];
+                    // let entry = trace.entry(var);
+
+                    // let size_buffer = match first_var.extent {
+                    //     Extent::DynSize { size: size_dep, .. } => {
+                    //         graph_builder.try_push_resource(trace, size_dep)
+                    //     }
+                    //     _ => None,
+                    // };
+                    let size_buffer = None;
+
+                    let deps = if trace.entry(first_var).op.is_device_op() {
+                        let entry = trace.entry(first_var);
+                        assert_eq!(group.len(), 1);
+                        let id = frontier[group.start];
+
+                        match trace.entry(first_var).op {
+                            Op::DeviceOp(op) => {
+                                let deps = entry.deps.clone();
+
+                                // TODO: Improve the readability here. atm. we are pushing all the
+                                // dependenceis into multiple vecs starting with [id]
+                                let resources = [id]
+                                    .iter()
+                                    .chain(deps.iter())
+                                    .flat_map(|id| push_resource(trace, *id))
+                                    .collect::<Vec<_>>();
+
+                                passes.push(Pass {
+                                    resources,
+                                    size_buffer,
+                                    op: PassOp::DeviceOp(op),
+                                });
+                                deps
+                            }
+                            _ => todo!(),
+                        }
+                    } else if matches!(
+                        trace.entry(first_var).op,
+                        Op::Buffer | Op::Texture | Op::Accel
+                    ) {
+                        assert_eq!(group.len(), 1);
+                        push_resource(trace, first_var);
+                        trace.entry(first_var).deps.clone()
+                    } else {
+                        let mut compiler = compiler::Compiler::default();
+
+                        let deps = compiler.compile(trace, &frontier[group.clone()]);
+
+                        let resources = [
+                            compiler.buffers.iter(),
+                            compiler.textures.iter(),
+                            compiler.accels.iter(),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .flat_map(|&id| push_resource(trace, id))
+                        .collect::<Vec<_>>();
+
+                        let ir = Prehashed::new(compiler.ir);
+                        let size = trace.entry(first_var).extent.capacity();
+
+                        passes.push(Pass {
+                            resources,
+                            size_buffer,
+                            op: PassOp::Kernel { ir, size },
+                        });
+                        deps
+                    };
+                    // Add dependencies to next frontier
+                    // If their dependant count is 0
+                    // otherwise decrement it.
+                    // dbg!(&deps);
+
+                    for dep in &deps {
+                        depcount[dep.0] -= 1;
+                    }
+
+                    next_frontier.extend(deps.into_iter().filter_map(|var| {
+                        if depcount[var.0] == 0 {
+                            Some(var)
+                        } else {
+                            None
+                        }
+                    }));
+                }
+                // Swap out frontier with next_frontier
+                std::mem::swap(&mut frontier, &mut next_frontier);
+                next_frontier.clear();
+            }
+
             let resources = resources
                 .into_keys()
-                .map(|var| ftrace.entry(var).desc())
+                .map(|var| trace.entry(var).desc())
                 .collect::<Vec<_>>();
             Graph {
                 passes,

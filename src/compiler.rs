@@ -19,10 +19,24 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&mut self, trace: &FTrace, ids: &[ftrace::Var]) {
+    pub fn compile(&mut self, trace: &FTrace, ids: &[ftrace::Var]) -> Vec<ftrace::Var> {
         for id in ids {
             let src = self.collect(trace, *id);
+        }
 
+        // Save dependencies of this kernel
+        let deps = [
+            self.buffers.iter(),
+            self.textures.iter(),
+            self.accels.iter(),
+        ]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>();
+
+        for id in ids {
+            let src = self.visited[id];
             let var = trace.entry(*id);
             // let scope = var.scope;
             if var.ty.size() == 0 {
@@ -64,6 +78,7 @@ impl Compiler {
         self.ir.n_buffers = self.buffers.len();
         self.ir.n_textures = self.textures.len();
         self.ir.n_accels = self.accels.len();
+        deps
     }
     pub fn collect(&mut self, trace: &ftrace::FTrace, id: ftrace::Var) -> ir::VarId {
         if self.visited.contains_key(&id) {
