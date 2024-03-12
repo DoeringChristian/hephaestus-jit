@@ -116,11 +116,22 @@ impl Graph {
 
             let schedule = output;
 
-            let mut push_resource = |ftrace: &mut FTrace, var: Var| {
+            let mut push_resource = |trace: &mut FTrace, var: Var| {
+                // Get the first resource var
+                fn resource_var(trace: &FTrace, var: Var) -> Var {
+                    let entry = trace.entry(var);
+                    if matches!(entry.op, Op::Buffer | Op::Texture | Op::Accel) {
+                        if entry.deps.len() > 0 {
+                            return entry.deps[0];
+                        }
+                    }
+                    var
+                }
+                let var = resource_var(trace, var);
+
                 if let Some(id) = resources.get_index_of(&var) {
                     Some(ResourceId(id))
                 } else {
-                    let entry = ftrace.entry(var);
                     let id = resources.insert_full(var, ()).0;
                     Some(ResourceId(id))
                 }
@@ -256,7 +267,6 @@ impl Graph {
                     // Add dependencies to next frontier
                     // If their dependant count is 0
                     // otherwise decrement it.
-                    // dbg!(&deps);
 
                     for dep in &deps {
                         depcount[dep.0] -= 1;
@@ -274,6 +284,9 @@ impl Graph {
                 std::mem::swap(&mut frontier, &mut next_frontier);
                 next_frontier.clear();
             }
+
+            // We have to reverse the passes, since we generate them in reverse order
+            passes.reverse();
 
             let resources = resources
                 .into_keys()

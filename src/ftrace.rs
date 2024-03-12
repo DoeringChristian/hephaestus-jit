@@ -60,9 +60,6 @@ impl Default for Entry {
 #[derive(Default, Debug)]
 pub struct FTrace {
     pub entries: Vec<Entry>,
-    pub scheduled: Vec<Var>,
-    start: usize,
-    pub groups: Vec<Range<usize>>,
 }
 
 impl FTrace {
@@ -77,17 +74,6 @@ impl FTrace {
     pub fn entry_mut(&mut self, var: Var) -> &mut Entry {
         &mut self.entries[var.0]
     }
-    pub fn new_group(&mut self) {
-        for i in self.groups.last().unwrap_or(&(0..0)).clone() {
-            // self.entry(self.scheduled[i]).dirty = false;
-        }
-        let start = self.start;
-        let end = self.scheduled.len();
-        if start != end {
-            self.groups.push(start..end);
-            self.start = end;
-        }
-    }
 }
 
 thread_local! {
@@ -99,11 +85,6 @@ pub fn new_var(entry: Entry) -> Var {
         let mut ftrace = ftrace.borrow_mut();
         ftrace.new_var(entry)
     })
-}
-pub fn schedule_eval() {
-    with_ftrace(|ftrace| {
-        ftrace.new_group();
-    });
 }
 
 pub fn with_ftrace<T, F: FnOnce(&mut FTrace) -> T>(f: F) -> T {
@@ -147,11 +128,82 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> Var {
     })
 }
 
+///
+/// Returns a variable that represents a global index within a kernel, while enforcing a minimum
+/// size.
+///
+pub fn sized_index(size: usize) -> Var {
+    new_var(Entry {
+        op: Op::KernelOp(KernelOp::Index),
+        ty: u32::var_ty(),
+        extent: Extent::Size(size),
+        ..Default::default()
+    })
+}
+
+///
+/// Returns the [Extent], resulting from an operation on some variables.
+///
+fn resulting_extent<'a>(vars: impl IntoIterator<Item = Var>) -> Extent {
+    with_ftrace(|trace| {
+        vars.into_iter()
+            .map(|var| trace.entry(var).extent.clone())
+            .reduce(|a, b| a.resulting_extent(&b))
+            .unwrap()
+    })
+}
+
 impl Var {
-    pub fn schedule(&self) {
-        with_ftrace(|ftrace| {
-            ftrace.scheduled.push(*self);
+    pub fn ty(&self) -> &'static VarType {
+        with_ftrace(|trace| trace.entry(*self).ty)
+    }
+    pub fn extent(&self) -> Extent {
+        with_ftrace(|trace| trace.entry(*self).extent.clone())
+    }
+    pub fn get_ref(&self) -> Self {
+        // TODO: maybe do scheduling here?
+        self._get_ref(false)
+    }
+    pub fn get_mut(&self) -> Self {
+        // TODO: maybe do scheduling here?
+        self._get_ref(true)
+    }
+    fn _get_ref(&self, mutable: bool) -> Self {
+        let ty = self.ty();
+        new_var(Entry {
+            op: Op::Ref { mutable },
+            ty,
+            extent: Extent::Size(0),
+            deps: vec![*self],
+            ..Default::default()
+        })
+    }
+
+    pub fn scatter(self, dst: &mut Self, index: Self) {
+        let ty = self.ty();
+        assert_eq!(self.ty(), ty);
+        let extent = resulting_extent([self, index]);
+
+        let dst_ref = dst.get_mut();
+
+        let scatter = new_var(Entry {
+            op: Op::KernelOp(KernelOp::Scatter),
+            ty: vartype::void(),
+            extent,
+            deps: vec![dst_ref, self, index],
+            ..Default::default()
         });
+
+        let extent = dst.extent();
+
+        let phi = new_var(Entry {
+            op: Op::Buffer,
+            ty,
+            extent,
+            deps: vec![*dst, scatter],
+            ..Default::default()
+        });
+        *dst = phi;
     }
 }
 
@@ -163,10 +215,14 @@ mod test {
     #[test]
     fn ftrace_01() {
         let device = backend::vulkan(0);
-        let x = sized_literal(1, 10);
-        x.schedule();
-        schedule_eval();
+        let mut x = sized_literal(1, 10);
 
+        let index = sized_index(3);
+        sized_literal(3, 3).scatter(&mut x, index);
+
+        with_ftrace(|trace| {
+            dbg!(trace);
+        });
         let graph = Graph::compile(&[], &[x]);
         dbg!(&graph);
         let resources = graph.launch(&device, &[]);
