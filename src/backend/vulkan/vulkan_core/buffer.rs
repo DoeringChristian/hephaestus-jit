@@ -180,6 +180,10 @@ impl Buffer {
         }
     }
 
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     pub fn create_mapped_storage(device: &Arc<Device>, data: &[u8]) -> Self {
         let mut buffer = Self::create(
             device,

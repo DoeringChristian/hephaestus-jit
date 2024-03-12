@@ -171,6 +171,10 @@ mod test {
         dbg!(&graph);
         let resources = graph.launch(&device, &[]);
         dbg!(&resources);
-        dbg!(resources[0].buffer().unwrap().to_host::<i32>(0..10));
+        dbg!(resources[0]
+            .buffer()
+            .unwrap()
+            .to_host::<i32>(0..10)
+            .unwrap());
     }
 }

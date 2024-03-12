@@ -12,11 +12,8 @@ pub enum ResourceDesc {
 ///
 /// A variable can hold data directly i.e. literals, buffers, textures or acceleration structures.
 ///
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub enum Resource {
-    #[default]
-    None,
-    Literal(u64),
     Array(Array),
     Texture(Texture),
     Accel(Accel),
@@ -42,18 +39,6 @@ impl Resource {
             _ => None,
         }
     }
-    pub fn is_none(&self) -> bool {
-        match self {
-            Self::None => true,
-            _ => false,
-        }
-    }
-    pub fn is_literal(&self) -> bool {
-        match self {
-            Self::Literal(_) => true,
-            _ => false,
-        }
-    }
     pub fn is_buffer(&self) -> bool {
         match self {
             Self::Array(_) => true,
@@ -62,12 +47,6 @@ impl Resource {
     }
     pub fn is_storage(&self) -> bool {
         self.is_buffer() || self.is_texture()
-    }
-    pub fn literal(&self) -> Option<u64> {
-        match self {
-            Self::Literal(lit) => Some(*lit),
-            _ => None,
-        }
     }
     pub fn buffer(&self) -> Option<&Array> {
         match self {
