@@ -61,6 +61,7 @@ impl Default for Entry {
 pub struct FTrace {
     pub entries: Vec<Entry>,
     pub scheduled: Vec<Var>,
+    start: usize,
     pub groups: Vec<Range<usize>>,
 }
 
@@ -76,6 +77,17 @@ impl FTrace {
     pub fn entry_mut(&mut self, var: Var) -> &mut Entry {
         &mut self.entries[var.0]
     }
+    pub fn new_group(&mut self) {
+        for i in self.groups.last().unwrap_or(&(0..0)).clone() {
+            // self.entry(self.scheduled[i]).dirty = false;
+        }
+        let start = self.start;
+        let end = self.scheduled.len();
+        if start != end {
+            self.groups.push(start..end);
+            self.start = end;
+        }
+    }
 }
 
 thread_local! {
@@ -87,6 +99,11 @@ pub fn new_var(entry: Entry) -> Var {
         let mut ftrace = ftrace.borrow_mut();
         ftrace.new_var(entry)
     })
+}
+pub fn schedule_eval() {
+    with_ftrace(|ftrace| {
+        ftrace.new_group();
+    });
 }
 
 pub fn with_ftrace<T, F: FnOnce(&mut FTrace) -> T>(f: F) -> T {
@@ -140,10 +157,20 @@ impl Var {
 
 #[cfg(test)]
 mod test {
+    use crate::Graph;
+
     use super::*;
     #[test]
     fn ftrace_01() {
+        let device = backend::vulkan(0);
         let x = sized_literal(1, 10);
         x.schedule();
+        schedule_eval();
+
+        let graph = Graph::compile(&[], &[x]);
+        dbg!(&graph);
+        let resources = graph.launch(&device, &[]);
+        dbg!(&resources);
+        dbg!(resources[0].buffer().unwrap().to_host::<i32>(0..10));
     }
 }

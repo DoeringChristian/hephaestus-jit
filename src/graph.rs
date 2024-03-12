@@ -104,7 +104,7 @@ impl Graph {
 
         // Launch graph on device
 
-        device.execute_graph(&self, &env);
+        device.execute_graph(&self, &env).unwrap();
 
         let output = self
             .output
