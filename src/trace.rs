@@ -253,12 +253,12 @@ pub struct Var {
 impl Var {
     pub fn resource_desc(&self) -> Option<resource::ResourceDesc> {
         match &self.extent {
-            Extent::Size(size) => Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc {
+            Extent::Size(size) => Some(resource::ResourceDesc::ArrayDesc(resource::ArrayDesc {
                 size: *size,
                 ty: self.ty,
             })),
             Extent::DynSize { capacity, .. } => {
-                Some(resource::ResourceDesc::BufferDesc(resource::BufferDesc {
+                Some(resource::ResourceDesc::ArrayDesc(resource::ArrayDesc {
                     size: *capacity,
                     ty: self.ty,
                 }))
@@ -557,7 +557,7 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
             op: Op::Buffer,
             extent: Extent::Size(size),
             ty,
-            data: Resource::Buffer(data),
+            data: Resource::Array(data),
             ..Default::default()
         },
         [],

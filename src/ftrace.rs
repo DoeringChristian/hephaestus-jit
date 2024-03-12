@@ -7,8 +7,11 @@ use crate::extent::Extent;
 use crate::ir::IR;
 use crate::op::{DeviceOp, KernelOp, Op};
 use crate::prehashed::Prehashed;
+use crate::resource::{Resource, ResourceDesc};
 use crate::vartype::{self, VarType};
-use crate::{compiler, AsVarType};
+use crate::{backend, compiler, AsVarType};
+
+use self::backend::{AccelDesc, ArrayDesc, TextureDesc};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct Var(usize);
@@ -20,6 +23,24 @@ pub struct Entry {
     pub extent: Extent,
     pub deps: Vec<Var>,
     pub literal: u64,
+}
+impl Entry {
+    pub fn desc(&self) -> ResourceDesc {
+        match self.extent {
+            Extent::Size(size) => ResourceDesc::ArrayDesc(ArrayDesc { size, ty: self.ty }),
+            Extent::DynSize { capacity, size } => ResourceDesc::ArrayDesc(ArrayDesc {
+                size: capacity,
+                ty: self.ty,
+            }),
+            Extent::Texture { shape, channels } => ResourceDesc::TextureDesc(TextureDesc {
+                shape,
+                channels,
+                format: self.ty,
+            }),
+            Extent::Accel(desc) => ResourceDesc::AccelDesc(desc),
+            _ => todo!(),
+        }
+    }
 }
 impl Default for Entry {
     fn default() -> Self {
@@ -35,8 +56,8 @@ impl Default for Entry {
 
 #[derive(Default, Debug)]
 pub struct FTrace {
-    entries: Vec<Entry>,
-    scheduled: Vec<Var>,
+    pub entries: Vec<Entry>,
+    pub scheduled: Vec<Var>,
     pub groups: Vec<Range<usize>>,
 }
 
@@ -108,159 +129,6 @@ impl Var {
         with_ftrace(|ftrace| {
             ftrace.scheduled.push(*self);
         });
-    }
-}
-
-// Graph
-
-#[derive(Debug, Clone, Copy)]
-pub struct PassId(usize);
-
-#[derive(Debug, Clone, Copy)]
-pub struct ResourceId(pub usize);
-
-#[derive(Default, Debug)]
-pub struct Pass {
-    pub resources: Vec<ResourceId>,
-    pub size_buffer: Option<ResourceId>,
-    pub op: PassOp,
-}
-
-#[derive(Default, Debug)]
-pub enum PassOp {
-    #[default]
-    None,
-    Kernel {
-        ir: Prehashed<IR>,
-        size: usize,
-    },
-    DeviceOp(DeviceOp),
-}
-
-#[derive(Debug)]
-pub struct Graph {
-    passes: Vec<Pass>,
-    resources: Vec<Var>,
-}
-
-#[derive(Debug)]
-pub enum GraphResource {
-    Internal { var: Var },
-}
-
-impl Graph {
-    pub fn compile() -> Self {
-        with_ftrace(|ftrace| {
-            let groups = ftrace.groups.clone();
-            let mut schedule = ftrace.scheduled.clone();
-
-            // Subdivide groups by extent
-            let groups = groups
-                .iter()
-                .flat_map(|group| {
-                    schedule[group.clone()].sort_by(|v0, v1| {
-                        ftrace
-                            .entry(*v0)
-                            .extent
-                            .partial_cmp(&ftrace.entry(*v1).extent)
-                            .unwrap()
-                    });
-
-                    let mut groups = vec![];
-                    let mut size = Extent::default();
-                    let mut start = group.start;
-
-                    for i in group.clone() {
-                        if ftrace.entry(schedule[i]).extent != size {
-                            let end = i + 1;
-                            if start != end {
-                                groups.push(start..end);
-                            }
-                            size = ftrace.entry(schedule[i]).extent.clone();
-                            start = end;
-                        }
-                    }
-                    let end = group.end;
-                    if start != end {
-                        groups.push(start..end);
-                    }
-                    groups
-                })
-                .collect::<Vec<_>>();
-
-            let mut resources: IndexMap<Var, GraphResource> = IndexMap::default();
-            let mut push_resource = |var: Var|{
-                if let Some(id) = resources.get_index_of(&var){
-                    Some(ResourceId(id))
-                }else{
-                    let entry = ftrace.entry(var);
-                    let id = resources.insert_full(var, GraphResource::Internal{var}).0;
-                    Some(ResourceId(id))
-                }
-            };
-
-            // Compile the graph
-            for group in groups.iter() {
-                let var = schedule[group.start];
-                let entry = ftrace.entry(var);
-
-                    let size_buffer = None;
-
-                let pass = if entry.op.is_device_op(){
-                    assert_eq!(group.len(), 1);
-
-                    match entry.op {
-                        Op::DeviceOp(op) => {
-                            let deps = &entry.deps;
-
-                            // TODO: Improve the readability here. atm. we are pushing all the
-                            // dependenceis into multiple vecs starting with [id]
-                            let resources = [var]
-                                .iter()
-                                .chain(deps.iter())
-                                .flat_map(|var| push_resource(*var))
-                                .collect::<Vec<_>>();
-
-                            Pass {
-                                resources,
-                                size_buffer,
-                                op: PassOp::DeviceOp(op),
-                            }
-                        }
-                        _ => todo!(),
-                    }
-                }else{
-                    let mut compiler = compiler::Compiler::default();
-
-                    compiler.compile(ftrace, &schedule[group.clone()]);
-
-                    let resources = compiler
-                        .buffers
-                        .iter()
-                        .chain(compiler.textures.iter())
-                        .chain(compiler.accels.iter())
-                        .flat_map(|&var| push_resource(var))
-                        .collect::<Vec<_>>();
-
-                    let ir = compiler.ir;
-
-                    let size = ftrace.entry(schedule[group.start]).extent.capacity();
-                    let ir = Prehashed::new(ir);
-
-                    Pass{
-                        resources,
-                        size_buffer,
-                        op: PassOp::Kernel{ir, size}
-                    };
-
-                        
-                    
-                    todo!()
-                }
-                todo!();
-            }
-        });
-        todo!()
     }
 }
 

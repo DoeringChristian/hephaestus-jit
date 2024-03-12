@@ -1,5 +1,5 @@
 use crate::backend::vulkan::pipeline::{Binding, BufferWriteInfo, DescSetLayout, WriteSet};
-use crate::backend::{self, Buffer, TextureDesc};
+use crate::backend::{self, Array, TextureDesc};
 use crate::vartype::AsVarType;
 use crate::vartype::VarType;
 use crate::vulkan;

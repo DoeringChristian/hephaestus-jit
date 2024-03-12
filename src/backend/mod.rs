@@ -49,20 +49,20 @@ impl Device {
             _ => None,
         }
     }
-    pub fn create_buffer(&self, size: usize) -> Result<Buffer> {
+    pub fn create_buffer(&self, size: usize) -> Result<Array> {
         let buffer = match self {
-            Device::CudaDevice(device) => Buffer::CudaBuffer(device.create_buffer(size)?),
-            Device::VulkanDevice(device) => Buffer::VulkanBuffer(device.create_buffer(size)?),
+            Device::CudaDevice(device) => Array::CudaBuffer(device.create_buffer(size)?),
+            Device::VulkanDevice(device) => Array::VulkanBuffer(device.create_buffer(size)?),
         };
         Ok(buffer)
     }
-    pub fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Buffer> {
+    pub fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Array> {
         Ok(match self {
             Device::CudaDevice(device) => {
-                Buffer::CudaBuffer(device.create_buffer_from_slice(slice)?)
+                Array::CudaBuffer(device.create_buffer_from_slice(slice)?)
             }
             Device::VulkanDevice(device) => {
-                Buffer::VulkanBuffer(device.create_buffer_from_slice(slice)?)
+                Array::VulkanBuffer(device.create_buffer_from_slice(slice)?)
             }
         })
     }
@@ -94,11 +94,11 @@ impl Device {
 
 // TODO: we might not need it to be cloneable
 #[derive(Debug, Clone)]
-pub enum Buffer {
+pub enum Array {
     CudaBuffer(CudaBuffer),
     VulkanBuffer(VulkanBuffer),
 }
-impl Buffer {
+impl Array {
     pub fn to_host<T: AsVarType>(&self, range: std::ops::Range<usize>) -> Result<Vec<T>> {
         match self {
             Self::CudaBuffer(buffer) => Ok(buffer.to_host(range)?),
@@ -107,8 +107,8 @@ impl Buffer {
     }
     pub fn device(&self) -> Device {
         match self {
-            Buffer::CudaBuffer(buffer) => Device::CudaDevice(buffer.device().clone()),
-            Buffer::VulkanBuffer(buffer) => Device::VulkanDevice(buffer.device().clone()),
+            Array::CudaBuffer(buffer) => Device::CudaDevice(buffer.device().clone()),
+            Array::VulkanBuffer(buffer) => Device::VulkanDevice(buffer.device().clone()),
         }
     }
     pub fn vulkan(&self) -> Option<&VulkanBuffer> {
@@ -176,10 +176,10 @@ pub trait BackendBuffer: Clone + Send + Sync {
     fn device(&self) -> &Self::Device;
 }
 
-impl AsRef<CudaBuffer> for Buffer {
+impl AsRef<CudaBuffer> for Array {
     fn as_ref(&self) -> &CudaBuffer {
         match self {
-            Buffer::CudaBuffer(buffer) => buffer,
+            Array::CudaBuffer(buffer) => buffer,
             _ => todo!(),
         }
     }
@@ -208,7 +208,7 @@ pub struct AccelDesc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BufferDesc {
+pub struct ArrayDesc {
     pub size: usize,
     pub ty: &'static VarType,
 }

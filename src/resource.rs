@@ -1,10 +1,10 @@
-use crate::backend::{Accel, Buffer, Device, Texture};
-pub use crate::backend::{AccelDesc, BufferDesc, TextureDesc};
+use crate::backend::{Accel, Array, Device, Texture};
+pub use crate::backend::{AccelDesc, ArrayDesc, TextureDesc};
 use crate::vartype::VarType;
 // TODO: maybe move to backend?
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum ResourceDesc {
-    BufferDesc(BufferDesc),
+    ArrayDesc(ArrayDesc),
     TextureDesc(TextureDesc),
     AccelDesc(AccelDesc),
 }
@@ -17,15 +17,15 @@ pub enum Resource {
     #[default]
     None,
     Literal(u64),
-    Buffer(Buffer),
+    Array(Array),
     Texture(Texture),
     Accel(Accel),
 }
 impl Resource {
     pub fn create(device: &Device, desc: &ResourceDesc) -> Self {
         match desc {
-            ResourceDesc::BufferDesc(desc) => {
-                Resource::Buffer(device.create_buffer(desc.size * desc.ty.size()).unwrap())
+            ResourceDesc::ArrayDesc(desc) => {
+                Resource::Array(device.create_buffer(desc.size * desc.ty.size()).unwrap())
             }
             ResourceDesc::TextureDesc(desc) => {
                 Resource::Texture(device.create_texture(desc).unwrap())
@@ -36,7 +36,7 @@ impl Resource {
     pub fn match_and_get(&self, desc: &ResourceDesc) -> Option<Self> {
         // TODO: match sizes as well.
         match (self, desc) {
-            (Resource::Buffer(_), ResourceDesc::BufferDesc(_)) => Some(self.clone()),
+            (Resource::Array(_), ResourceDesc::ArrayDesc(_)) => Some(self.clone()),
             (Resource::Texture(_), ResourceDesc::TextureDesc(_)) => Some(self.clone()),
             (Resource::Accel(_), ResourceDesc::AccelDesc(_)) => Some(self.clone()),
             _ => None,
@@ -56,7 +56,7 @@ impl Resource {
     }
     pub fn is_buffer(&self) -> bool {
         match self {
-            Self::Buffer(_) => true,
+            Self::Array(_) => true,
             _ => false,
         }
     }
@@ -69,9 +69,9 @@ impl Resource {
             _ => None,
         }
     }
-    pub fn buffer(&self) -> Option<&Buffer> {
+    pub fn buffer(&self) -> Option<&Array> {
         match self {
-            Self::Buffer(buf) => Some(buf),
+            Self::Array(buf) => Some(buf),
             _ => None,
         }
     }
