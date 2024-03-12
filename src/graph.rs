@@ -122,7 +122,7 @@ impl Graph {
                     let entry = trace.entry(var);
                     if matches!(entry.op, Op::Buffer | Op::Texture | Op::Accel) {
                         if entry.deps.len() > 0 {
-                            return entry.deps[0];
+                            return trace.deps(var)[0];
                         }
                     }
                     var
@@ -183,8 +183,8 @@ impl Graph {
 
             let mut depcount = vec![0; trace.entries.len()];
 
-            for entry in &trace.entries {
-                for dep in &entry.deps {
+            for var in trace.vars() {
+                for dep in trace.deps(var) {
                     depcount[dep.0] += 1;
                 }
             }
@@ -213,7 +213,7 @@ impl Graph {
 
                         match trace.entry(first_var).op {
                             Op::DeviceOp(op) => {
-                                let deps = entry.deps.clone();
+                                let deps = trace.deps(first_var).to_vec();
 
                                 // TODO: Improve the readability here. atm. we are pushing all the
                                 // dependenceis into multiple vecs starting with [id]
@@ -238,7 +238,7 @@ impl Graph {
                     ) {
                         assert_eq!(group.len(), 1);
                         push_resource(trace, first_var);
-                        trace.entry(first_var).deps.clone()
+                        trace.deps(first_var).to_vec()
                     } else {
                         let mut compiler = compiler::Compiler::default();
 

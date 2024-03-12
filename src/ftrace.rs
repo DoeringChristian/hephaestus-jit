@@ -21,7 +21,7 @@ pub struct Entry {
     pub op: Op,
     pub ty: &'static VarType,
     pub extent: Extent,
-    pub deps: Vec<Var>,
+    pub deps: Range<usize>,
     pub literal: u64,
 }
 impl Entry {
@@ -60,10 +60,17 @@ impl Default for Entry {
 #[derive(Default, Debug)]
 pub struct FTrace {
     pub entries: Vec<Entry>,
+    pub deps: Vec<Var>,
 }
 
 impl FTrace {
-    pub fn new_var(&mut self, entry: Entry) -> Var {
+    pub fn new_var(&mut self, mut entry: Entry, deps: impl IntoIterator<Item = Var>) -> Var {
+        let start = self.deps.len();
+        self.deps.extend(deps.into_iter());
+        let end = self.deps.len();
+
+        entry.deps = start..end;
+
         let i = self.entries.len();
         self.entries.push(entry);
         Var(i)
@@ -74,16 +81,22 @@ impl FTrace {
     pub fn entry_mut(&mut self, var: Var) -> &mut Entry {
         &mut self.entries[var.0]
     }
+    pub fn deps(&self, var: Var) -> &[Var] {
+        &self.deps[self.entries[var.0].deps.clone()]
+    }
+    pub fn vars(&self) -> impl Iterator<Item = Var> {
+        (0..self.entries.len()).map(|i| Var(i))
+    }
 }
 
 thread_local! {
     pub static FTRACE: RefCell<FTrace> = RefCell::new(Default::default());
 }
 
-pub fn new_var(entry: Entry) -> Var {
+pub fn new_var(entry: Entry, deps: impl IntoIterator<Item = Var>) -> Var {
     FTRACE.with(|ftrace| {
         let mut ftrace = ftrace.borrow_mut();
-        ftrace.new_var(entry)
+        ftrace.new_var(entry, deps)
     })
 }
 
@@ -102,13 +115,16 @@ pub fn literal<T: AsVarType>(val: T) -> Var {
     let ty = T::var_ty();
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
-    new_var(Entry {
-        op: Op::KernelOp(KernelOp::Literal),
-        ty,
-        extent: Extent::None,
-        literal: data,
-        ..Default::default()
-    })
+    new_var(
+        Entry {
+            op: Op::KernelOp(KernelOp::Literal),
+            ty,
+            extent: Extent::None,
+            literal: data,
+            ..Default::default()
+        },
+        [],
+    )
 }
 ///
 /// Returns a variable representing a literal within a kernel.
@@ -119,13 +135,16 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> Var {
     let ty = T::var_ty();
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
-    new_var(Entry {
-        op: Op::KernelOp(KernelOp::Literal),
-        ty,
-        extent: Extent::Size(size),
-        literal: data,
-        ..Default::default()
-    })
+    new_var(
+        Entry {
+            op: Op::KernelOp(KernelOp::Literal),
+            ty,
+            extent: Extent::Size(size),
+            literal: data,
+            ..Default::default()
+        },
+        [],
+    )
 }
 
 ///
@@ -133,12 +152,15 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> Var {
 /// size.
 ///
 pub fn sized_index(size: usize) -> Var {
-    new_var(Entry {
-        op: Op::KernelOp(KernelOp::Index),
-        ty: u32::var_ty(),
-        extent: Extent::Size(size),
-        ..Default::default()
-    })
+    new_var(
+        Entry {
+            op: Op::KernelOp(KernelOp::Index),
+            ty: u32::var_ty(),
+            extent: Extent::Size(size),
+            ..Default::default()
+        },
+        [],
+    )
 }
 
 ///
@@ -170,13 +192,15 @@ impl Var {
     }
     fn _get_ref(&self, mutable: bool) -> Self {
         let ty = self.ty();
-        new_var(Entry {
-            op: Op::Ref { mutable },
-            ty,
-            extent: Extent::Size(0),
-            deps: vec![*self],
-            ..Default::default()
-        })
+        new_var(
+            Entry {
+                op: Op::Ref { mutable },
+                ty,
+                extent: Extent::Size(0),
+                ..Default::default()
+            },
+            [*self],
+        )
     }
 
     pub fn scatter(self, dst: &mut Self, index: Self) {
@@ -186,23 +210,27 @@ impl Var {
 
         let dst_ref = dst.get_mut();
 
-        let scatter = new_var(Entry {
-            op: Op::KernelOp(KernelOp::Scatter),
-            ty: vartype::void(),
-            extent,
-            deps: vec![dst_ref, self, index],
-            ..Default::default()
-        });
+        let scatter = new_var(
+            Entry {
+                op: Op::KernelOp(KernelOp::Scatter),
+                ty: vartype::void(),
+                extent,
+                ..Default::default()
+            },
+            [dst_ref, self, index],
+        );
 
         let extent = dst.extent();
 
-        let phi = new_var(Entry {
-            op: Op::Buffer,
-            ty,
-            extent,
-            deps: vec![*dst, scatter],
-            ..Default::default()
-        });
+        let phi = new_var(
+            Entry {
+                op: Op::Buffer,
+                ty,
+                extent,
+                ..Default::default()
+            },
+            [*dst, scatter],
+        );
         *dst = phi;
     }
 }
