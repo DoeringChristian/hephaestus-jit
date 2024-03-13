@@ -12,22 +12,20 @@ use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 pub trait Traverse {
     // This operation flattens the structure to it's VarRef components
     // fn traverse<'a>(&'a self);
-    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
-        None.into_iter()
-    }
+    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {}
 }
 pub trait Construct {
     fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self;
 }
 
 impl Traverse for VarRef {
-    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
-        [self].into_iter()
+    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+        vec.push(self)
     }
 }
 impl Traverse for &VarRef {
-    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
-        [*self].into_iter()
+    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+        vec.push(*self)
     }
 }
 impl Construct for VarRef {
@@ -36,13 +34,17 @@ impl Construct for VarRef {
     }
 }
 impl<const N: usize, T: Traverse> Traverse for [T; N] {
-    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
-        self.iter().flat_map(|i| i.traverse())
+    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+        for i in self {
+            i.traverse(vec);
+        }
     }
 }
 impl<T: Traverse> Traverse for &[T] {
-    fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef> {
-        self.iter().flat_map(|i| i.traverse())
+    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+        for i in *self {
+            i.traverse(vec);
+        }
     }
 }
 
@@ -50,10 +52,9 @@ macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
-            fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef>{
+            fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
                 let ($($param,)*) = self;
-                [].into_iter()
-                $(.chain($param.traverse()))*
+                $($param.traverse(vec);)*
             }
         }
     };
@@ -144,11 +145,12 @@ where
         device: &backend::Device,
         input: Input,
     ) -> Option<(backend::Report, Output)> {
-        let input_vec = input.traverse().collect::<Vec<_>>();
+        let mut inputs = vec![];
+        input.traverse(&mut inputs);
 
         // We evaluate the inputs to the function, to not collect dependencies of input variables.
         // This might not be the best solution, but it solves some of the problems.
-        for input in input_vec.iter() {
+        for input in inputs.iter() {
             input.schedule();
         }
         // Evaluate all iput variables
@@ -161,7 +163,7 @@ where
         // uniquely identify the type and extent of the variable.
         let mut hasher = DefaultHasher::new();
         with_trace(|trace| {
-            for var in &input_vec {
+            for var in &inputs {
                 trace.var(var.id()).resource_desc().hash(&mut hasher);
             }
         });
@@ -171,9 +173,10 @@ where
             let mut f = self.f.lock().unwrap();
             let output = f(input.clone());
 
-            let output_vec = output.traverse().collect::<Vec<_>>();
+            let mut outputs = vec![];
+            output.traverse(&mut outputs);
 
-            for v in &output_vec {
+            for v in &outputs {
                 v.schedule();
             }
 
@@ -184,12 +187,12 @@ where
                 TS.with(|s| {
                     let mut s = s.borrow_mut();
                     let ts = std::mem::take(&mut (*s));
-                    graph::compile(&ts, &input_vec, &output_vec)
+                    graph::compile(&ts, &inputs, &outputs)
                 }),
             );
         }
         let graph = &self.graphs.lock().unwrap()[&hash];
-        let (report, output) = graph.launch_with(device, &input_vec)?;
+        let (report, output) = graph.launch_with(device, &inputs)?;
         let mut output = output.into_iter();
         Some((report, Output::construct(&mut output)))
     }
