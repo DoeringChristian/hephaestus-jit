@@ -452,7 +452,7 @@ pub fn compile(
             .enumerate()
             .map(|(i, var_id)| {
                 let resource_id = ResourceId(i);
-                if inputs.contains(&resource_id) {
+                if input_set.contains(&resource_id) {
                     GraphResource::Input
                 } else if matches!(
                     trace.var(*var_id).data,
