@@ -183,5 +183,6 @@ Graph {
         Internal,
         Captured,
     ],
-    n_outputs: 0,
+    inputs: [],
+    outputs: [],
 }

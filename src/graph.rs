@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
 use crate::extent::Extent;
@@ -20,33 +20,18 @@ use indexmap::IndexMap;
 /// they get overriden by the internal resource.
 ///
 pub enum GraphResource {
-    Input {
-        idx: usize,
-        out_idx: Option<usize>, // NOTE: might also be returned
-    },
-    Output {
-        idx: usize,
-    },
+    // An input variable to the Graph
+    Input,
     // Using strong reference for captured variables
-    Captured {
-        r: trace::VarRef,
-        out_idx: Option<usize>, // NOTE: might also be returned
-    },
+    Captured { r: trace::VarRef },
     // Using weak reference for internal variables
-    Internal {
-        id: trace::VarId,
-    },
+    Internal { id: trace::VarId },
 }
 // Have to implement debug for snapshot tests to work
 impl Debug for GraphResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Input { idx, out_idx } => f
-                .debug_struct("Input")
-                .field("idx", idx)
-                .field("out_idx", out_idx)
-                .finish(),
-            Self::Output { idx } => f.debug_struct("Output").field("idx", idx).finish(),
+            Self::Input => f.debug_struct("IO").finish(),
             Self::Captured { .. } => f.debug_struct("Captured").finish(),
             Self::Internal { .. } => f.debug_struct("Internal").finish(),
         }
@@ -130,7 +115,8 @@ pub struct Graph {
     passes: Vec<Pass>,
     resource_descs: Vec<ResourceDesc>,
     resources: Vec<GraphResource>,
-    n_outputs: usize,
+    inputs: Vec<ResourceId>,
+    outputs: Vec<ResourceId>,
 }
 
 impl Graph {
@@ -185,24 +171,33 @@ impl Graph {
         //
         // TODO: at some point we could forward "virtual" resources to the backend, so that it can
         // perform resource aliasing
-        let mut env = Env::default();
-        trace::with_trace(|trace| {
-            env.resources = self
-                .resources
-                .iter()
-                .zip(self.resource_descs.iter())
-                .map(|(res, desc)| match res {
-                    GraphResource::Input { idx, .. } => {
-                        let var = trace.var(inputs[*idx].id());
-                        assert_eq!(var.resource_desc().as_ref(), Some(desc));
-                        var.data.clone()
+        let mut resources = vec![None; self.resources.len()];
+
+        for (&r, id) in inputs.into_iter().zip(self.inputs.iter()) {
+            trace::with_trace(|trace| {
+                let var = trace.var(r.id());
+                let desc = &self.resource_descs[id.0];
+                assert_eq!(var.resource_desc().as_ref(), Some(desc));
+                resources[id.0] = Some(var.data.clone());
+            })
+        }
+        for i in 0..resources.len() {
+            if resources[i].is_none() {
+                match &self.resources[i] {
+                    GraphResource::Captured { r } => trace::with_trace(|trace| {
+                        resources[i] = Some(trace.var(r.id()).data.clone());
+                    }),
+                    GraphResource::Internal { id } => {
+                        resources[i] = Some(Resource::create(device, &self.resource_descs[i]))
                     }
-                    GraphResource::Output { .. } => Resource::create(device, desc),
-                    GraphResource::Captured { r, .. } => trace.var(r.id()).data.clone(),
-                    GraphResource::Internal { .. } => Resource::create(device, desc),
-                })
-                .collect::<Vec<_>>();
-        });
+                    _ => {}
+                }
+            }
+        }
+
+        let resources = resources.into_iter().collect::<Option<Vec<_>>>().unwrap();
+
+        let env = Env { resources };
 
         // Execute the graph with the captured environment on the device.
         log::trace!("Launching Graph");
@@ -215,7 +210,42 @@ impl Graph {
         //      - Variables for output resources are created
         //      - Create output variables (keeping in mind pass-through variables)
 
-        let mut output = vec![None; self.n_outputs];
+        let output = self
+            .outputs
+            .iter()
+            .map(|id| {
+                let res = env.resources[id.0].clone();
+                let desc = &self.resource_descs[id.0];
+
+                let op = match res {
+                    Resource::Buffer(_) => op::Op::Buffer,
+                    Resource::Texture(_) => op::Op::Texture,
+                    Resource::Accel(_) => op::Op::Accel,
+                    _ => todo!(),
+                };
+                let (ty, extent) = match desc {
+                    ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
+                    ResourceDesc::TextureDesc(desc) => (
+                        desc.format,
+                        Extent::Texture {
+                            shape: desc.shape,
+                            channels: desc.channels,
+                        },
+                    ),
+                    ResourceDesc::AccelDesc(desc) => (vartype::void(), Extent::Accel(desc.clone())),
+                };
+                trace::with_trace(|trace| {
+                    trace.push_var(trace::Var {
+                        op,
+                        ty,
+                        extent,
+                        data: res,
+                        ..Default::default()
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+
         env.resources
             .into_iter()
             .zip(self.resources.iter())
@@ -236,55 +266,8 @@ impl Graph {
                         }
                     });
                 }
-                GraphResource::Output { idx } => {
-                    // Create a new variable for all output variables
-                    let op = match res {
-                        Resource::Buffer(_) => op::Op::Buffer,
-                        Resource::Texture(_) => op::Op::Texture,
-                        Resource::Accel(_) => op::Op::Accel,
-                        _ => todo!(),
-                    };
-                    let (ty, extent) = match desc {
-                        ResourceDesc::BufferDesc(desc) => (desc.ty, Extent::Size(desc.size)),
-                        ResourceDesc::TextureDesc(desc) => (
-                            desc.format,
-                            Extent::Texture {
-                                shape: desc.shape,
-                                channels: desc.channels,
-                            },
-                        ),
-                        ResourceDesc::AccelDesc(desc) => {
-                            (vartype::void(), Extent::Accel(desc.clone()))
-                        }
-                    };
-                    trace::with_trace(|trace| {
-                        output[*idx] = Some(trace.push_var(trace::Var {
-                            op,
-                            ty,
-                            extent,
-                            data: res,
-                            ..Default::default()
-                        }))
-                    })
-                }
-                GraphResource::Input {
-                    idx,
-                    out_idx: Some(out_idx),
-                } => {
-                    // Use input variable for output
-                    output[*out_idx] = Some(inputs[*idx].clone());
-                }
-                GraphResource::Captured {
-                    r,
-                    out_idx: Some(out_idx),
-                } => {
-                    // Use captured variable for output
-                    output[*out_idx] = Some(r.clone());
-                }
                 _ => {}
             });
-
-        let output = output.into_iter().collect::<Option<Vec<_>>>().unwrap();
 
         Some((report, output))
     }
@@ -293,7 +276,7 @@ impl Graph {
 #[derive(Debug, Clone, Copy)]
 pub struct PassId(usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ResourceId(pub usize);
 
 #[derive(Default, Debug)]
@@ -335,18 +318,15 @@ pub fn compile(
             graph_builder.try_push_resource(&trace, r.id());
         }
 
-        let input = input
+        let inputs = input
             .into_iter()
-            .enumerate()
-            .map(|(i, r)| (r.id(), i))
-            .collect::<HashMap<_, _>>();
-        let output = output
+            .map(|r| graph_builder.try_push_resource(&trace, r.id()).unwrap())
+            .collect::<Vec<_>>();
+        let outputs = output
             .into_iter()
-            .enumerate()
-            .map(|(i, r)| (r.id(), i))
-            .collect::<HashMap<_, _>>();
-
-        let n_outputs = output.len();
+            .map(|r| graph_builder.try_push_resource(&trace, r.id()).unwrap())
+            .collect::<Vec<_>>();
+        let input_set = inputs.iter().copied().collect::<HashSet<_>>();
 
         // Get scheduled variables from thread state in order
         let mut vars = ts.scheduled.values().map(|r| r.id()).collect::<Vec<_>>();
@@ -467,27 +447,31 @@ pub fn compile(
 
         // Collect descriptors and input resources
 
+        // let resources = (0..graph_builder.resources.len()).map(|i|{
+        //     let id = ResourceId(i);
+        //     if input_output.contains(&id){
+        //         GraphResource::IO
+        //     }else if {
+        //
+        //     }
+        // })
         let resources = graph_builder
             .resources
-            .iter()
-            .map(|(id, _)| {
-                if input.contains_key(&id) {
-                    GraphResource::Input {
-                        idx: input[&id],
-                        out_idx: output.get(id).cloned(),
-                    }
+            .keys()
+            .enumerate()
+            .map(|(i, var_id)| {
+                let resource_id = ResourceId(i);
+                if inputs.contains(&resource_id) {
+                    GraphResource::Input
                 } else if matches!(
-                    trace.var(*id).data,
+                    trace.var(*var_id).data,
                     Resource::Buffer(_) | Resource::Texture(_) | Resource::Accel(_)
                 ) {
                     GraphResource::Captured {
-                        r: trace.ref_borrow(*id),
-                        out_idx: output.get(id).cloned(),
+                        r: trace.ref_borrow(*var_id),
                     }
-                } else if output.contains_key(&id) {
-                    GraphResource::Output { idx: output[&id] }
                 } else {
-                    GraphResource::Internal { id: *id }
+                    GraphResource::Internal { id: *var_id }
                 }
             })
             .collect::<Vec<_>>();
@@ -502,7 +486,8 @@ pub fn compile(
             passes: graph_builder.passes,
             resource_descs,
             resources,
-            n_outputs,
+            inputs,
+            outputs,
         };
         graph
     })

@@ -142,5 +142,6 @@ Graph {
         Captured,
         Internal,
     ],
-    n_outputs: 0,
+    inputs: [],
+    outputs: [],
 }
