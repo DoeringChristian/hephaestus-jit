@@ -446,15 +446,6 @@ pub fn compile(
         }
 
         // Collect descriptors and input resources
-
-        // let resources = (0..graph_builder.resources.len()).map(|i|{
-        //     let id = ResourceId(i);
-        //     if input_output.contains(&id){
-        //         GraphResource::IO
-        //     }else if {
-        //
-        //     }
-        // })
         let resources = graph_builder
             .resources
             .keys()
