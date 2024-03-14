@@ -253,19 +253,35 @@ impl_recordable!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 macro_rules! loop_record {
     ([$($vars:ident),*] while $cond:ident $content:block) => {
         let cond_vars = [&$cond, $(&$vars),*];
-        let (loop_start, state) = $crate::tr::loop_start(cond_vars.as_slice());
+        let (loop_start, mut state) = $crate::tr::loop_start(cond_vars.as_slice());
 
-        let mut itr = state.into_iter();
-        $cond = itr.next().unwrap();
-        $($vars = itr.next().unwrap())*;
+        $cond = state.next().unwrap();
+        $($vars = state.next().unwrap())*;
 
         $content
 
         let cond_vars = [&$cond, $(&$vars),*];
-        let state = $crate::tr::loop_end(&loop_start, cond_vars.as_slice());
+        let mut state = $crate::tr::loop_end(&loop_start, cond_vars.as_slice());
 
-        let mut itr = state.into_iter();
-        $cond = itr.next().unwrap();
-        $($vars = itr.next().unwrap())*;
+        $cond = state.next().unwrap();
+        $($vars = state.next().unwrap())*;
+    };
+}
+#[macro_export]
+macro_rules! if_record {
+    ([$($vars:ident),*] if $cond:ident $content:block) => {
+        let cond_vars = [&$cond, $(&$vars),*];
+        let (if_start, mut state) = $crate::tr::if_start(cond_vars.as_slice());
+
+        $cond = state.next().unwrap();
+        $($vars = state.next().unwrap())*;
+
+        $content
+
+        let cond_vars = [&$cond, $(&$vars),*];
+        let mut state = $crate::tr::if_end(&if_start, cond_vars.as_slice());
+
+        $cond = state.next().unwrap();
+        $($vars = state.next().unwrap())*;
     };
 }

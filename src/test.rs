@@ -1325,16 +1325,16 @@ fn loop_record1() {
     let c = tr::literal(true);
 
     // Start the loop recording
-    let (loop_start, state) = tr::loop_start(&[&c, &i]);
-    let c = state[0].clone();
-    let i = state[1].clone();
+    let (loop_start, mut state) = tr::loop_start(&[&c, &i]);
+    let c = state.next().unwrap();
+    let i = state.next().unwrap();
 
     let i = i.add(&tr::literal(1));
     let c = c.and(&i.lt(&tr::literal(2)));
 
-    let state = tr::loop_end(&loop_start, &[&c, &i]);
-    let c = state[0].clone();
-    let i = state[1].clone();
+    let mut state = tr::loop_end(&loop_start, &[&c, &i]);
+    let c = state.next().unwrap();
+    let i = state.next().unwrap();
 
     i.schedule();
 

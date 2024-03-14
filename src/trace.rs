@@ -362,7 +362,7 @@ pub fn new_scope() -> ScopeId {
 /// We could introduce a 'namespace' cosntruct type, that would allow us to not actually use spir-v
 /// variables.
 ///
-pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, Vec<VarRef>) {
+pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>) {
     let state = composite(state_vars);
 
     let ty = state.ty();
@@ -385,15 +385,11 @@ pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, Vec<VarRef>) {
         [&state],
     );
 
-    let state = state_vars
-        .iter()
-        .enumerate()
-        .map(|(i, _)| loop_start.extract(i))
-        .collect::<Vec<_>>();
+    let state = loop_start.extract_all();
 
     (loop_start, state)
 }
-pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef> {
+pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<Item = VarRef> {
     let state = composite(state_vars);
 
     let ty = state.ty();
@@ -419,11 +415,7 @@ pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef> {
         deps,
     );
 
-    let state = state_vars
-        .iter()
-        .enumerate()
-        .map(|(i, _)| loop_end.extract(i))
-        .collect::<Vec<_>>();
+    let state = loop_end.extract_all();
 
     state
 }
@@ -449,7 +441,7 @@ pub fn if_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>
         [&state],
     );
 
-    let state = state.extract_all();
+    let state = if_start.extract_all();
 
     (if_start, state)
 }
