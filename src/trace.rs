@@ -427,6 +427,63 @@ pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> Vec<VarRef> {
 
     state
 }
+pub fn if_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>) {
+    let state = composite(state_vars);
+
+    let ty = state.ty();
+    let extent = state.extent();
+
+    TS.with(|ts| {
+        let mut ts = ts.borrow_mut();
+        let start = ts.recorded_se.len();
+        ts.recorded_se_start.push(start);
+    });
+
+    let if_start = push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::IfStart),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        [&state],
+    );
+
+    let state = state.extract_all();
+
+    (if_start, state)
+}
+
+pub fn if_end(if_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<Item = VarRef> {
+    let state = composite(state_vars);
+
+    let ty = state.ty();
+    let extent = state.extent();
+
+    // Get side effects of this loop
+    let side_effects = TS.with(|ts| {
+        let mut ts = ts.borrow_mut();
+        let start = ts.recorded_se_start.pop().unwrap();
+        dbg!(start);
+        ts.recorded_se.drain(start..).collect::<Vec<_>>()
+    });
+
+    let deps = [if_start, &state].into_iter().chain(side_effects.iter());
+
+    let if_end = push_var(
+        Var {
+            op: Op::KernelOp(KernelOp::LoopEnd),
+            ty,
+            extent,
+            ..Default::default()
+        },
+        deps,
+    );
+
+    let state = if_end.extract_all();
+
+    state
+}
 
 ///
 /// Compiles the current thread state (see [ThreadState]) into a [graph::Graph], which can be
@@ -773,10 +830,16 @@ pub fn fused_mlp_inference(
 
     let ty = f16::var_ty();
     let size = input.size();
-    
+
     push_var(
         Var {
-            op: Op::DeviceOp(DeviceOp::FusedMlpInference { width, in_width, out_width, hidden_layers, max_batch_size: batch_size}),
+            op: Op::DeviceOp(DeviceOp::FusedMlpInference {
+                width,
+                in_width,
+                out_width,
+                hidden_layers,
+                max_batch_size: batch_size,
+            }),
             ty,
             extent: Extent::Size(size),
             ..Default::default()
@@ -1265,9 +1328,10 @@ impl VarRef {
             [self, elem],
         )
     }
-    pub fn extract_all(&self) -> Vec<Self> {
-        let n_elements = self.ty().num_elements().unwrap();
-        (0..n_elements).map(|i| self.extract(i)).collect()
+    pub fn extract_all(&self) -> impl Iterator<Item = Self> {
+        let s = self.clone();
+        let n_elements = s.ty().num_elements().unwrap();
+        (0..n_elements).map(move |i| s.extract(i))
     }
     pub fn select(&self, true_val: &Self, false_val: &Self) -> Self {
         assert_eq!(self.ty(), bool::var_ty());

@@ -1286,6 +1286,34 @@ fn atomic_inc_rand() {
         "Atomic Operations should return the previous index which is unique!"
     );
 }
+
+#[test]
+fn if_record1() {
+    pretty_env_logger::try_init().ok();
+    let device = vulkan(0);
+
+    // Initial state
+    let i = tr::array(&[0, 0], &device);
+    let c = tr::array(&[true, false], &device);
+
+    let (if_start, mut state) = tr::if_start(&[&c, &i]);
+    let c = state.next().unwrap();
+    let i = state.next().unwrap();
+
+    let i = i.add(&tr::literal(1));
+
+    let mut state = tr::if_end(&if_start, &[&c, &i]);
+    let c = state.next().unwrap();
+    let i = state.next().unwrap();
+
+    i.schedule();
+
+    let graph = tr::compile();
+    graph.launch(&device);
+
+    assert_eq!(i.to_vec::<i32>(..), vec![1, 0]);
+}
+
 #[test]
 fn loop_record1() {
     // TODO: loops work without scopes -> comment out scopes

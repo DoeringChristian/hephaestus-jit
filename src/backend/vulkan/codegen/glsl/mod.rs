@@ -699,6 +699,21 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 writeln!(s, "\t}}")?;
                 writeln!(s, "\t{glsl_ty} {dst} = {loop_state};")?;
             }
+            crate::op::KernelOp::IfStart => {
+                let if_state = Reg(id);
+                let init = Reg(deps[0]);
+                writeln!(s, "\t{glsl_ty} {if_state} = {init};")?;
+                writeln!(s, "\tif({if_state}.e0){{")?;
+            }
+            crate::op::KernelOp::IfEnd => {
+                let dst = Reg(id);
+                let if_state = Reg(deps[0]);
+                let iresult = Reg(deps[1]);
+
+                writeln!(s, "\t{if_state} = {iresult};")?;
+                writeln!(s, "\t}}")?;
+                writeln!(s, "\t{glsl_ty} {dst} = {if_state};")?;
+            }
             crate::op::KernelOp::TexLookup => {
                 let tex_ref = ir.var(deps[0]);
                 let dim = match tex_ref.op {

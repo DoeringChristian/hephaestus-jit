@@ -63,6 +63,9 @@ pub enum KernelOp {
     LoopStart,
     LoopEnd,
 
+    IfStart,
+    IfEnd,
+
     TexLookup,
     TraceRay,
 
