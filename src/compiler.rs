@@ -14,12 +14,6 @@ pub struct Compiler {
     pub buffers: IndexSet<trace::VarId>,
     pub textures: IndexSet<trace::VarId>,
     pub accels: IndexSet<trace::VarId>,
-    // id2buffer: HashMap<trace::VarId, usize>,
-    // pub buffers: Vec<trace::VarId>,
-    // id2texture: HashMap<trace::VarId, usize>,
-    // pub textures: Vec<trace::VarId>,
-    // id2accel: HashMap<trace::VarId, usize>,
-    // pub accels: Vec<trace::VarId>,
 }
 
 impl Compiler {
