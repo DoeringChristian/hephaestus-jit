@@ -121,7 +121,7 @@ impl Trace {
     pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
         self.vars.get_mut(id.0)
     }
-    pub fn push_var(&mut self, mut var: Var) -> VarRef {
+    pub fn new_var(&mut self, mut var: Var) -> VarRef {
         for id in var.deps.iter().chain(var.extent.get_dynamic().as_ref()) {
             self.inc_rc(*id);
         }
@@ -298,14 +298,14 @@ pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     // })
 }
 ///
-/// This function is used to push a Variable ([Var]) to the trace.
+/// This function is used to create a variable ([Var]) on the trace.
 /// It takes care of certain special cases, such as:
 /// - scheduling device wide dependencies
 /// - scheduling evaluation of the previous group if the variable represents a device wide operation
 /// - scheduling evaluation of the previous group if the variable depends on 'dirty' variables
 /// - scheduling evaluation of the current group if the variable represents a device wide operation
 ///
-pub(crate) fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
+pub(crate) fn new_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>) -> VarRef {
     // Auto schedule_eval device ops
     let is_device_op = v.op.is_device_op();
     let deps = deps
@@ -342,7 +342,7 @@ pub(crate) fn push_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef
     v.deps = deps;
 
     // Push actual variable
-    let res = with_trace(|t| t.push_var(v));
+    let res = with_trace(|t| t.new_var(v));
     // Auto schedule and schedule evaluation if device op
     if is_device_op {
         res.schedule();
@@ -375,7 +375,7 @@ pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRe
         ts.recorded_se_start.push(start);
     });
 
-    let loop_start = push_var(
+    let loop_start = new_var(
         Var {
             op: Op::KernelOp(KernelOp::LoopStart),
             ty,
@@ -405,7 +405,7 @@ pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<It
 
     let deps = [loop_start, &state].into_iter().chain(side_effects.iter());
 
-    let loop_end = push_var(
+    let loop_end = new_var(
         Var {
             op: Op::KernelOp(KernelOp::LoopEnd),
             ty,
@@ -431,7 +431,7 @@ pub fn if_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>
         ts.recorded_se_start.push(start);
     });
 
-    let if_start = push_var(
+    let if_start = new_var(
         Var {
             op: Op::KernelOp(KernelOp::IfStart),
             ty,
@@ -462,7 +462,7 @@ pub fn if_end(if_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<Item =
 
     let deps = [if_start, &state].into_iter().chain(side_effects.iter());
 
-    let if_end = push_var(
+    let if_end = new_var(
         Var {
             op: Op::KernelOp(KernelOp::LoopEnd),
             ty,
@@ -507,7 +507,7 @@ pub fn schedule_eval() {
 /// Returns a variable that represents a global index within a kernel.
 ///
 pub fn index() -> VarRef {
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),
             ty: u32::var_ty(),
@@ -522,7 +522,7 @@ pub fn index() -> VarRef {
 /// size.
 ///
 pub fn sized_index(size: usize) -> VarRef {
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),
             ty: u32::var_ty(),
@@ -541,7 +541,7 @@ pub fn dynamic_index(capacity: usize, size: &VarRef) -> VarRef {
     schedule_eval();
     let id = size.id();
 
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Index),
             ty: u32::var_ty(),
@@ -559,7 +559,7 @@ pub fn literal<T: AsVarType>(val: T) -> VarRef {
     let ty = T::var_ty();
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Literal),
             ty,
@@ -579,7 +579,7 @@ pub fn sized_literal<T: AsVarType>(val: T, size: usize) -> VarRef {
     let ty = T::var_ty();
     let mut data = 0;
     unsafe { *(&mut data as *mut _ as *mut T) = val };
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Literal),
             ty,
@@ -601,7 +601,7 @@ pub fn array<T: AsVarType>(slice: &[T], device: &backend::Device) -> VarRef {
     let slice: &[u8] =
         unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const _, slice.len() * ty.size()) };
     let data = device.create_buffer_from_slice(slice).unwrap();
-    push_var(
+    new_var(
         Var {
             op: Op::Buffer,
             extent: Extent::Size(size),
@@ -630,7 +630,7 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
     log::trace!("Constructing composite struct {ty:?}.");
 
     let extent = resulting_extent(refs.iter().map(|r| *r));
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Construct),
             ty,
@@ -648,7 +648,7 @@ pub fn arr(refs: &[&VarRef]) -> VarRef {
 
     let ty = vartype::array(ty, refs.len());
 
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Construct),
             ty,
@@ -671,7 +671,7 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
 
     let ty = vartype::vector(ty, refs.len());
 
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Construct),
             ty,
@@ -695,7 +695,7 @@ pub fn mat(columns: &[&VarRef]) -> VarRef {
 
     let ty = vartype::matrix(ty, cols, rows);
 
-    push_var(
+    new_var(
         Var {
             op: Op::KernelOp(KernelOp::Construct),
             ty,
@@ -766,7 +766,7 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
         instances: desc.instances.size(),
     };
 
-    push_var(
+    new_var(
         Var {
             op: Op::DeviceOp(DeviceOp::BuildAccel),
             ty: vartype::void(),
@@ -789,7 +789,7 @@ pub fn matfma(
     assert_eq!(mat_a.ty(), mat_b.ty());
     let c_type = mat_c.ty();
 
-    let mat_c = push_var(
+    let mat_c = new_var(
         Var {
             op: Op::DeviceOp(DeviceOp::MatMul {
                 max_n: N,
@@ -823,7 +823,7 @@ pub fn fused_mlp_inference(
     let ty = f16::var_ty();
     let size = input.size();
 
-    push_var(
+    new_var(
         Var {
             op: Op::DeviceOp(DeviceOp::FusedMlpInference {
                 width,
@@ -910,7 +910,7 @@ macro_rules! bop {
                 assert_eq!(other.ty(), ty);
 
                 $(let ty = $result_type;)?
-                push_var(
+                new_var(
                     Var {
                         op: Op::KernelOp(KernelOp::Bop(Bop::[<$op:camel>])),
                         extent,
@@ -933,7 +933,7 @@ macro_rules! uop {
                 let ty = self.ty();
 
                 $(let ty = $result_type;)?
-                push_var(
+                new_var(
                     Var {
                         op: Op::KernelOp(KernelOp::Uop(Uop::[<$op:camel>])),
                         extent,
@@ -986,7 +986,7 @@ impl VarRef {
     pub fn cast(&self, ty: &'static VarType) -> Self {
         let extent = resulting_extent([self]);
 
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Uop(Uop::Cast)),
                 extent,
@@ -1009,7 +1009,7 @@ impl VarRef {
     pub fn bitcast(&self, ty: &'static VarType) -> Self {
         let extent = resulting_extent([self]);
 
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Uop(Uop::BitCast)),
                 extent,
@@ -1026,7 +1026,7 @@ impl VarRef {
         let ty = self.ty();
         let extent = idx.extent();
         let src_ref = self.get_ref();
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Gather),
                 ty,
@@ -1042,7 +1042,7 @@ impl VarRef {
         let ty = self.ty();
         let extent = idx.extent();
         let src_ref = self.get_ref();
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Gather),
                 ty,
@@ -1059,7 +1059,7 @@ impl VarRef {
         schedule_eval();
         let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter),
                 ty: vartype::void(),
@@ -1077,7 +1077,7 @@ impl VarRef {
         schedule_eval();
         let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Scatter),
                 ty: vartype::void(),
@@ -1095,7 +1095,7 @@ impl VarRef {
         schedule_eval();
         let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterReduce(op)),
                 ty: vartype::void(),
@@ -1113,7 +1113,7 @@ impl VarRef {
         schedule_eval();
         let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterReduce(op)),
                 ty: vartype::void(),
@@ -1132,7 +1132,7 @@ impl VarRef {
         let ty = self.ty();
         let extent = resulting_extent([self, idx].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterAtomic(op)),
                 ty,
@@ -1151,7 +1151,7 @@ impl VarRef {
         let ty = self.ty();
         let extent = resulting_extent([self, idx, active].into_iter());
         let dst_ref = dst.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::ScatterAtomic(op)),
                 ty,
@@ -1173,7 +1173,7 @@ impl VarRef {
         assert!(matches!(idx.extent(), Extent::None));
 
         let dst_ref = self.get_mut();
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::AtomicInc),
                 ty,
@@ -1190,7 +1190,7 @@ impl VarRef {
         let extent = resulting_extent([self, b, c]);
         let ty = self.ty();
 
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::FMA),
                 extent,
@@ -1212,7 +1212,7 @@ impl VarRef {
     }
     fn _get_ref(&self, mutable: bool) -> Self {
         let ty = self.ty();
-        push_var(
+        new_var(
             Var {
                 op: Op::Ref { mutable },
                 ty,
@@ -1292,7 +1292,7 @@ impl VarRef {
             VarType::Array { ty, .. } => ty,
             _ => todo!(),
         };
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Extract(elem as u32)),
                 ty,
@@ -1310,7 +1310,7 @@ impl VarRef {
             _ => todo!(),
         };
 
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::DynExtract),
                 ty,
@@ -1333,7 +1333,7 @@ impl VarRef {
 
         let extent = resulting_extent([self, true_val, false_val].into_iter());
 
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::Select),
                 ty,
@@ -1356,7 +1356,7 @@ impl VarRef {
         let ty = vartype::vector(ty, channels);
         let src_ref = self.get_ref();
 
-        let composite = push_var(
+        let composite = new_var(
             Var {
                 op: Op::KernelOp(KernelOp::TexLookup),
                 ty,
@@ -1387,7 +1387,7 @@ impl VarRef {
 
         let ty = self.ty();
 
-        push_var(
+        new_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::Buffer2Texture),
                 ty,
@@ -1404,7 +1404,7 @@ impl VarRef {
 
         let accel_ref = self.get_ref();
 
-        push_var(
+        new_var(
             Var {
                 op: Op::KernelOp(KernelOp::TraceRay),
                 ty: ty,
@@ -1441,7 +1441,7 @@ impl VarRef {
         self.schedule();
         schedule_eval();
 
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::Compress),
                 ty: vartype::void(),
@@ -1460,7 +1460,7 @@ impl VarRef {
         let size = self.size();
         let ty = self.ty();
 
-        let res = push_var(
+        let res = new_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::PrefixSum { inclusive }),
                 ty,
@@ -1477,7 +1477,7 @@ impl VarRef {
     pub fn reduce(&self, op: ReduceOp) -> Self {
         let extent = Extent::Size(1);
         let ty = self.ty();
-        push_var(
+        new_var(
             Var {
                 op: Op::DeviceOp(DeviceOp::ReduceOp(op)),
                 ty,

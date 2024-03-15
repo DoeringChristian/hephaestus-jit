@@ -234,7 +234,7 @@ impl Graph {
                     ResourceDesc::AccelDesc(desc) => (vartype::void(), Extent::Accel(desc.clone())),
                 };
                 trace::with_trace(|trace| {
-                    trace.push_var(trace::Var {
+                    trace.new_var(trace::Var {
                         op,
                         ty,
                         extent,
