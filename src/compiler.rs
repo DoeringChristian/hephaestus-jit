@@ -1,21 +1,25 @@
+use indexmap::IndexSet;
+
 use crate::ir::{self, IR};
 use crate::op::{KernelOp, Op};
 use crate::trace::{self, Trace};
 use crate::vartype::{self, AsVarType};
 use std::collections::HashMap;
-use std::ops::Range;
 
 #[derive(Default)]
 pub struct Compiler {
     pub ir: IR,
     visited: HashMap<trace::VarId, ir::VarId>,
     trivial: HashMap<ir::Var, ir::VarId>,
-    id2buffer: HashMap<trace::VarId, usize>,
-    pub buffers: Vec<trace::VarId>,
-    id2texture: HashMap<trace::VarId, usize>,
-    pub textures: Vec<trace::VarId>,
-    id2accel: HashMap<trace::VarId, usize>,
-    pub accels: Vec<trace::VarId>,
+    pub buffers: IndexSet<trace::VarId>,
+    pub textures: IndexSet<trace::VarId>,
+    pub accels: IndexSet<trace::VarId>,
+    // id2buffer: HashMap<trace::VarId, usize>,
+    // pub buffers: Vec<trace::VarId>,
+    // id2texture: HashMap<trace::VarId, usize>,
+    // pub textures: Vec<trace::VarId>,
+    // id2accel: HashMap<trace::VarId, usize>,
+    // pub accels: Vec<trace::VarId>,
 }
 
 impl Compiler {
@@ -185,25 +189,13 @@ impl Compiler {
         }
     }
     pub fn push_buffer(&mut self, id: trace::VarId) -> usize {
-        *self.id2buffer.entry(id).or_insert_with(|| {
-            let buffer_id = self.buffers.len();
-            self.buffers.push(id);
-            buffer_id
-        })
+        self.buffers.insert_full(id).0
     }
     pub fn push_texture(&mut self, id: trace::VarId) -> usize {
-        *self.id2texture.entry(id).or_insert_with(|| {
-            let texture_id = self.textures.len();
-            self.textures.push(id);
-            texture_id
-        })
+        self.textures.insert_full(id).0
     }
     pub fn push_accel(&mut self, id: trace::VarId) -> usize {
-        *self.id2accel.entry(id).or_insert_with(|| {
-            let accel_id = self.accels.len();
-            self.accels.push(id);
-            accel_id
-        })
+        self.accels.insert_full(id).0
     }
     pub fn push_var<I>(&mut self, mut var: ir::Var, deps: I) -> ir::VarId
     where
@@ -234,11 +226,8 @@ impl Compiler {
         self.ir.clear();
         self.trivial.clear();
         self.visited.clear();
-        self.id2buffer.clear();
         self.buffers.clear();
-        self.id2texture.clear();
         self.textures.clear();
-        self.id2accel.clear();
         self.accels.clear();
     }
 }
