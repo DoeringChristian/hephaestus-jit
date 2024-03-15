@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::sync::Arc;
 
 use ash::vk;
@@ -83,6 +84,11 @@ impl<'a> PipelineDef for CoopMMADef<'a> {
             code,
             desc_set_layouts: layout.into(),
         }
+    }
+
+    fn typed_hash(&self, state: &mut impl std::hash::Hasher) {
+        std::any::TypeId::of::<CoopMMADef<'static>>().hash(state);
+        Hash::hash(self, state);
     }
 }
 

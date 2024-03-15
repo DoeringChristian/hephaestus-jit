@@ -30,11 +30,19 @@ pub struct DeviceInfo {
 //     fn generate(&self) -> Vec<u32>;
 // }
 
-#[derive(Hash)]
 pub struct IrGlslDef<'a> {
     pub ir: &'a Prehashed<IR>,
     pub entry_point: &'a str,
     pub device_info: &'a DeviceInfo,
+}
+// Implement hash with type id
+impl<'a> Hash for IrGlslDef<'a> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::any::TypeId::of::<IrGlslDef<'static>>().hash(state);
+        self.ir.hash(state);
+        self.entry_point.hash(state);
+        self.device_info.hash(state);
+    }
 }
 impl<'a> PipelineDef for IrGlslDef<'a> {
     fn generate(self) -> PipelineInfo {
@@ -64,5 +72,10 @@ impl<'a> PipelineDef for IrGlslDef<'a> {
             code,
             desc_set_layouts: layouts.into(),
         }
+    }
+
+    fn typed_hash(&self, state: &mut impl std::hash::Hasher) {
+        std::any::TypeId::of::<IrGlslDef<'static>>().hash(state);
+        self.hash(state);
     }
 }

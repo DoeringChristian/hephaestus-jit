@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::sync::Arc;
 
 use ash::vk;
@@ -90,6 +91,11 @@ impl PipelineDef for MLPCompileDef {
             code,
             desc_set_layouts: desc_set_layouts.into(),
         }
+    }
+
+    fn typed_hash(&self, state: &mut impl std::hash::Hasher) {
+        std::any::TypeId::of::<Self>().hash(state);
+        self.hash(state);
     }
 }
 // impl codegen::CodegenDef for MLPCompileDef {

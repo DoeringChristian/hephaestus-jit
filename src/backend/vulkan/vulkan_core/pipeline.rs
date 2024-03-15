@@ -31,7 +31,7 @@ impl Pipeline {
         let mut hasher = DefaultHasher::new();
         // Any::type_id(def).hash(&mut hasher);
         // TypeId::of::<D>().hash(&mut hasher);
-        def.hash(&mut hasher);
+        def.typed_hash(&mut hasher);
         let hash = hasher.finish();
 
         let mut cache = device.pipeline_cache.lock().unwrap();
@@ -343,10 +343,15 @@ impl From<ShaderKind> for shaderc::ShaderKind {
         }
     }
 }
-pub trait PipelineDef: Hash {
+pub trait PipelineDef {
+    fn typed_hash(&self, state: &mut impl Hasher);
     fn generate(self) -> PipelineInfo;
 }
 impl PipelineDef for &[u32] {
+    fn typed_hash(&self, state: &mut impl Hasher) {
+        std::any::TypeId::of::<&'static [u32]>().hash(state);
+        Hash::hash(self, state);
+    }
     fn generate(self) -> PipelineInfo {
         let code: Box<[u32]> = self.into();
         let entry_points = spirq::ReflectConfig::new()

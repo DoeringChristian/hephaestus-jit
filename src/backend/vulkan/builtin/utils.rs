@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use ash::vk;
 
 use crate::backend::vulkan::codegen;
@@ -108,5 +110,10 @@ impl<'a> PipelineDef for GlslShaderDef<'a> {
     #[profiling::function]
     fn generate(self) -> PipelineInfo {
         self.compile().generate()
+    }
+
+    fn typed_hash(&self, state: &mut impl std::hash::Hasher) {
+        std::any::TypeId::of::<GlslShaderDef<'static>>().hash(state);
+        Hash::hash(self, state);
     }
 }
