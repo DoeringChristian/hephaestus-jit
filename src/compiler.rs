@@ -5,7 +5,7 @@ use crate::vartype::{self, AsVarType};
 use std::collections::HashMap;
 use std::ops::Range;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Compiler {
     pub ir: IR,
     visited: HashMap<trace::VarId, ir::VarId>,

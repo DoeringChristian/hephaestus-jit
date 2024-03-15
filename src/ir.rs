@@ -33,17 +33,6 @@ impl Default for Var {
         }
     }
 }
-impl Debug for Var {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Var")
-            .field("ty", &self.ty)
-            .field("op", &self.op)
-            .field("deps", &self.deps)
-            .field("data", &self.data)
-            // .field("scope", &self.scope)
-            .finish()
-    }
-}
 impl Hash for Var {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.ty.hash(state);
