@@ -1,12 +1,6 @@
-use itertools::Itertools;
-
 use crate::op::KernelOp;
-use crate::tr::ScopeId;
-use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::sync::Mutex;
 
 use crate::vartype::VarType;
 use crate::{utils, vartype};
