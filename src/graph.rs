@@ -416,11 +416,8 @@ pub fn compile(
                     compiler.compile(trace, &vars[group.clone()]);
 
                     let resources = compiler
-                        .buffers
-                        .iter()
-                        .chain(compiler.textures.iter())
-                        .chain(compiler.accels.iter())
-                        .flat_map(|&id| graph_builder.try_push_resource(trace, id))
+                        .resource_vars()
+                        .flat_map(|id| graph_builder.try_push_resource(trace, id))
                         .collect::<Vec<_>>();
 
                     let ir = std::mem::take(&mut compiler.ir);

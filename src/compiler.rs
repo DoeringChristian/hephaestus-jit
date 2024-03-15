@@ -11,9 +11,9 @@ pub struct Compiler {
     pub ir: IR,
     visited: HashMap<trace::VarId, ir::VarId>,
     trivial: HashMap<ir::Var, ir::VarId>,
-    pub buffers: IndexSet<trace::VarId>,
-    pub textures: IndexSet<trace::VarId>,
-    pub accels: IndexSet<trace::VarId>,
+    buffers: IndexSet<trace::VarId>,
+    textures: IndexSet<trace::VarId>,
+    accels: IndexSet<trace::VarId>,
 }
 
 impl Compiler {
@@ -190,6 +190,16 @@ impl Compiler {
     }
     pub fn push_accel(&mut self, id: trace::VarId) -> usize {
         self.accels.insert_full(id).0
+    }
+    pub fn resource_vars<'a>(&'a self) -> impl Iterator<Item = trace::VarId> + 'a {
+        [
+            self.buffers.iter(),
+            self.textures.iter(),
+            self.accels.iter(),
+        ]
+        .into_iter()
+        .flatten()
+        .copied()
     }
     pub fn push_var<I>(&mut self, mut var: ir::Var, deps: I) -> ir::VarId
     where
