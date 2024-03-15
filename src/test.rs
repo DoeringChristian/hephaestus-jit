@@ -287,7 +287,7 @@ fn conditionals() {
 
     dst.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
@@ -311,7 +311,7 @@ fn conditional_scatter() {
 
     dst.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
@@ -333,7 +333,7 @@ fn conditional_gather() {
     let dst = src.gather_if(&tr::sized_index(10), &active);
     dst.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -352,7 +352,7 @@ fn select() {
     let res = cond.select(&true_val, &false_val);
     res.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
@@ -428,7 +428,7 @@ fn accel() {
         }
     });
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     dbg!(intersection.to_vec::<i32>(..));
@@ -456,7 +456,7 @@ fn reduce_max() {
             let x = tr::array(&x, &device);
             let max = x.reduce_max();
             max.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(max.to_vec::<$ty>(..)[0], reduced)
@@ -481,7 +481,7 @@ fn reduce_min() {
             let x = tr::array(&x, &device);
             let min = x.reduce_min();
             min.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(min.to_vec::<$ty>(..)[0], reduced)
@@ -515,7 +515,7 @@ fn reduce_sum() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -549,7 +549,7 @@ fn reduce_prod() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -570,7 +570,7 @@ fn reduce_prod() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             let res = sum.to_vec::<$ty>(..)[0];
@@ -617,7 +617,7 @@ fn reduce_and() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -636,7 +636,7 @@ fn reduce_and() {
         let x = tr::array(&x, &device);
         let res = x.reduce_and();
         res.schedule();
-        let mut graph = tr::compile();
+        let graph = tr::compile();
         graph.launch(&device);
 
         assert_eq!(res.to_vec::<bool>(..)[0], reduced)
@@ -667,7 +667,7 @@ fn reduce_or() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -686,7 +686,7 @@ fn reduce_or() {
         let x = tr::array(&x, &device);
         let res = x.reduce_or();
         res.schedule();
-        let mut graph = tr::compile();
+        let graph = tr::compile();
         graph.launch(&device);
 
         assert_eq!(res.to_vec::<bool>(..)[0], reduced)
@@ -716,7 +716,7 @@ fn reduce_xor() {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let mut graph = tr::compile();
+            let graph = tr::compile();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -735,7 +735,7 @@ fn reduce_xor() {
         let x = tr::array(&x, &device);
         let res = x.reduce_or();
         res.schedule();
-        let mut graph = tr::compile();
+        let graph = tr::compile();
         graph.launch(&device);
 
         assert_eq!(res.to_vec::<bool>(..)[0], reduced)
@@ -760,7 +760,7 @@ fn uop_cos() {
     let pred = x.cos();
     pred.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     for (reference, pred) in reference
@@ -789,7 +789,7 @@ fn scatter_atomic() {
     // result as it could lead to unintended evaluation of the result.
     prev.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
@@ -818,7 +818,7 @@ fn scatter_reduce() {
 
     src.scatter_reduce(&dst, &idx, crate::op::ReduceOp::Sum);
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
@@ -845,7 +845,7 @@ fn compress_small() {
 
     let (count, index) = src_tr.compress();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     let count = count.to_vec::<u32>(..)[0] as usize;
