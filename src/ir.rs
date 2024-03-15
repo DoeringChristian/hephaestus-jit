@@ -77,8 +77,21 @@ impl Debug for IR {
                             ty = var.ty,
                             op = var.op
                         )?;
-                        for dep in self.deps(id) {
-                            write!(f, "var{}, ", dep.0)?;
+                        let deps = self.deps(id);
+                        for (i, dep) in deps.iter().enumerate() {
+                            write!(f, "var{}", dep.0)?;
+                            if i < deps.len() - 1 {
+                                write!(f, ", ")?;
+                            }
+                        }
+                        if matches!(
+                            var.op,
+                            KernelOp::BufferRef
+                                | KernelOp::TextureRef { .. }
+                                | KernelOp::AccelRef { .. }
+                                | KernelOp::Literal
+                        ) {
+                            write!(f, "{}", var.data)?;
                         }
                         writeln!(f, ")")?;
                     }

@@ -14,10 +14,10 @@ Graph {
             op: Kernel {
                 ir: IR {
                     vars: [
-                    	var0: I32 = Literal()
-                    	var1: I32 = BufferRef()
+                    	var0: I32 = Literal(0)
+                    	var1: I32 = BufferRef(0)
                     	var2: U32 = Index()
-                    	var3: Void = Scatter(var1, var0, var2, )
+                    	var3: Void = Scatter(var1, var0, var2)
                     ],
                     n_buffers: 1,
                     n_textures: 0,
@@ -39,12 +39,12 @@ Graph {
             op: Kernel {
                 ir: IR {
                     vars: [
-                    	var0: I32 = BufferRef()
-                    	var1: I32 = Literal()
+                    	var0: I32 = BufferRef(0)
+                    	var1: I32 = Literal(1)
                     	var2: U32 = Index()
-                    	var3: Bool = BufferRef()
-                    	var4: Bool = Gather(var3, var2, )
-                    	var5: Void = Scatter(var0, var1, var2, var4, )
+                    	var3: Bool = BufferRef(1)
+                    	var4: Bool = Gather(var3, var2)
+                    	var5: Void = Scatter(var0, var1, var2, var4)
                     ],
                     n_buffers: 2,
                     n_textures: 0,
