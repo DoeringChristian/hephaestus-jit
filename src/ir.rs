@@ -8,8 +8,8 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
-use crate::vartype;
 use crate::vartype::VarType;
+use crate::{utils, vartype};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct VarId(pub(crate) usize);
@@ -53,13 +53,44 @@ impl Hash for Var {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct IR {
     pub(crate) vars: Vec<Var>,
     pub(crate) deps: Vec<VarId>,
     pub(crate) n_buffers: usize,
     pub(crate) n_textures: usize,
     pub(crate) n_accels: usize,
+}
+impl Debug for IR {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IR")
+            .field(
+                "vars",
+                &utils::DebugClosure::new(|f| {
+                    writeln!(f, "[")?;
+                    for id in self.var_ids() {
+                        let var = self.var(id);
+                        write!(
+                            f,
+                            "\tvar{id}: {ty:?} = {op:?}(",
+                            id = id.0,
+                            ty = var.ty,
+                            op = var.op
+                        )?;
+                        for dep in self.deps(id) {
+                            write!(f, "var{}, ", dep.0)?;
+                        }
+                        writeln!(f, ")")?;
+                    }
+                    write!(f, "]")?;
+                    Ok(())
+                }),
+            )
+            .field("n_buffers", &self.n_buffers)
+            .field("n_textures", &self.n_textures)
+            .field("n_accels", &self.n_accels)
+            .finish()
+    }
 }
 // Implement hash for IR using it's cached internal hash
 impl Hash for IR {

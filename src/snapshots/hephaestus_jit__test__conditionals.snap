@@ -14,53 +14,10 @@ Graph {
             op: Kernel {
                 ir: IR {
                     vars: [
-                        Var {
-                            ty: Bool,
-                            op: Literal,
-                            deps: (
-                                0,
-                                0,
-                            ),
-                            data: 1,
-                        },
-                        Var {
-                            ty: Bool,
-                            op: BufferRef,
-                            deps: (
-                                0,
-                                0,
-                            ),
-                            data: 0,
-                        },
-                        Var {
-                            ty: U32,
-                            op: Index,
-                            deps: (
-                                0,
-                                0,
-                            ),
-                            data: 0,
-                        },
-                        Var {
-                            ty: Void,
-                            op: Scatter,
-                            deps: (
-                                0,
-                                3,
-                            ),
-                            data: 0,
-                        },
-                    ],
-                    deps: [
-                        VarId(
-                            1,
-                        ),
-                        VarId(
-                            0,
-                        ),
-                        VarId(
-                            2,
-                        ),
+                    	var0: Bool = Literal()
+                    	var1: Bool = BufferRef()
+                    	var2: U32 = Index()
+                    	var3: Void = Scatter(var1, var0, var2, )
                     ],
                     n_buffers: 1,
                     n_textures: 0,

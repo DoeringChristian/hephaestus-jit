@@ -50,3 +50,19 @@ pub mod u32 {
         return x + 1;
     }
 }
+use std::fmt::{self, Debug};
+// trait FormatClosure = FnOnce(&mut fmt::Formatter<'_>) -> fmt::Result;
+
+pub struct DebugClosure<F>(F);
+
+impl<F: Fn(&mut fmt::Formatter<'_>) -> fmt::Result> DebugClosure<F> {
+    pub fn new(f: F) -> Self {
+        Self(f)
+    }
+}
+
+impl<F: Fn(&mut fmt::Formatter<'_>) -> fmt::Result> Debug for DebugClosure<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (self.0)(f)
+    }
+}
