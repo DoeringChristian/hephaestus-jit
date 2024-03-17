@@ -1,4 +1,3 @@
-use proc_macro2::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
 use self::traits::derive_as_var_type_impl;
