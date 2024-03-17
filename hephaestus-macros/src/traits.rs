@@ -14,6 +14,7 @@ pub fn crate_name() -> proc_macro2::TokenStream {
 }
 
 pub fn derive_as_var_type_impl(input: DeriveInput) -> TokenStream {
+    // determine if the struct is repr C
     let repr_c = input
         .attrs
         .iter()
@@ -34,6 +35,8 @@ pub fn derive_as_var_type_impl(input: DeriveInput) -> TokenStream {
         })
         .is_some();
     assert!(repr_c, "AsVarType requires the struct to be repr C!");
+
+    // Get the types of the struct
     let types = match &input.data {
         syn::Data::Struct(data) => match &data.fields {
             syn::Fields::Named(fields) => fields
