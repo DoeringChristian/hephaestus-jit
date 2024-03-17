@@ -46,6 +46,8 @@ profiling = "1.0"
 spirq = "1.1.1"
 # test-log = "0.2.14"
 
+hephaestus-macros = { workspace = true }
+
 [features]
 default = ["profile-with-puffin"]
 profile-with-puffin = ["profiling/profile-with-puffin"]

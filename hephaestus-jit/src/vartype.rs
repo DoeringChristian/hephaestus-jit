@@ -1,5 +1,6 @@
 use crate::utils;
 use half::f16;
+use hephaestus_macros::AsVarType;
 use once_cell::sync::Lazy;
 use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;
@@ -263,25 +264,15 @@ as_var_type! {
 
 /// Instance Type used for Ray Tracing
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, AsVarType)]
 pub struct Instance {
     pub transform: [f32; 12],
     pub geometry: u32,
 }
 
-impl AsVarType for Instance {
-    fn var_ty() -> &'static VarType {
-        let transform_ty = <[f32; 12]>::var_ty();
-        let geometry_ty = u32::var_ty();
-        from_ty::<Self>(|| VarType::Struct {
-            tys: vec![transform_ty, geometry_ty],
-        })
-    }
-}
-
 /// Ray Intersection
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, AsVarType)]
 pub struct Intersection {
     pub bx: f32,
     pub by: f32,
@@ -290,42 +281,19 @@ pub struct Intersection {
     pub valid: u32, // 0 if invalid, >0 if valid
 }
 
-impl AsVarType for Intersection {
-    fn var_ty() -> &'static VarType {
-        let f32_ty = f32::var_ty();
-        let f32x2_ty = vector(f32_ty, 2);
-        let u32_ty = u32::var_ty();
-        from_ty::<Self>(|| VarType::Struct {
-            tys: vec![f32_ty, f32_ty, u32_ty, u32_ty, u32_ty],
-        })
-    }
-}
-
 #[allow(non_snake_case)]
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable, AsVarType)]
 pub struct MatMulConfig {
     pub M: u32,
     pub N: u32,
     pub K: u32,
 }
-impl AsVarType for MatMulConfig {
-    fn var_ty() -> &'static VarType {
-        let u32_ty = u32::var_ty();
-        composite(&[&u32_ty, &u32_ty, &u32_ty])
-    }
-}
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod, AsVarType)]
 pub struct FusedMlpConfig {
     pub batch_size: u32,
-}
-impl AsVarType for FusedMlpConfig {
-    fn var_ty() -> &'static VarType {
-        let u32_ty = u32::var_ty();
-        composite(&[&u32_ty, &u32_ty])
-    }
 }
 
 impl<const N: usize, T: AsVarType + 'static> AsVarType for [T; N] {

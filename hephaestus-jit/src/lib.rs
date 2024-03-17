@@ -25,3 +25,5 @@ pub use graph::Graph;
 pub use record::record;
 pub use trace::*;
 pub use vartype::AsVarType;
+
+pub use hephaestus_macros::AsVarType;

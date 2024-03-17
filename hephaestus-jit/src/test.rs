@@ -1505,14 +1505,14 @@ fn fused_mlp() {
     let batch_size = 128;
     let hidden_layers = 2;
 
-    let input = include_bytes!("./backend/vulkan/builtin/test/data/input.bin");
+    let input = include_bytes!("backend/vulkan/builtin/test/data/input.bin");
     assert_eq!(
         input.len(),
         (in_width * batch_size) * std::mem::size_of::<f16>()
     );
     let input = bytemuck::cast_slice::<_, f16>(input);
 
-    let weights = include_bytes!("./backend/vulkan/builtin/test/data/weights.bin");
+    let weights = include_bytes!("backend/vulkan/builtin/test/data/weights.bin");
     assert_eq!(
         weights.len(),
         (width * width * ((hidden_layers - 1) as usize) + in_width * width + out_width * width)
@@ -1520,7 +1520,7 @@ fn fused_mlp() {
     );
     let weights = bytemuck::cast_slice::<_, f16>(weights);
 
-    let reference = include_bytes!("./backend/vulkan/builtin/test/data/output.bin");
+    let reference = include_bytes!("backend/vulkan/builtin/test/data/output.bin");
     let reference = bytemuck::cast_slice::<_, f16>(reference);
 
     let input = tr::array(&input, &device);

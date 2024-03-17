@@ -1,0 +1,11 @@
+use proc_macro2::TokenStream;
+use syn::{parse_macro_input, DeriveInput};
+
+use self::traits::derive_as_var_type_impl;
+
+mod traits;
+
+#[proc_macro_derive(AsVarType)]
+pub fn deive_as_var_type(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    derive_as_var_type_impl(parse_macro_input!(input as DeriveInput)).into()
+}

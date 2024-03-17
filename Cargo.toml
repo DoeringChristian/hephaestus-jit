@@ -1,5 +1,9 @@
 [workspace]
 members = [
-    "hephaestus-jit",
+    "hephaestus-jit", "hephaestus-macros",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+hephaestus-jit = { path = "./hephaestus-jit" }
+hephaestus-macros = { path = "./hephaestus-macros" }
