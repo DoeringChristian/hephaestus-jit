@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
 use syn::token::Token;
-use syn::{DeriveInput, Ident, LitInt};
+use syn::{DeriveInput, Ident, Lifetime, LitInt};
 
 pub fn crate_name() -> proc_macro2::TokenStream {
     let found_crate = proc_macro_crate::crate_name("hephaestus-jit").unwrap();
@@ -104,9 +104,25 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
+    // Construct a livetime that doesn't exist
+    let livetime = input
+        .generics
+        .params
+        .iter()
+        .filter_map(|param| match param {
+            syn::GenericParam::Lifetime(lt) => Some(lt.lifetime.ident.to_string()),
+            _ => None,
+        })
+        .fold(String::from("'"), |mut a, b| {
+            a.push_str(&b);
+            a.push_str("_");
+            a
+        });
+    let livetime = Lifetime::new(&livetime, Span::call_site());
+
     quote! {
         impl #impl_generics #crate_name::record::Traverse for #ident #ty_generics #where_clause{
-            fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>){
+            fn traverse<#livetime>(&#livetime self, vec: &mut Vec<&#livetime VarRef>){
                 #(
                     self.#names.traverse(vec);
                 )*
