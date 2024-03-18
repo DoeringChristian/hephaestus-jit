@@ -200,7 +200,7 @@ where
 pub fn record<Input, Output, F>(f: F) -> impl Fn(&backend::Device, Input) -> Output
 where
     Input: Traverse + Clone,
-    Output: Traverse + Construct + Clone + 'static,
+    Output: Traverse + Construct + Clone,
     F: Recordable<Input, Output>,
 {
     f.record()
@@ -217,7 +217,7 @@ macro_rules! impl_recordable {
         #[allow(non_snake_case)]
         impl<$($param,)* Output, Fin> Recordable<($($param,)*), Output> for Fin
         where
-            $($param: Traverse + Clone + 'static,)*
+            $($param: Traverse + Clone,)*
             Output: Traverse + Construct + Clone + 'static,
             Fin: Fn($($param,)*) -> Output + 'static,
         {

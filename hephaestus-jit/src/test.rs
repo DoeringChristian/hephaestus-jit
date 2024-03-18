@@ -1139,12 +1139,14 @@ fn record_fn() {
     // }
 
     fn func(device: &crate::Device, x: &VarRef) -> VarRef {
+        use crate::record::Recordable;
         fn _func(x: &VarRef) -> VarRef {
             x.add(&tr::literal(1))
         }
-        const RECORDING: crate::once_cell::sync::Lazy<crate::record::Func<(&VarRef,), VarRef>> =
-            crate::once_cell::sync::Lazy::new(|| _func.func());
-        RECORDING.call(device, (x,))
+        let recording = _func.func();
+        // const RECORDING: crate::once_cell::sync::Lazy<crate::record::Func<(&VarRef,), VarRef>> =
+        //     crate::once_cell::sync::Lazy::new(|| _func.func());
+        recording.call(device, (x,))
     }
 
     let y = func(&device, &tr::array(&[0, 1, 2, 3], &device));

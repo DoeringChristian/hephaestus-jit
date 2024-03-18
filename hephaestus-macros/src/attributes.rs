@@ -56,6 +56,7 @@ pub fn record_impl(func: syn::ItemFn) -> TokenStream {
             #func
             //
             const RECORDING: #lazy<#crate_name::record::Func<#input_tuple_type, #output_type>> = #lazy::new(|| #func_ident.func());
+
             RECORDING.call(device, (#(#input_vars,)*))
         }
     }
