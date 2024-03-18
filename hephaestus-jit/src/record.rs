@@ -110,23 +110,22 @@ impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-pub struct Func<Input, Output, F> {
+pub struct Func<Input, Output> {
     graphs: Mutex<HashMap<u64, graph::Graph>>,
-    f: Mutex<F>,
+    f: Mutex<Box<dyn FnMut(Input) -> Output>>,
     _in: PhantomData<Input>,
     _out: PhantomData<Output>,
 }
 
-impl<Input, Output, F> Func<Input, Output, F>
+impl<Input, Output> Func<Input, Output>
 where
     Input: Traverse + Clone + 'static,
     Output: Traverse + Construct + Clone + 'static,
-    F: FnMut(Input) -> Output,
 {
-    pub fn new(f: F) -> Self {
+    pub fn new(f: impl FnMut(Input) -> Output + 'static) -> Self {
         Self {
             graphs: Mutex::new(HashMap::new()),
-            f: Mutex::new(f),
+            f: Mutex::new(Box::new(f)),
             _in: PhantomData,
             _out: PhantomData,
         }
@@ -208,7 +207,9 @@ where
 }
 
 pub trait Recordable<Input, Output> {
+    type Input;
     fn record(self) -> impl Fn(&backend::Device, Input) -> Output;
+    fn func(self) -> Func<Input, Output>;
 }
 
 macro_rules! impl_recordable {
@@ -218,15 +219,19 @@ macro_rules! impl_recordable {
         where
             $($param: Traverse + Clone + 'static,)*
             Output: Traverse + Construct + Clone + 'static,
-            Fin: Fn($($param,)*) -> Output,
+            Fin: Fn($($param,)*) -> Output + 'static,
         {
-            fn record(self) -> impl Fn(&backend::Device, ($($param,)*)) -> Output {
-                let func = Func::new(move |input: ($($param,)*)| {
+            type Input = ($($param,)*);
+            fn record(self) -> impl Fn(&backend::Device, Self::Input) -> Output {
+                let func = self.func().func();
+
+                move |device: &backend::Device, input: Self::Input| func(device, input)
+            }
+            fn func(self) -> Func<Self::Input, Output>{
+                Func::new(move |input: Self::Input| {
                     let ($($param,)*) = input;
                     self($($param),*)
-                }).func();
-
-                move |device: &backend::Device, input: ($($param,)*)| func(device, input)
+                })
             }
         }
     };
@@ -288,12 +293,17 @@ macro_rules! if_record {
 
 #[cfg(test)]
 mod test {
-    use hephaestus_macros::{Construct, Traverse};
+    use hephaestus_macros::{recorded, Construct, Traverse};
+    use once_cell::sync::Lazy;
 
-    use crate::VarRef;
+    use crate::backend::Device;
+    use crate::record::Recordable;
+    use crate::{literal, VarRef};
+
+    use super::Func;
 
     #[test]
-    fn traverse_macro() {
+    fn derive_macros() {
         #[derive(Traverse)]
         struct Test1<'b> {
             a: VarRef,
@@ -312,5 +322,25 @@ mod test {
 
         #[derive(Traverse, Construct)]
         struct Test4(VarRef, VarRef);
+    }
+
+    #[test]
+    fn attribute_macros() {
+        // #[record]
+        // let _recording =
+        // Func::<(VarRef, VarRef), VarRef, fn(VarRef, VarRef) -> VarRef>::new(recording);
+        // let _recording = Func::new(recording);
+        fn recorded(device: &Device, x: VarRef, y: VarRef) -> VarRef {
+            fn recording(x: VarRef, y: VarRef) -> VarRef {
+                x.add(&literal(1))
+            }
+            const RECORDING: Lazy<Func<(VarRef, VarRef), VarRef>> = Lazy::new(|| recording.func());
+            RECORDING.call(device, (x, y))
+        }
+
+        #[recorded]
+        fn recording(x: VarRef, y: VarRef) -> VarRef {
+            x.add(&literal(1))
+        }
     }
 }

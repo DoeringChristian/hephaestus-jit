@@ -1,18 +1,8 @@
+use crate::utils::crate_name;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
 use syn::token::Token;
 use syn::{DeriveInput, Ident, Lifetime, LitInt};
-
-pub fn crate_name() -> proc_macro2::TokenStream {
-    let found_crate = proc_macro_crate::crate_name("hephaestus-jit").unwrap();
-    match found_crate {
-        proc_macro_crate::FoundCrate::Itself => quote!(crate),
-        proc_macro_crate::FoundCrate::Name(name) => {
-            let ident = Ident::new(&name, Span::call_site());
-            quote!(#ident)
-        }
-    }
-}
 
 pub fn derive_as_var_type_impl(input: DeriveInput) -> TokenStream {
     // determine if the struct is repr C

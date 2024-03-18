@@ -1,4 +1,5 @@
 use half::f16;
+use hephaestus_macros::recorded;
 use num_traits::Float;
 use rand::Rng;
 use std::collections::HashSet;
@@ -985,21 +986,24 @@ fn example() {
     );
     let mask = tr::sized_literal(true, n);
 
-    let mut f = tr::record(|| {
-        // Compress wavefront
-        let indices = mask.compress_dyn();
-        let b = a.gather(&indices);
+    let f = {
+        let a = a.clone();
+        tr::record(move || {
+            // Compress wavefront
+            let indices = mask.compress_dyn();
+            let b = a.gather(&indices);
 
-        // Do some (RR style) work on the values
-        let b = b.mul(&tr::literal(0.9f32));
-        let new_mask = b.gt(&tr::literal(0.1f32));
+            // Do some (RR style) work on the values
+            let b = b.mul(&tr::literal(0.9f32));
+            let new_mask = b.gt(&tr::literal(0.1f32));
 
-        // Write wavefront back to arrays
-        new_mask.scatter(&mask, &indices);
-        b.scatter(&a, &indices);
+            // Write wavefront back to arrays
+            new_mask.scatter(&mask, &indices);
+            b.scatter(&a, &indices);
 
-        a.schedule();
-    });
+            a.schedule();
+        })
+    };
 
     // Launch it multiple times
     for _ in 0..10 {
@@ -1060,9 +1064,9 @@ fn record_ident() {
     let device = vulkan(0);
 
     let c = tr::array(&[1, 2, 3], &device);
-    let cr = &c;
+    let cr = c.clone();
 
-    let f = tr::record(|a: VarRef, b: VarRef| {
+    let f = tr::record(move |a: VarRef, b: VarRef| {
         let a = a.add(&tr::literal(1));
         a.schedule();
         let c = cr.clone();
@@ -1122,6 +1126,21 @@ fn record_scatter() {
 
     dbg!(a.to_vec::<i32>(..));
     dbg!(b.to_vec::<i32>(..));
+}
+#[test]
+fn record_fn() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    #[recorded]
+    fn func(x: VarRef) -> VarRef {
+        x.add(&tr::literal(1))
+    }
+
+    let y = func(&device, tr::array(&[0, 1, 2, 3], &device));
+
+    assert_eq!(y.to_vec::<i32>(..), vec![1, 2, 3, 4]);
 }
 #[test]
 fn matrix_times_matrix() {

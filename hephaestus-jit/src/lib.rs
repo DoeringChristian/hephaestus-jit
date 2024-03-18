@@ -20,10 +20,12 @@ mod test;
 
 pub use trace as tr;
 
-pub use backend::vulkan;
+pub use backend::{vulkan, Device};
 pub use graph::Graph;
 pub use record::{record, Construct, Traverse};
 pub use trace::*;
 pub use vartype::AsVarType;
 
-pub use hephaestus_macros::AsVarType;
+pub use hephaestus_macros::{recorded, AsVarType, Construct, Traverse};
+
+pub use once_cell;
