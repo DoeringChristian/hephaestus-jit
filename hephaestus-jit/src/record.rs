@@ -309,5 +309,8 @@ mod test {
             a: VarRef,
             b: VarRef,
         }
+
+        #[derive(Traverse, Construct)]
+        struct Test4(VarRef, VarRef);
     }
 }

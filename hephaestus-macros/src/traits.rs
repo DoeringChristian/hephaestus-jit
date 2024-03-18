@@ -96,7 +96,7 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
                 .collect::<Vec<_>>(),
             syn::Fields::Unit => todo!("Unit fields are not supported!"),
         },
-        _ => todo!("AsVarType can only be derived for structs!"),
+        _ => todo!("Traverse can only be derived for structs!"),
     };
 
     let crate_name = crate_name();
@@ -161,10 +161,21 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                 }
             }
             syn::Fields::Unnamed(fields) => {
-                todo!();
+                let types = fields
+                    .unnamed
+                    .iter()
+                    .map(|field| &field.ty)
+                    .collect::<Vec<_>>();
+                quote! {
+                    impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
+                        fn construct(iter: &mut impl Iterator<Item = #crate_name::VarRef>) -> Self{
+                            Self(#(<#types as #crate_name::Construct>::construct(iter),)*)
+                        }
+                    }
+                }
             }
             syn::Fields::Unit => todo!("Unit fields are not supported!"),
         },
-        _ => todo!("AsVarType can only be derived for structs!"),
+        _ => todo!("Construct can only be derived for structs!"),
     }
 }
