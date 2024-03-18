@@ -285,3 +285,22 @@ macro_rules! if_record {
         $($vars = state.next().unwrap())*;
     };
 }
+
+#[cfg(test)]
+mod test {
+    use hephaestus_macros::Traverse;
+
+    use crate::VarRef;
+
+    #[test]
+    fn traverse_macro() {
+        #[derive(Traverse)]
+        struct Test1<'b> {
+            a: VarRef,
+            b: VarRef,
+            c: &'b [VarRef],
+        }
+        #[derive(Traverse)]
+        struct Test2<'b>(VarRef, VarRef, &'b [VarRef]);
+    }
+}

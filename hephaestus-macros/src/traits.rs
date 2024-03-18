@@ -1,6 +1,7 @@
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
-use syn::{DeriveInput, Ident};
+use syn::token::Token;
+use syn::{DeriveInput, Ident, LitInt};
 
 pub fn crate_name() -> proc_macro2::TokenStream {
     let found_crate = proc_macro_crate::crate_name("hephaestus-jit").unwrap();
@@ -65,6 +66,50 @@ pub fn derive_as_var_type_impl(input: DeriveInput) -> TokenStream {
                 composite(&[
                     #(<#types as #crate_name::vartype::AsVarType>::var_ty()),*
                 ])
+            }
+        }
+    }
+}
+
+pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
+    // Get the types of the struct
+    let names = match &input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            syn::Fields::Named(fields) => fields
+                .named
+                .iter()
+                .map(|field| {
+                    let ident = field.ident.as_ref().unwrap();
+                    quote!(#ident)
+                })
+                .collect::<Vec<_>>(),
+            syn::Fields::Unnamed(fields) => fields
+                .unnamed
+                .iter()
+                .enumerate()
+                .map(|(i, _)| {
+                    // let ident = Ident::new(&format!("{i}"), Span::call_site());
+                    let ident = format!("{i}");
+                    let ident = LitInt::new(&ident, Span::call_site());
+                    quote!(#ident)
+                })
+                .collect::<Vec<_>>(),
+            syn::Fields::Unit => todo!("Unit fields are not supported!"),
+        },
+        _ => todo!("AsVarType can only be derived for structs!"),
+    };
+
+    let crate_name = crate_name();
+
+    let ident = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics #crate_name::record::Traverse for #ident #ty_generics #where_clause{
+            fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>){
+                #(
+                    self.#names.traverse(vec);
+                )*
             }
         }
     }
