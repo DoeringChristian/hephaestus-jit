@@ -119,7 +119,7 @@ pub struct Func<Input, Output> {
 
 impl<Input, Output> Func<Input, Output>
 where
-    Input: Traverse + Clone + 'static,
+    Input: Traverse + Clone,
     Output: Traverse + Construct + Clone + 'static,
 {
     pub fn new(f: impl FnMut(Input) -> Output + 'static) -> Self {
@@ -199,7 +199,7 @@ where
 
 pub fn record<Input, Output, F>(f: F) -> impl Fn(&backend::Device, Input) -> Output
 where
-    Input: Traverse + Clone + 'static,
+    Input: Traverse + Clone,
     Output: Traverse + Construct + Clone + 'static,
     F: Recordable<Input, Output>,
 {

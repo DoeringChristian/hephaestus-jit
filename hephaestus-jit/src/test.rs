@@ -1,5 +1,5 @@
 use half::f16;
-use hephaestus_macros::recorded;
+use hephaestus_macros::{recorded, Traverse};
 use num_traits::Float;
 use rand::Rng;
 use std::collections::HashSet;
@@ -1132,6 +1132,44 @@ fn record_fn() {
     pretty_env_logger::try_init().ok();
 
     let device = vulkan(0);
+
+    // #[recorded]
+    // fn func(x: &VarRef) -> VarRef {
+    //     x.add(&tr::literal(1))
+    // }
+
+    fn func(device: &crate::Device, x: &VarRef) -> VarRef {
+        fn _func(x: &VarRef) -> VarRef {
+            x.add(&tr::literal(1))
+        }
+        const RECORDING: crate::once_cell::sync::Lazy<crate::record::Func<(&VarRef,), VarRef>> =
+            crate::once_cell::sync::Lazy::new(|| _func.func());
+        RECORDING.call(device, (x,))
+    }
+
+    let y = func(&device, &tr::array(&[0, 1, 2, 3], &device));
+
+    assert_eq!(y.to_vec::<i32>(..), vec![1, 2, 3, 4]);
+}
+#[test]
+fn record_struct() {
+    pretty_env_logger::try_init().ok();
+
+    let device = vulkan(0);
+
+    #[derive(Clone, Traverse)]
+    pub struct Test {
+        a: VarRef,
+    }
+
+    // impl Test {
+    //     fn func(&self) -> VarRef {
+    //         // #[recorded]
+    //         // fn func(s: &Test) -> VarRef {
+    //         //     s.a.add(&tr::literal(1))
+    //         // }
+    //     }
+    // }
 
     #[recorded]
     fn func(x: VarRef) -> VarRef {
