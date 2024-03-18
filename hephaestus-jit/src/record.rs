@@ -288,7 +288,7 @@ macro_rules! if_record {
 
 #[cfg(test)]
 mod test {
-    use hephaestus_macros::Traverse;
+    use hephaestus_macros::{Construct, Traverse};
 
     use crate::VarRef;
 
@@ -300,7 +300,14 @@ mod test {
             b: VarRef,
             c: &'b [VarRef],
         }
+
         #[derive(Traverse)]
         struct Test2<'b>(VarRef, VarRef, &'b [VarRef]);
+
+        #[derive(Traverse, Construct)]
+        struct Test3 {
+            a: VarRef,
+            b: VarRef,
+        }
     }
 }

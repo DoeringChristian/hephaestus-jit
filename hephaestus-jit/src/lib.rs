@@ -22,7 +22,7 @@ pub use trace as tr;
 
 pub use backend::vulkan;
 pub use graph::Graph;
-pub use record::record;
+pub use record::{record, Construct, Traverse};
 pub use trace::*;
 pub use vartype::AsVarType;
 

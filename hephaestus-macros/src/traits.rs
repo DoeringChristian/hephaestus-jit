@@ -113,7 +113,7 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
             syn::GenericParam::Lifetime(lt) => Some(lt.lifetime.ident.to_string()),
             _ => None,
         })
-        .fold(String::from("'"), |mut a, b| {
+        .fold(String::from("'lt_"), |mut a, b| {
             a.push_str(&b);
             a.push_str("_");
             a
@@ -121,12 +121,50 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
     let livetime = Lifetime::new(&livetime, Span::call_site());
 
     quote! {
-        impl #impl_generics #crate_name::record::Traverse for #ident #ty_generics #where_clause{
+        impl #impl_generics #crate_name::Traverse for #ident #ty_generics #where_clause{
             fn traverse<#livetime>(&#livetime self, vec: &mut Vec<&#livetime VarRef>){
                 #(
                     self.#names.traverse(vec);
                 )*
             }
         }
+    }
+}
+
+pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
+    let crate_name = crate_name();
+
+    let ident = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    match input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            syn::Fields::Named(fields) => {
+                let names = fields
+                    .named
+                    .iter()
+                    .map(|field| field.ident.as_ref().unwrap())
+                    .collect::<Vec<_>>();
+                let types = fields
+                    .named
+                    .iter()
+                    .map(|field| &field.ty)
+                    .collect::<Vec<_>>();
+                quote! {
+                    impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
+                        fn construct(iter: &mut impl Iterator<Item = #crate_name::VarRef>) -> Self{
+                            Self{
+                                #(#names: <#types as #crate_name::Construct>::construct(iter),)*
+                            }
+                        }
+                    }
+                }
+            }
+            syn::Fields::Unnamed(fields) => {
+                todo!();
+            }
+            syn::Fields::Unit => todo!("Unit fields are not supported!"),
+        },
+        _ => todo!("AsVarType can only be derived for structs!"),
     }
 }
