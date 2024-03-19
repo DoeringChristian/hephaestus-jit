@@ -95,24 +95,24 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     // Construct a livetime that doesn't exist
-    let livetime = input
-        .generics
-        .params
-        .iter()
-        .filter_map(|param| match param {
-            syn::GenericParam::Lifetime(lt) => Some(lt.lifetime.ident.to_string()),
-            _ => None,
-        })
-        .fold(String::from("'lt_"), |mut a, b| {
-            a.push_str(&b);
-            a.push_str("_");
-            a
-        });
-    let livetime = Lifetime::new(&livetime, Span::call_site());
+    // let livetime = input
+    //     .generics
+    //     .params
+    //     .iter()
+    //     .filter_map(|param| match param {
+    //         syn::GenericParam::Lifetime(lt) => Some(lt.lifetime.ident.to_string()),
+    //         _ => None,
+    //     })
+    //     .fold(String::from("'lt_"), |mut a, b| {
+    //         a.push_str(&b);
+    //         a.push_str("_");
+    //         a
+    //     });
+    // let livetime = Lifetime::new(&livetime, Span::call_site());
 
     quote! {
         impl #impl_generics #crate_name::Traverse for #ident #ty_generics #where_clause{
-            fn traverse<#livetime>(&#livetime self, vec: &mut Vec<&#livetime VarRef>){
+            fn traverse(&self, vec: &mut Vec<VarRef>){
                 #(
                     self.#names.traverse(vec);
                 )*

@@ -160,7 +160,7 @@ impl Graph {
     pub fn launch_with(
         &self,
         device: &backend::Device,
-        inputs: &[&trace::VarRef],
+        inputs: &[trace::VarRef],
     ) -> Option<(backend::Report, Vec<trace::VarRef>)> {
         if self.passes.is_empty() {
             return None;
@@ -172,7 +172,7 @@ impl Graph {
         // perform resource aliasing
         let mut resources = vec![None; self.resources.len()];
 
-        for (&r, id) in inputs.into_iter().zip(self.inputs.iter()) {
+        for (r, id) in inputs.iter().zip(self.inputs.iter()) {
             trace::with_trace(|trace| {
                 let var = trace.var(r.id());
                 let desc = &self.resource_descs[id.0];
@@ -307,8 +307,8 @@ pub enum PassOp {
 #[profiling::function]
 pub fn compile(
     ts: &trace::ThreadState,
-    input: &[&trace::VarRef],
-    output: &[&trace::VarRef],
+    input: &[trace::VarRef],
+    output: &[trace::VarRef],
 ) -> Graph {
     // TODO: Not sure if we should lock the graph for the whole compilation?
     trace::with_trace(|trace| {
@@ -318,11 +318,11 @@ pub fn compile(
         }
 
         let inputs = input
-            .into_iter()
+            .iter()
             .map(|r| graph_builder.try_push_resource(&trace, r.id()).unwrap())
             .collect::<Vec<_>>();
         let outputs = output
-            .into_iter()
+            .iter()
             .map(|r| graph_builder.try_push_resource(&trace, r.id()).unwrap())
             .collect::<Vec<_>>();
         let input_set = inputs.iter().copied().collect::<HashSet<_>>();

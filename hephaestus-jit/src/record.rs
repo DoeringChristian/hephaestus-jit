@@ -12,20 +12,20 @@ use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 pub trait Traverse {
     // This operation flattens the structure to it's VarRef components
     // fn traverse<'a>(&'a self);
-    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {}
+    fn traverse(&self, vec: &mut Vec<VarRef>);
 }
 pub trait Construct {
     fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self;
 }
 
 impl Traverse for VarRef {
-    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
-        vec.push(self)
+    fn traverse(&self, vec: &mut Vec<VarRef>) {
+        vec.push(self.clone())
     }
 }
 impl Traverse for &VarRef {
-    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
-        vec.push(*self)
+    fn traverse(&self, vec: &mut Vec<VarRef>) {
+        vec.push((*self).clone())
     }
 }
 impl Construct for VarRef {
@@ -34,14 +34,14 @@ impl Construct for VarRef {
     }
 }
 impl<const N: usize, T: Traverse> Traverse for [T; N] {
-    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+    fn traverse(&self, vec: &mut Vec<VarRef>) {
         for i in self {
             i.traverse(vec);
         }
     }
 }
 impl<T: Traverse> Traverse for &[T] {
-    fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+    fn traverse(&self, vec: &mut Vec<VarRef>) {
         for i in *self {
             i.traverse(vec);
         }
@@ -52,7 +52,7 @@ macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
-            fn traverse<'a>(&'a self, vec: &mut Vec<&'a VarRef>) {
+            fn traverse(&self, vec: &mut Vec<VarRef>) {
                 let ($($param,)*) = self;
                 $($param.traverse(vec);)*
             }
@@ -191,7 +191,7 @@ where
             );
         }
         let graph = &self.graphs.lock().unwrap()[&hash];
-        let (report, output) = graph.launch_with(device, &inputs)?;
+        let (report, output) = graph.launch_with(device, inputs.as_slice())?;
         let mut output = output.into_iter();
         Some((report, Output::construct(&mut output)))
     }
@@ -205,6 +205,49 @@ where
 {
     f.record()
 }
+
+pub trait WrapInput<Input, Output> {
+    type Input;
+    fn wrap_input(self) -> impl Fn(Input) -> Output;
+}
+
+macro_rules! impl_wrap_input {
+    ($($param:ident),*) => {
+        #[allow(non_snake_case)]
+        impl<$($param,)* Output, Fin> WrapInput<($($param,)*), Output> for Fin
+        where
+            $($param: Traverse + Clone,)*
+            Output: Traverse + Construct + Clone,
+            Fin: Fn($($param,)*) -> Output,
+        {
+            type Input = ($($param,)*);
+            fn wrap_input(self) -> impl Fn(Self::Input) -> Output{
+                move |input|{
+                    let ($($param,)*) = input;
+                    self($($param),*)
+                }
+            }
+        }
+    };
+}
+
+impl_wrap_input!();
+impl_wrap_input!(A);
+impl_wrap_input!(A, B);
+impl_wrap_input!(A, B, C);
+impl_wrap_input!(A, B, C, D);
+impl_wrap_input!(A, B, C, D, E);
+impl_wrap_input!(A, B, C, D, E, F);
+impl_wrap_input!(A, B, C, D, E, F, G);
+impl_wrap_input!(A, B, C, D, E, F, G, H);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 pub trait Recordable<Input, Output> {
     type Input;
@@ -291,19 +334,97 @@ macro_rules! if_record {
     };
 }
 
+pub struct FuncCache {
+    graphs: HashMap<u64, graph::Graph>,
+}
+impl FuncCache {
+    pub fn call<Input, Output, F>(
+        &mut self,
+        f: F,
+        device: &backend::Device,
+        input: Input,
+    ) -> Option<(backend::Report, Output)>
+    where
+        Input: Traverse,
+        Output: Traverse + Construct,
+        F: FnOnce(Input) -> Output + 'static,
+    {
+        // Traverse Input
+        let mut inputs = vec![];
+        input.traverse(&mut inputs);
+
+        // We evaluate the inputs to the function, to not collect dependencies of input variables.
+        // This might not be the best solution, but it solves some of the problems.
+        for input in inputs.iter() {
+            input.schedule();
+        }
+        // Evaluate all iput variables
+        let graph = tr::compile();
+        graph.launch(&device);
+
+        // Calculate hash of function + input
+        let mut hasher = DefaultHasher::new();
+
+        // Calculate hash of function type
+        std::any::TypeId::of::<F>().hash(&mut hasher);
+
+        // Between function calls, the size or type of input variables might change.
+        // To this end we keep a chache of graphs.
+        // We calculate the hash of the inputs by using their resource descriptors, as they
+        // uniquely identify the type and extent of the variable.
+        with_trace(|trace| {
+            for var in &inputs {
+                trace.var(var.id()).resource_desc().hash(&mut hasher);
+            }
+        });
+        let hash = hasher.finish();
+        if !self.graphs.contains_key(&hash) {
+            let output = f(input);
+
+            let mut outputs = vec![];
+            output.traverse(&mut outputs);
+
+            // Compile with params
+            for v in &outputs {
+                v.schedule();
+            }
+            schedule_eval();
+
+            let graph = TS.with(|s| {
+                let mut s = s.borrow_mut();
+                let ts = std::mem::take(&mut (*s));
+                graph::compile(&ts, &inputs, &outputs)
+            });
+
+            self.graphs.insert(hash, graph);
+        }
+
+        let graph = &self.graphs[&hash];
+        let (report, output) = graph.launch_with(device, &inputs)?;
+        let mut output = output.into_iter();
+        Some((report, Output::construct(&mut output)))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use hephaestus_macros::{recorded, Construct, Traverse};
     use once_cell::sync::Lazy;
 
     use crate::backend::Device;
-    use crate::record::Recordable;
+    use crate::record::{FuncCache, Recordable};
     use crate::{literal, VarRef};
 
     use super::Func;
+    use super::WrapInput;
 
     #[test]
     fn derive_macros() {
+        let func = |x: VarRef, y: VarRef| {
+            return x;
+        };
+        let func = func.wrap_input();
+
         #[derive(Traverse)]
         struct Test1<'b> {
             a: VarRef,
