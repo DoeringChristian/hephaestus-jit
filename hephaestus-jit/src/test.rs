@@ -1164,21 +1164,20 @@ fn record_struct() {
         a: VarRef,
     }
 
-    // impl Test {
-    //     fn func(&self) -> VarRef {
-    //         // #[recorded]
-    //         // fn func(s: &Test) -> VarRef {
-    //         //     s.a.add(&tr::literal(1))
-    //         // }
-    //     }
-    // }
-
-    #[recorded]
-    fn func(x: VarRef) -> VarRef {
-        x.add(&tr::literal(1))
+    impl Test {
+        fn func(&self, device: &backend::Device) -> VarRef {
+            #[recorded]
+            fn func(s: &Test) -> VarRef {
+                s.a.add(&tr::literal(1))
+            }
+            func(device, self).unwrap().0
+        }
     }
 
-    let y = func(&device, tr::array(&[0, 1, 2, 3], &device));
+    let t = Test {
+        a: tr::array(&[0, 1, 2, 3], &device),
+    };
+    let y = t.func(&device);
 
     assert_eq!(y.to_vec::<i32>(..), vec![1, 2, 3, 4]);
 }

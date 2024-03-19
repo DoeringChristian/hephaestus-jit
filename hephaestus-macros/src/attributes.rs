@@ -37,27 +37,33 @@ pub fn record_impl(func: syn::ItemFn) -> TokenStream {
         syn::ReturnType::Default => quote!(()),
         syn::ReturnType::Type(_, ty) => quote!(#ty),
     };
+    let wrapped_output_type = quote!(Option<(#output_type, #crate_name::backend::Report)>);
 
     let lazy = quote!(#crate_name::once_cell::sync::Lazy);
     let input_tuple_type = quote!((#(#input_types,)*));
+    let input_tuple_vars = quote!((#(#input_vars,)*));
 
     let mut func = func.clone();
     let func_inputs: Punctuated<FnArg, Token![,]> = parse_quote!(#(#input_vars: #input_types,)*);
-    let func_ident = Ident::new(
-        &format!("_{ident}", ident = &func.sig.ident),
-        Span::call_site(),
-    );
-    func.sig.ident = func_ident.clone();
-    func.sig.inputs = func_inputs;
+    // let func_ident = Ident::new(
+    //     &format!("_{ident}", ident = &func.sig.ident),
+    //     Span::call_site(),
+    // );
+    // func.sig.ident = func_ident.clone();
+    // func.sig.inputs = func_inputs;
 
     quote! {
-        fn #ident(device: &#crate_name::Device, #input) -> #output_type{
-            use #crate_name::record::Recordable;
+        fn #ident(device: &#crate_name::Device, #input) -> #wrapped_output_type{
             #func
-            //
-            const RECORDING: #lazy<#crate_name::record::Func<#input_tuple_type, #output_type>> = #lazy::new(|| #func_ident.func());
 
-            RECORDING.call(device, (#(#input_vars,)*))
+            use std::sync::Mutex;
+            use #crate_name::record::FCache;
+            use #crate_name::record::WrapInput;
+            static FCACHE: #lazy<Mutex<FCache>> = #lazy::new(||Mutex::new(FCache::default()));
+
+            let wrapped_input_func = #ident.wrap_input();
+
+            FCACHE.lock().unwrap().call(wrapped_input_func, device, #input_tuple_vars)
         }
     }
 }

@@ -23,11 +23,16 @@ impl Traverse for VarRef {
         vec.push(self.clone())
     }
 }
-impl Traverse for &VarRef {
+impl<T: Traverse> Traverse for &T {
     fn traverse(&self, vec: &mut Vec<VarRef>) {
-        vec.push((*self).clone())
+        (**self).traverse(vec);
     }
 }
+// impl Traverse for &VarRef {
+//     fn traverse(&self, vec: &mut Vec<VarRef>) {
+//         vec.push((*self).clone())
+//     }
+// }
 impl Construct for VarRef {
     fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self {
         iter.next().unwrap()
@@ -207,8 +212,8 @@ where
 }
 
 pub trait WrapInput<Input, Output> {
-    type Input;
-    fn wrap_input(self) -> impl Fn(Input) -> Output;
+    // type Input;
+    fn wrap_input(self) -> impl FnOnce(Input) -> Output + 'static;
 }
 
 macro_rules! impl_wrap_input {
@@ -216,12 +221,10 @@ macro_rules! impl_wrap_input {
         #[allow(non_snake_case)]
         impl<$($param,)* Output, Fin> WrapInput<($($param,)*), Output> for Fin
         where
-            $($param: Traverse + Clone,)*
-            Output: Traverse + Construct + Clone,
-            Fin: Fn($($param,)*) -> Output,
+            Fin: FnOnce($($param,)*) -> Output + 'static,
         {
-            type Input = ($($param,)*);
-            fn wrap_input(self) -> impl Fn(Self::Input) -> Output{
+            // type Input = ($($param,)*);
+            fn wrap_input(self) -> impl FnOnce(($($param,)*)) -> Output + 'static{
                 move |input|{
                     let ($($param,)*) = input;
                     self($($param),*)
@@ -334,16 +337,17 @@ macro_rules! if_record {
     };
 }
 
-pub struct FuncCache {
+#[derive(Default)]
+pub struct FCache {
     graphs: HashMap<u64, graph::Graph>,
 }
-impl FuncCache {
+impl FCache {
     pub fn call<Input, Output, F>(
         &mut self,
         f: F,
         device: &backend::Device,
         input: Input,
-    ) -> Option<(backend::Report, Output)>
+    ) -> Option<(Output, backend::Report)>
     where
         Input: Traverse,
         Output: Traverse + Construct,
@@ -366,7 +370,7 @@ impl FuncCache {
         let mut hasher = DefaultHasher::new();
 
         // Calculate hash of function type
-        std::any::TypeId::of::<F>().hash(&mut hasher);
+        // std::any::TypeId::of::<F>().hash(&mut hasher);
 
         // Between function calls, the size or type of input variables might change.
         // To this end we keep a chache of graphs.
@@ -378,6 +382,8 @@ impl FuncCache {
             }
         });
         let hash = hasher.finish();
+
+        // If the correct graph could not be found, compile and insert it into the cache.
         if !self.graphs.contains_key(&hash) {
             let output = f(input);
 
@@ -399,10 +405,11 @@ impl FuncCache {
             self.graphs.insert(hash, graph);
         }
 
+        // Get the correct graph, launch it and construct the output struct.
         let graph = &self.graphs[&hash];
         let (report, output) = graph.launch_with(device, &inputs)?;
         let mut output = output.into_iter();
-        Some((report, Output::construct(&mut output)))
+        Some((Output::construct(&mut output), report))
     }
 }
 
@@ -412,7 +419,7 @@ mod test {
     use once_cell::sync::Lazy;
 
     use crate::backend::Device;
-    use crate::record::{FuncCache, Recordable};
+    use crate::record::{FCache, Recordable};
     use crate::{literal, VarRef};
 
     use super::Func;
@@ -420,6 +427,8 @@ mod test {
 
     #[test]
     fn derive_macros() {
+        let fcache = FCache::default();
+
         let func = |x: VarRef, y: VarRef| {
             return x;
         };
