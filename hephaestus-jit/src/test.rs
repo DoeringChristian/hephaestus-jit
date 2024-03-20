@@ -34,7 +34,7 @@ fn simple1() {
         dbg!(&s);
     });
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     dbg!(&graph);
     for i in 0..1000 {
         graph.launch(&device);
@@ -62,7 +62,7 @@ fn simple_u16() {
     tr::TS.with(|s| {
         dbg!(&s);
     });
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -103,7 +103,7 @@ fn scatter_chain1() {
         dbg!(&s);
     });
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -120,7 +120,7 @@ fn scatter_chain2() {
 
     b.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -881,7 +881,7 @@ fn compress_large() {
 
     let (count, index) = src_tr.compress();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     let count = count.to_vec::<u32>(..)[0] as usize;
@@ -908,7 +908,7 @@ fn prefix_sum() {
     let prediction = x.prefix_sum(true);
     prediction.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     let reference = input
@@ -953,7 +953,7 @@ fn dynamic_index() {
 
     values.schedule();
 
-    let mut graph = tr::compile();
+    let graph = tr::compile();
     graph.launch(&device);
 
     assert_eq!(values.capacity(), n);
