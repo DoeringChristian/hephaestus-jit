@@ -156,7 +156,6 @@ impl Graph {
     /// Size independent kernels are cached in the backend layer anyways,
     /// therefore rerecording should be fine.
     ///
-    #[profiling::function]
     pub fn launch_with(
         &self,
         device: &backend::Device,
@@ -268,6 +267,7 @@ impl Graph {
                 _ => {}
             });
 
+        profiling::finish_frame!();
         Some((report, output))
     }
 }

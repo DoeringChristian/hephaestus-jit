@@ -64,6 +64,8 @@ ndarray = "0.15.6"
 puffin = { version = "0.19" }
 puffin_http = { version = "0.16" }
 
+rstest = "0.18.2"
+
 [hooks]
 pre-commit = "cargo test"
 

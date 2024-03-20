@@ -1,10 +1,12 @@
 use half::f16;
 use hephaestus_macros::{recorded, Traverse};
 use num_traits::Float;
+use once_cell::sync::Lazy;
 use rand::Rng;
+use rstest::{fixture, rstest};
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 use std::thread;
 
 use approx::assert_abs_diff_eq;
@@ -12,10 +14,32 @@ use approx::assert_abs_diff_eq;
 use crate::record::{self, *};
 use crate::tr::VarRef;
 use crate::vartype::{self, AsVarType, Instance, Intersection};
-use crate::{backend, tr, vulkan};
+use crate::{backend, tr, Device};
 
-#[test]
-fn simple1() {
+static DEBUG: Once = Once::new();
+
+fn vulkan() -> Device {
+    DEBUG.call_once(|| {
+        pretty_env_logger::init();
+        #[cfg(feature = "profile-with-puffin")]
+        {
+            // let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+            let _puffin_server = puffin_http::Server::new("127.0.0.1:8585").unwrap();
+            puffin::set_scopes_on(true);
+            profiling::finish_frame!();
+            profiling::finish_frame!();
+        }
+    });
+    backend::vulkan(0)
+}
+
+#[fixture]
+#[once]
+fn debug() {}
+
+#[rstest]
+#[case(vulkan())]
+fn simple1(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();
@@ -48,8 +72,9 @@ fn simple1() {
     assert_eq!(j.to_vec::<u32>(..), vec![0, 1, 2, 3, 4]);
 }
 
-#[test]
-fn simple_u16() {
+#[rstest]
+#[case(vulkan())]
+fn simple_u16(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -69,11 +94,9 @@ fn simple_u16() {
     dbg!(c.to_vec::<u16>(..));
     assert_eq!(c.to_vec::<u16>(..), vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1,])
 }
-#[test]
-fn simple_f16() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn simple_f16(#[case] device: Device) {
     let c = tr::sized_index(10).cast(f16::var_ty());
 
     c.schedule();
@@ -85,8 +108,9 @@ fn simple_f16() {
     assert_eq!(reference, c.to_vec::<f16>(..));
 }
 
-#[test]
-fn scatter_chain1() {
+#[rstest]
+#[case(vulkan())]
+fn scatter_chain1(#[case] device: Device) {
     let device = backend::Device::vulkan(0).unwrap();
 
     let b0 = tr::sized_literal(0, 5);
@@ -110,8 +134,9 @@ fn scatter_chain1() {
     // dbg!(&b1.data().buffer().unwrap().to_host::<i32>().unwrap());
     assert_eq!(b1.to_vec::<i32>(..), vec![2, 2, 2, 2, 2]);
 }
-#[test]
-fn scatter_chain2() {
+#[rstest]
+#[case(vulkan())]
+fn scatter_chain2(#[case] device: Device) {
     let device = backend::Device::vulkan(0).unwrap();
 
     let a = tr::sized_literal(0, 5);
@@ -129,8 +154,9 @@ fn scatter_chain2() {
     assert_eq!(b.to_vec::<i32>(..), vec![2, 2, 2, 2, 2]);
     assert_eq!(a.to_vec::<i32>(..), vec![1, 1, 1, 1, 1]);
 }
-#[test]
-fn extract() {
+#[rstest]
+#[case(vulkan())]
+fn extract(#[case] device: Device) {
     let device = backend::Device::vulkan(0).unwrap();
 
     let a = tr::sized_literal(1f32, 10);
@@ -151,11 +177,9 @@ fn extract() {
     dbg!(a.to_vec::<f32>(..));
     dbg!(b.to_vec::<f32>(..));
 }
-#[test]
-fn extract2() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn extract2(#[case] device: Device) {
     let b = tr::sized_literal(0xffu8, 2);
     let a = tr::sized_literal(2u32, 2);
 
@@ -167,8 +191,9 @@ fn extract2() {
 
     dbg!(&s.to_vec::<u8>(..));
 }
-#[test]
-fn test_struct() {
+#[rstest]
+#[case(vulkan())]
+fn test_struct(#[case] device: Device) {
     let device = backend::Device::vulkan(0).unwrap();
 
     let a = tr::sized_literal(1u8, 10);
@@ -190,8 +215,9 @@ fn test_struct() {
     dbg!(b.to_vec::<u32>(..));
 }
 
-#[test]
-fn texture2df32() {
+#[rstest]
+#[case(vulkan())]
+fn texture2df32(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -214,8 +240,9 @@ fn texture2df32() {
     dbg!(v.to_vec::<f32>(..));
     assert_eq!(v.to_vec::<f32>(..), vec![1.0; 8]);
 }
-#[test]
-fn texture3df32() {
+#[rstest]
+#[case(vulkan())]
+fn texture3df32(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -239,8 +266,9 @@ fn texture3df32() {
     dbg!(v.to_vec::<f32>(..));
     assert_eq!(v.to_vec::<f32>(..), vec![1.0; 8]);
 }
-#[test]
-fn texture2di32() {
+#[rstest]
+#[case(vulkan())]
+fn texture2di32(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -259,8 +287,9 @@ fn texture2di32() {
 
     assert_eq!(v.to_vec::<i32>(..), vec![1; 8]);
 }
-// #[test]
-// fn texture2di8() {
+// #[rstest]
+// #[case(vulkan())]
+// fn texture2di8(#[case]device: Device) {
 //     pretty_env_logger::try_init().ok();
 //     let device = backend::Device::vulkan(0).unwrap();
 //
@@ -279,8 +308,9 @@ fn texture2di32() {
 //
 //     assert_eq!(v.to_vec::<i8>(..), vec![1; 8]);
 // }
-#[test]
-fn conditionals() {
+#[rstest]
+#[case(vulkan())]
+fn conditionals(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -294,8 +324,9 @@ fn conditionals() {
 
     dbg!(&dst.to_vec::<u8>(..));
 }
-#[test]
-fn conditional_scatter() {
+#[rstest]
+#[case(vulkan())]
+fn conditional_scatter(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -318,11 +349,9 @@ fn conditional_scatter() {
 
     assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0])
 }
-#[test]
-fn conditional_gather() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn conditional_gather(#[case] device: Device) {
     let src = tr::sized_literal(1, 10);
     let active = tr::array(
         &[
@@ -340,11 +369,9 @@ fn conditional_gather() {
 
     assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 0, 0, 1, 0, 1, 0, 1, 0]);
 }
-#[test]
-fn select() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn select(#[case] device: Device) {
     let cond = tr::array(&[true, false], &device);
 
     let true_val = tr::literal(10);
@@ -359,11 +386,9 @@ fn select() {
 
     assert_eq!(res.to_vec::<i32>(..), vec![10, 5]);
 }
-#[test]
-fn accel() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn accel(#[case] device: Device) {
     let x = tr::array(&[1f32, 0f32, 1f32], &device);
     let y = tr::array(&[0f32, 1f32, 1f32], &device);
     let z = tr::array(&[0f32, 0f32, 0f32], &device);
@@ -443,8 +468,9 @@ fn accel() {
 
     assert_eq!(intersections[1].valid, 0);
 }
-#[test]
-fn reduce_max() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_max(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -468,8 +494,9 @@ fn reduce_max() {
     max_test!(i8, -128..127);
     max_test!(f32, 0..100);
 }
-#[test]
-fn reduce_min() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_min(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
 
@@ -496,8 +523,9 @@ fn reduce_min() {
     min_test!(f32, 0..100);
 }
 
-#[test]
-fn reduce_sum() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_sum(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
     use rand::Rng;
@@ -530,8 +558,9 @@ fn reduce_sum() {
     rng_test!(f32, 0..100, 1_000, std::ops::Add::add, reduce_sum);
 }
 
-#[test]
-fn reduce_prod() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_prod(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
     use rand::Rng;
@@ -598,8 +627,9 @@ fn reduce_prod() {
     );
 }
 
-#[test]
-fn reduce_and() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_and(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
     use rand::Rng;
@@ -648,8 +678,9 @@ fn reduce_and() {
     test_bool(&[false, false, false, false]);
 }
 
-#[test]
-fn reduce_or() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_or(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
     use rand::Rng;
@@ -697,8 +728,9 @@ fn reduce_or() {
     test_bool(&[false, false, false, true]);
     test_bool(&[false, false, false, false]);
 }
-#[test]
-fn reduce_xor() {
+#[rstest]
+#[case(vulkan())]
+fn reduce_xor(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
     let device = backend::Device::vulkan(0).unwrap();
     use rand::Rng;
@@ -747,8 +779,9 @@ fn reduce_xor() {
     test_bool(&[false, false, false, false]);
 }
 
-#[test]
-fn uop_cos() {
+#[rstest]
+#[case(vulkan())]
+fn uop_cos(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();
@@ -771,8 +804,9 @@ fn uop_cos() {
         approx::assert_abs_diff_eq!(reference, pred, epsilon = 0.001);
     }
 }
-#[test]
-fn scatter_atomic() {
+#[rstest]
+#[case(vulkan())]
+fn scatter_atomic(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();
@@ -804,8 +838,9 @@ fn scatter_atomic() {
     );
 }
 
-#[test]
-fn scatter_reduce() {
+#[rstest]
+#[case(vulkan())]
+fn scatter_reduce(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();
@@ -825,8 +860,9 @@ fn scatter_reduce() {
     assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
 }
 
-#[test]
-fn compress_small() {
+#[rstest]
+#[case(vulkan())]
+fn compress_small(#[case] device: Device) {
     use rand::Rng;
 
     pretty_env_logger::try_init().ok();
@@ -856,13 +892,10 @@ fn compress_small() {
     assert_eq!(reference, prediction);
     assert_eq!(reference.len(), count);
 }
-#[test]
-fn compress_large() {
+#[rstest]
+#[case(vulkan())]
+fn compress_large(#[case] device: Device) {
     use rand::Rng;
-
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
 
     let n = usize::pow(2, 12) + 15;
 
@@ -891,17 +924,14 @@ fn compress_large() {
     assert_eq!(reference, prediction);
     assert_eq!(reference.len(), count);
 }
-#[test]
-fn prefix_sum() {
-    pretty_env_logger::try_init().ok();
-
+#[rstest]
+#[case(vulkan())]
+fn prefix_sum(#[case] device: Device) {
     // TODO: investigate why it's not working with sizes not divisible by 4 (suspect last thread
     // not running)
     let num = 2048 * 4 + 3; // test some weird value for initialization
 
     let input = (0..num as u64).map(|i| i).collect::<Vec<_>>();
-
-    let device = vulkan(0);
 
     let x = tr::array(&input, &device);
 
@@ -921,10 +951,10 @@ fn prefix_sum() {
 
     assert_eq!(prediction.to_vec::<u64>(..), reference);
 }
-#[test]
-fn dynamic_index() {
+#[rstest]
+#[case(vulkan())]
+fn dynamic_index(#[case] device: Device) {
     use rand::Rng;
-    pretty_env_logger::try_init().ok();
 
     // TODO: figure out compression bug
     // Also, add a view function, that allows for a view into a subset of a buffer without
@@ -932,8 +962,6 @@ fn dynamic_index() {
     let n = 1024;
     let min = 3;
     let max = 7;
-
-    let device = vulkan(0);
 
     // TODO: same bug as in prefix sum but with sizes not divisible by 16
     let src: Vec<i32> = (0..n)
@@ -967,13 +995,10 @@ fn dynamic_index() {
 
     assert_eq!(values, reference);
 }
-#[test]
-fn example() {
+#[rstest]
+#[case(vulkan())]
+fn example(#[case] device: Device) {
     use rand::Rng;
-
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
 
     let n = 128;
 
@@ -1013,12 +1038,9 @@ fn example() {
     // Read data back to CPU and print it
     dbg!(a.to_vec::<f32>(..));
 }
-#[test]
-fn record() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_test(#[case] device: Device) {
     let f = tr::record(|a: VarRef| {
         a.add(&tr::literal(1)).scatter(&a, &tr::sized_index(3));
     });
@@ -1036,12 +1058,9 @@ fn record() {
     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_eq!(b.to_vec::<i32>(..), vec![5, 6, 7]);
 }
-#[test]
-fn record_output() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_output(#[case] device: Device) {
     let f = tr::record(|a: VarRef| {
         let a = a.add(&tr::literal(1));
         a
@@ -1057,12 +1076,9 @@ fn record_output() {
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_ne!(a1.id(), a2.id());
 }
-#[test]
-fn record_ident() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_ident(#[case] device: Device) {
     let c = tr::array(&[1, 2, 3], &device);
     let cr = c.clone();
 
@@ -1085,12 +1101,9 @@ fn record_ident() {
     assert_eq!(c1.to_vec::<i32>(..), vec![1, 2, 3]);
 }
 
-#[test]
-fn record_change() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_change(#[case] device: Device) {
     let f = tr::record(|a: VarRef| a.add(&tr::literal(1)));
 
     let a = tr::array(&[1, 2, 3], &device);
@@ -1104,12 +1117,9 @@ fn record_change() {
     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
 }
-#[test]
-fn record_scatter() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_scatter(#[case] device: Device) {
     let f = tr::record(|a: VarRef| {
         tr::sized_literal(1, 3).scatter(&a, &tr::index());
     });
@@ -1127,12 +1137,9 @@ fn record_scatter() {
     dbg!(a.to_vec::<i32>(..));
     dbg!(b.to_vec::<i32>(..));
 }
-#[test]
-fn record_fn() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_fn(#[case] device: Device) {
     #[recorded]
     fn func(x: &VarRef) -> VarRef {
         x.add(&tr::literal(1))
@@ -1147,12 +1154,9 @@ fn record_fn() {
 
     assert_eq!(y.to_vec::<i32>(..), vec![1, 2, 3, 4]);
 }
-#[test]
-fn record_struct() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn record_struct(#[case] device: Device) {
     #[derive(Clone, Traverse)]
     pub struct Test {
         a: VarRef,
@@ -1175,12 +1179,9 @@ fn record_struct() {
 
     assert_eq!(y.to_vec::<i32>(..), vec![1, 2, 3, 4]);
 }
-#[test]
-fn matrix_times_matrix() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn matrix_times_matrix(#[case] device: Device) {
     let c0 = tr::vec(&[&tr::sized_literal(1f32, 1), &tr::literal(3f32)]);
     let c1 = tr::vec(&[&tr::literal(2f32), &tr::literal(4f32)]);
     let m0 = tr::mat(&[&c0, &c1]);
@@ -1198,12 +1199,9 @@ fn matrix_times_matrix() {
 
     dbg!(res.to_vec::<f32>(..));
 }
-#[test]
-fn array() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn array(#[case] device: Device) {
     let a0 = tr::sized_literal(1, 2);
     let a1 = tr::literal(2);
     let a2 = tr::literal(3);
@@ -1216,12 +1214,9 @@ fn array() {
 
     assert_eq!(array.to_vec::<[i32; 3]>(..), vec![[1, 2, 3], [1, 2, 3]]);
 }
-#[test]
-fn dyn_extract() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn dyn_extract(#[case] device: Device) {
     let a0 = tr::sized_literal(1, 2);
     let a1 = tr::literal(2);
     let a2 = tr::literal(3);
@@ -1238,12 +1233,9 @@ fn dyn_extract() {
 
     dbg!(res.to_vec::<i32>(..));
 }
-#[test]
-fn vec3_memory_layout() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn vec3_memory_layout(#[case] device: Device) {
     let vec = tr::vec(&[&tr::sized_literal(1, 2), &tr::literal(2), &tr::literal(3)]);
 
     let tmp = vec.gather(&tr::sized_index(2));
@@ -1256,12 +1248,9 @@ fn vec3_memory_layout() {
 
     assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
 }
-#[test]
-fn cast_array_vec() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn cast_array_vec(#[case] device: Device) {
     let arr = tr::arr(&[
         &tr::sized_literal(1f32, 2),
         &tr::literal(2f32),
@@ -1279,12 +1268,9 @@ fn cast_array_vec() {
     // assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
     assert_eq!(arr.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
 }
-#[test]
-fn atomic_inc() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn atomic_inc(#[case] device: Device) {
     let atomics = tr::array(&[0u32, 0, 0], &device);
 
     let active = tr::sized_literal(true, 1000);
@@ -1305,12 +1291,9 @@ fn atomic_inc() {
         "Atomic Operations should return the previous index which is unique!"
     );
 }
-#[test]
-fn atomic_inc_rand() {
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn atomic_inc_rand(#[case] device: Device) {
     let atomics = tr::array(&[0u32, 0, 0], &device);
 
     let mut rng = rand::thread_rng();
@@ -1339,11 +1322,9 @@ fn atomic_inc_rand() {
     );
 }
 
-#[test]
-fn if_record1() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn if_record1(#[case] device: Device) {
     // Initial state
     let i = tr::array(&[0, 0], &device);
     let c = tr::array(&[true, false], &device);
@@ -1366,11 +1347,10 @@ fn if_record1() {
     assert_eq!(i.to_vec::<i32>(..), vec![1, 0]);
 }
 
-#[test]
-fn loop_record1() {
+#[rstest]
+#[case(vulkan())]
+fn loop_record1(#[case] device: Device) {
     // TODO: loops work without scopes -> comment out scopes
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
 
     // Initial state
     let i = tr::array(&[0, 1], &device);
@@ -1396,11 +1376,10 @@ fn loop_record1() {
     assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
 }
 
-#[test]
-fn loop_record2() {
+#[rstest]
+#[case(vulkan())]
+fn loop_record2(#[case] device: Device) {
     // TODO: loops work without scopes -> comment out scopes
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
 
     // Initial state
     let mut i = tr::array(&[0, 1], &device);
@@ -1420,10 +1399,10 @@ fn loop_record2() {
     assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
     assert_eq!(c.to_vec::<bool>(..), vec![false, false]);
 }
-#[test]
-fn loop_record_side_effect() {
+#[rstest]
+#[case(vulkan())]
+fn loop_record_side_effect(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
 
     let mut i = tr::sized_literal(0, 1);
     let mut c = tr::literal(true);
@@ -1443,14 +1422,13 @@ fn loop_record_side_effect() {
 
     assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
 }
-#[test]
+#[rstest]
+#[case(vulkan())]
 #[allow(non_snake_case)]
-fn matmul_linspace() {
+fn matmul_linspace(#[case] device: Device) {
     let N = 256;
     let M = 256;
     let K = 256;
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
 
     pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
         tr::literal(start).add(
@@ -1502,55 +1480,9 @@ fn matmul_linspace() {
         "lhs = {D:?}\n is not equal to rhs = {D_ref:?}\n"
     );
 }
-#[test]
-#[cfg(feature = "profile-with-puffin")]
-#[allow(non_snake_case)]
-pub fn puffin() {
-    let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-    let _puffin_server = puffin_http::Server::new(&server_addr).unwrap();
-    puffin::set_scopes_on(true);
-
-    pretty_env_logger::try_init().ok();
-
-    let device = vulkan(0);
-
-    let D = {
-        profiling::scope!("Tracing");
-        let N = 4096;
-        let M = 4096;
-        let K = 4096;
-
-        pub fn linspace(start: f32, end: f32, num: usize) -> VarRef {
-            tr::literal(start).add(
-                &tr::sized_index(num)
-                    .cast(f32::var_ty())
-                    .mul(&tr::literal((end - start) / (num as f32))),
-            )
-        }
-
-        let A = linspace(0f32, 1f32, M * K).cast(f16::var_ty());
-        let B = linspace(0f32, 1f32, K * N).cast(f16::var_ty());
-        let C = tr::sized_literal(f16::ZERO, M * N);
-
-        let D = tr::matfma(&A, &B, &C, M, N, K);
-        D
-    };
-
-    D.schedule();
-
-    let graph = tr::compile();
-
-    for i in 0..10 {
-        graph.launch(&device);
-    }
-
-    profiling::finish_frame!();
-}
-#[test]
-fn fused_mlp() {
-    pretty_env_logger::try_init().ok();
-    let device = vulkan(0);
-
+#[rstest]
+#[case(vulkan())]
+fn fused_mlp(#[case] device: Device) {
     let width = 64;
     let in_width = width;
     let out_width = width;
