@@ -370,7 +370,7 @@ impl FCache {
         let mut hasher = DefaultHasher::new();
 
         // Calculate hash of function type
-        // std::any::TypeId::of::<F>().hash(&mut hasher);
+        std::any::TypeId::of::<F>().hash(&mut hasher);
 
         // Between function calls, the size or type of input variables might change.
         // To this end we keep a chache of graphs.
