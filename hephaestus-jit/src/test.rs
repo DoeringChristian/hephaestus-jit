@@ -1133,23 +1133,17 @@ fn record_fn() {
 
     let device = vulkan(0);
 
-    // #[recorded]
-    // fn func(x: &VarRef) -> VarRef {
-    //     x.add(&tr::literal(1))
-    // }
-
-    fn func(device: &crate::Device, x: &VarRef) -> VarRef {
-        use crate::record::Recordable;
-        fn _func(x: &VarRef) -> VarRef {
-            x.add(&tr::literal(1))
-        }
-        let recording = _func.func();
-        // const RECORDING: crate::once_cell::sync::Lazy<crate::record::Func<(&VarRef,), VarRef>> =
-        //     crate::once_cell::sync::Lazy::new(|| _func.func());
-        recording.call(device, (x,))
+    #[recorded]
+    fn func(x: &VarRef) -> VarRef {
+        x.add(&tr::literal(1))
     }
 
-    let y = func(&device, &tr::array(&[0, 1, 2, 3], &device));
+    let a = tr::array(&[0, 1, 2, 3], &device);
+
+    let y = func(&device, &a).unwrap().0;
+    for i in 0..10 {
+        func(&device, &a).unwrap();
+    }
 
     assert_eq!(y.to_vec::<i32>(..), vec![1, 2, 3, 4]);
 }
