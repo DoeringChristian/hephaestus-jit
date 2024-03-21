@@ -24,8 +24,8 @@ pub fn vulkan(id: usize) -> Device {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // #[error("[CudaError] {0:?}")]
-    // CudaError(#[from] cuda::DriverError),
+    #[error(transparent)]
+    VulkanError(#[from] vulkan::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -111,12 +111,6 @@ impl Buffer {
             Buffer::VulkanBuffer(buffer) => Device::VulkanDevice(buffer.device().clone()),
         }
     }
-    pub fn vulkan(&self) -> Option<&VulkanBuffer> {
-        match self {
-            Self::VulkanBuffer(buffer) => Some(buffer),
-            _ => None,
-        }
-    }
     pub fn cuda(&self) -> Option<&CudaBuffer> {
         match self {
             Self::CudaBuffer(buffer) => Some(buffer),
@@ -130,27 +124,13 @@ pub enum Texture {
     VulkanTexture(VulkanTexture),
 }
 
-impl Texture {
-    pub fn vulkan(&self) -> Option<&VulkanTexture> {
-        match self {
-            Self::VulkanTexture(buffer) => Some(buffer),
-            _ => None,
-        }
-    }
-}
+impl Texture {}
 
 #[derive(Debug, Clone)]
 pub enum Accel {
     VulkanAccel(VulkanAccel),
 }
-impl Accel {
-    pub fn vulkan(&self) -> Option<&VulkanAccel> {
-        match self {
-            Self::VulkanAccel(accel) => Some(accel),
-            _ => None,
-        }
-    }
-}
+impl Accel {}
 
 ///
 /// This trait represents an interface to a device.

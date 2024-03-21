@@ -32,6 +32,46 @@ use self::codegen::{DeviceInfo, IrGlslDef};
 // use self::shader_cache::{ShaderCache, ShaderKind};
 use self::vulkan_core::pipeline::{self, Binding, DescSetLayout, Pipeline, PipelineInfo};
 
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Could not convert buffer to Vulkan!")]
+    BufferConversion,
+    #[error("Could not convert texture to Vulkan!")]
+    TextureConversion,
+    #[error("Could not convert acceleration structure to Vulkan!")]
+    AccelConversion,
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+// upcast functions
+impl backend::Buffer {
+    pub fn vulkan(&self) -> Result<&VulkanBuffer> {
+        match self {
+            Self::VulkanBuffer(buffer) => Ok(buffer),
+            _ => Err(Error::BufferConversion),
+        }
+    }
+}
+
+impl backend::Texture {
+    pub fn vulkan(&self) -> Result<&VulkanTexture> {
+        match self {
+            Self::VulkanTexture(buffer) => Ok(buffer),
+            _ => Err(Error::TextureConversion),
+        }
+    }
+}
+
+impl backend::Accel {
+    pub fn vulkan(&self) -> Result<&VulkanAccel> {
+        match self {
+            Self::VulkanAccel(accel) => Ok(accel),
+            _ => Err(Error::AccelConversion),
+        }
+    }
+}
+
 impl VulkanDevice {
     fn compile_ir(&self, ir: &Prehashed<IR>, info: &DeviceInfo) -> Arc<pipeline::Pipeline> {
         let def = IrGlslDef {
@@ -109,34 +149,34 @@ impl backend::BackendDevice for VulkanDevice {
         for (i, pass) in graph.passes().iter().enumerate() {
             let to_buffer = |id: crate::graph::ResourceId| {
                 env.buffer(id)
-                    .and_then(|buffer| Some(buffer.vulkan()?.buffer.clone()))
+                    .and_then(|buffer| Some(buffer.vulkan().ok()?.buffer.clone()))
             };
             let to_image = |id: crate::graph::ResourceId| {
                 env.texture(id)
-                    .and_then(|image| Some(image.vulkan()?.image.clone()))
+                    .and_then(|image| Some(image.vulkan().ok()?.image.clone()))
             };
             let to_accel = |id: crate::graph::ResourceId| {
                 env.accel(id)
-                    .and_then(|accel| Some(accel.vulkan()?.accel.clone()))
+                    .and_then(|accel| Some(accel.vulkan().ok()?.accel.clone()))
             };
             let buffers = pass
                 .resources
                 .iter()
                 .flat_map(|id| env.buffer(*id))
-                .map(|buffer| buffer.vulkan().unwrap().buffer.clone())
-                .collect::<Vec<_>>();
+                .map(|buffer| Ok(buffer.vulkan()?.buffer.clone()))
+                .collect::<Result<Vec<_>>>()?;
             let images = pass
                 .resources
                 .iter()
                 .flat_map(|id| env.texture(*id))
-                .map(|texture| texture.vulkan().unwrap().image.clone())
-                .collect::<Vec<_>>();
+                .map(|texture| Ok(texture.vulkan()?.image.clone()))
+                .collect::<Result<Vec<_>>>()?;
             let accels = pass
                 .resources
                 .iter()
                 .flat_map(|id| env.accel(*id))
-                .map(|accel| accel.vulkan().unwrap().accel.clone())
-                .collect::<Vec<_>>();
+                .map(|accel| Ok(accel.vulkan()?.accel.clone()))
+                .collect::<Result<Vec<_>>>()?;
             match &pass.op {
                 PassOp::Kernel { ir, size } => {
                     let size = *size;

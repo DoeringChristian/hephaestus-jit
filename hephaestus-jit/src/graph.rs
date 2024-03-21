@@ -22,6 +22,8 @@ pub enum Error {
     UninitializedResourve,
     #[error("Could not compare extent!")]
     ExtentComparison,
+    #[error(transparent)]
+    BackendError(#[from] backend::Error),
     #[error("Undefined error!")]
     None(Backtrace),
 }
@@ -189,7 +191,7 @@ impl Graph {
         let mut resources = vec![None; self.resources.len()];
 
         for (r, id) in inputs.iter().zip(self.inputs.iter()) {
-            trace::with_trace(|trace| {
+            trace::with_trace(|trace| -> Result<()> {
                 let var = trace.var(r.id());
                 let desc = &self.resource_descs[id.0];
 
@@ -230,7 +232,7 @@ impl Graph {
         let report = if self.passes.is_empty() {
             backend::Report::default()
         } else {
-            device.execute_graph(self, &env).unwrap()
+            device.execute_graph(self, &env)?
         };
         log::trace!("Report:\n {report}");
 
