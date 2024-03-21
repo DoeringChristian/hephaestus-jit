@@ -1156,6 +1156,70 @@ fn record_fn(#[case] device: Device) {
 }
 #[rstest]
 #[case(vulkan())]
+fn record_vec1(#[case] device: Device) {
+    #[recorded]
+    fn func(x: &[VarRef]) -> Vec<VarRef> {
+        x.into_iter()
+            .map(|x| x.add(&tr::literal(1)))
+            .collect::<Vec<_>>()
+    }
+
+    let x = (0..3)
+        .map(|i| tr::array(&[0, 1, 2, 3], &device))
+        .collect::<Vec<_>>();
+
+    let y = func(&device, &x).unwrap().0;
+
+    let y = y
+        .into_iter()
+        .map(|y| y.to_vec::<i32>(..))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        y,
+        vec![vec![1, 2, 3, 4], vec![1, 2, 3, 4], vec![1, 2, 3, 4]]
+    );
+}
+
+#[rstest]
+#[case(vulkan())]
+fn record_vec2(#[case] device: Device) {
+    #[recorded]
+    fn func(x: &[Vec<VarRef>]) -> Vec<Vec<VarRef>> {
+        x.into_iter()
+            .map(|x| x.iter().map(|x| x.add(&tr::literal(1))).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    }
+
+    let x = (1..4)
+        .map(|i| {
+            (0..i)
+                .map(|j| {
+                    let v = &(0..i + j).collect::<Vec<i32>>();
+                    tr::array(&v, &device)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let (y, report) = func(&device, &x).unwrap();
+
+    let y = y
+        .into_iter()
+        .map(|y| y.iter().map(|y| y.to_vec::<i32>(..)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        y,
+        vec![
+            vec![vec![1],],
+            vec![vec![1, 2], vec![1, 2, 3],],
+            vec![vec![1, 2, 3], vec![1, 2, 3, 4], vec![1, 2, 3, 4, 5],]
+        ]
+    );
+}
+
+#[rstest]
+#[case(vulkan())]
 fn record_struct(#[case] device: Device) {
     #[derive(Clone, Traverse)]
     pub struct Test {

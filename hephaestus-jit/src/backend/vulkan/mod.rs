@@ -175,8 +175,11 @@ impl backend::BackendDevice for VulkanDevice {
                         .chain(buffers.into_iter())
                         .collect::<Vec<_>>();
 
+                    let grid_size = (size + compile_info.work_group_size as usize - 1)
+                        / compile_info.work_group_size as usize;
+
                     // Create a render pass on the graph, pushing all it's resource accesses
-                    let mut rpass = rgraph.pass(format!("JIT Kernel {i}"));
+                    let mut rpass = rgraph.pass(format!("JIT Kernel {i} [{size}]"));
                     for buffer in &buffers {
                         rpass = rpass.read(&buffer, AccessType::ComputeShaderReadOther);
                         rpass = rpass.write(&buffer, AccessType::ComputeShaderWrite);
@@ -194,9 +197,6 @@ impl backend::BackendDevice for VulkanDevice {
                         }
                     }
                     let tlases = accels.iter().map(|a| a.tlas.clone()).collect::<Vec<_>>();
-
-                    let grid_size = (size + compile_info.work_group_size as usize - 1)
-                        / compile_info.work_group_size as usize;
 
                     rpass.record(move |device, cb, pool| {
                         pipeline.submit_to_cbuffer(cb, pool, grid_size, &buffers, &images, &tlases);

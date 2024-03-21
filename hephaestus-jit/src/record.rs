@@ -14,43 +14,71 @@ use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 pub trait Traverse {
     // This operation flattens the structure to it's VarRef components
     // fn traverse<'a>(&'a self);
-    fn traverse(&self, vec: &mut Vec<VarRef>);
+    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>);
 }
 pub trait Construct {
-    fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self;
+    fn construct(
+        iter: &mut impl Iterator<Item = VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self;
 }
 
 impl Traverse for VarRef {
-    fn traverse(&self, vec: &mut Vec<VarRef>) {
-        vec.push(self.clone())
+    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
+        layout.push(1);
+        vars.push(self.clone())
     }
 }
 impl<T: Traverse> Traverse for &T {
-    fn traverse(&self, vec: &mut Vec<VarRef>) {
-        (**self).traverse(vec);
+    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
+        layout.push(1);
+        (**self).traverse(vars, layout);
     }
 }
-// impl Traverse for &VarRef {
-//     fn traverse(&self, vec: &mut Vec<VarRef>) {
-//         vec.push((*self).clone())
-//     }
-// }
+
 impl Construct for VarRef {
-    fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self {
-        iter.next().unwrap()
+    fn construct(
+        vars: &mut impl Iterator<Item = VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        layout.next().unwrap();
+        vars.next().unwrap()
     }
 }
-impl<const N: usize, T: Traverse> Traverse for [T; N] {
-    fn traverse(&self, vec: &mut Vec<VarRef>) {
+
+impl<T: Traverse> Traverse for Vec<T> {
+    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
+        layout.push(self.len());
         for i in self {
-            i.traverse(vec);
+            i.traverse(vars, layout);
+        }
+    }
+}
+
+impl<T: Construct> Construct for Vec<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        let len = layout.next().unwrap();
+
+        (0..len).map(|_| T::construct(vars, layout)).collect()
+    }
+}
+
+impl<const N: usize, T: Traverse> Traverse for [T; N] {
+    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
+        layout.push(N);
+        for i in self {
+            i.traverse(vars, layout);
         }
     }
 }
 impl<T: Traverse> Traverse for &[T] {
-    fn traverse(&self, vec: &mut Vec<VarRef>) {
+    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
+        layout.push(self.len());
         for i in *self {
-            i.traverse(vec);
+            i.traverse(vars, layout);
         }
     }
 }
@@ -59,9 +87,17 @@ macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
-            fn traverse(&self, vec: &mut Vec<VarRef>) {
+            fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
+                let i = layout.len();
+                layout.push(0);
+
+                let mut len = 0;
                 let ($($param,)*) = self;
-                $($param.traverse(vec);)*
+                $(
+                    len += 1;
+                    $param.traverse(vars, layout);
+                )*
+                layout[i] = len;
             }
         }
     };
@@ -88,8 +124,9 @@ macro_rules! impl_construct_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Construct),*> Construct for ($($param,)*){
-            fn construct(iter: &mut impl Iterator<Item = VarRef>) -> Self{
-                ($($param::construct(iter),)*)
+            fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
+            layout.next().unwrap();
+                ($($param::construct(vars, layout),)*)
             }
             // fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef>{
             //     let ($($param,)*) = self;
@@ -215,7 +252,7 @@ where
 
 #[derive(Default)]
 pub struct FCache {
-    graphs: HashMap<u64, graph::Graph>,
+    graphs: HashMap<u64, (graph::Graph, Vec<usize>)>,
 }
 impl FCache {
     pub fn call<Input, Output, F>(
@@ -231,7 +268,8 @@ impl FCache {
     {
         // Traverse Input
         let mut inputs = vec![];
-        input.traverse(&mut inputs);
+        let mut layout = vec![];
+        input.traverse(&mut inputs, &mut layout);
 
         // We evaluate the inputs to the function, to not collect dependencies of input variables.
         // This might not be the best solution, but it solves some of the problems.
@@ -244,6 +282,9 @@ impl FCache {
 
         // Calculate hash of function + input
         let mut hasher = DefaultHasher::new();
+
+        // Hash the input layout
+        layout.hash(&mut hasher);
 
         // Calculate hash of function type
         std::any::TypeId::of::<F>().hash(&mut hasher);
@@ -264,7 +305,8 @@ impl FCache {
             let output = f(input);
 
             let mut outputs = vec![];
-            output.traverse(&mut outputs);
+            let mut layout = vec![];
+            output.traverse(&mut outputs, &mut layout);
 
             // Compile with params
             for v in &outputs {
@@ -278,14 +320,19 @@ impl FCache {
                 graph::compile(&ts, &inputs, &outputs)
             });
 
-            self.graphs.insert(hash, graph);
+            self.graphs.insert(hash, (graph, layout));
         }
 
         // Get the correct graph, launch it and construct the output struct.
-        let graph = &self.graphs[&hash];
+        let (graph, layout) = &self.graphs[&hash];
         let (report, output) = graph.launch_with(device, &inputs)?;
+
         let mut output = output.into_iter();
-        Some((Output::construct(&mut output), report))
+        let mut layout = layout.iter().copied();
+        let output = Output::construct(&mut output, &mut layout);
+        assert_eq!(layout.next(), None);
+
+        Some((output, report))
     }
 }
 

@@ -30,7 +30,7 @@ pub enum GraphResource {
 impl Debug for GraphResource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Input => f.debug_struct("IO").finish(),
+            Self::Input => f.debug_struct("Input").finish(),
             Self::Captured { .. } => f.debug_struct("Captured").finish(),
             Self::Internal { .. } => f.debug_struct("Internal").finish(),
         }
@@ -161,6 +161,7 @@ impl Graph {
         device: &backend::Device,
         inputs: &[trace::VarRef],
     ) -> Option<(backend::Report, Vec<trace::VarRef>)> {
+        log::trace!("Launching graph: {self:?}");
         if self.passes.is_empty() {
             return None;
         }
@@ -344,12 +345,12 @@ pub fn compile(
                 });
 
                 let mut groups = vec![];
-                let mut size = Extent::default();
+                let mut size = trace.var(vars[group.start]).extent.clone();
                 let mut start = group.start;
 
                 for i in group.clone() {
                     if trace.var(vars[i]).extent != size {
-                        let end = i + 1;
+                        let end = i;
                         if start != end {
                             groups.push(start..end);
                         }

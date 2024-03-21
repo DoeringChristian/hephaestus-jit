@@ -91,30 +91,17 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
 
     let crate_name = crate_name();
 
+    let n_names = names.len();
+
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // Construct a livetime that doesn't exist
-    // let livetime = input
-    //     .generics
-    //     .params
-    //     .iter()
-    //     .filter_map(|param| match param {
-    //         syn::GenericParam::Lifetime(lt) => Some(lt.lifetime.ident.to_string()),
-    //         _ => None,
-    //     })
-    //     .fold(String::from("'lt_"), |mut a, b| {
-    //         a.push_str(&b);
-    //         a.push_str("_");
-    //         a
-    //     });
-    // let livetime = Lifetime::new(&livetime, Span::call_site());
-
     quote! {
         impl #impl_generics #crate_name::Traverse for #ident #ty_generics #where_clause{
-            fn traverse(&self, vec: &mut Vec<VarRef>){
+            fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>){
+                layout.push(#n_names);
                 #(
-                    self.#names.traverse(vec);
+                    self.#names.traverse(vars, layout);
                 )*
             }
         }
@@ -142,9 +129,10 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                     .collect::<Vec<_>>();
                 quote! {
                     impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
-                        fn construct(iter: &mut impl Iterator<Item = #crate_name::VarRef>) -> Self{
+                        fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
+                            layout.next().unwrap();
                             Self{
-                                #(#names: <#types as #crate_name::Construct>::construct(iter),)*
+                                #(#names: <#types as #crate_name::Construct>::construct(vars, layout),)*
                             }
                         }
                     }
@@ -158,8 +146,9 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                     .collect::<Vec<_>>();
                 quote! {
                     impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
-                        fn construct(iter: &mut impl Iterator<Item = #crate_name::VarRef>) -> Self{
-                            Self(#(<#types as #crate_name::Construct>::construct(iter),)*)
+                        fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
+                            layout.next().unwrap();
+                            Self(#(<#types as #crate_name::Construct>::construct(vars, layout),)*)
                         }
                     }
                 }
