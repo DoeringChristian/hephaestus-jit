@@ -18,6 +18,10 @@ pub enum Error {
     PushResourceError(Backtrace),
     #[error("Resource does not match variable type!")]
     ResourceMissmatch,
+    #[error("A resource in the environment has been left empty!")]
+    UninitializedResourve,
+    #[error("Could not compare extent!")]
+    ExtentComparison,
     #[error("Undefined error!")]
     None(Backtrace),
 }
@@ -188,9 +192,16 @@ impl Graph {
             trace::with_trace(|trace| {
                 let var = trace.var(r.id());
                 let desc = &self.resource_descs[id.0];
-                assert_eq!(var.resource_desc().as_ref(), Some(desc));
+
+                // Assert
+                (var.resource_desc().as_ref() == Some(desc))
+                    .then_some(())
+                    .ok_or(Error::ResourceMissmatch)?;
+
                 resources[id.0] = Some(var.data.clone());
-            })
+
+                Ok(())
+            })?;
         }
         for i in 0..resources.len() {
             if resources[i].is_none() {
@@ -199,6 +210,7 @@ impl Graph {
                         resources[i] = Some(trace.var(r.id()).data.clone());
                     }),
                     GraphResource::Internal { id } => {
+                        // TODO: error handling
                         resources[i] = Some(Resource::create(device, &self.resource_descs[i]))
                     }
                     _ => {}
@@ -206,7 +218,10 @@ impl Graph {
             }
         }
 
-        let resources = resources.into_iter().collect::<Option<Vec<_>>>().unwrap();
+        let resources = resources
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or(Error::UninitializedResourve)?;
 
         let env = Env { resources };
 
@@ -353,6 +368,7 @@ pub fn compile(
             .iter()
             .flat_map(|group| {
                 vars[group.clone()].sort_by(|id0, id1| {
+                    // TODO: Result handling
                     trace
                         .var(*id0)
                         .extent
