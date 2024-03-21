@@ -43,6 +43,8 @@ pub enum Error {
     AccelConversion,
     #[error("Resource {0} not found in environment!")]
     ResourceNotFound(usize),
+    #[error(transparent)]
+    CoreError(#[from] vulkan_core::Error),
     #[error("Other error!")]
     Other,
 }
@@ -97,14 +99,14 @@ pub struct VulkanDevice(Arc<Device>);
 impl VulkanDevice {
     #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
-        Ok(Self(
-            DEVICES
-                .lock()
-                .unwrap()
-                .entry(id)
-                .or_insert_with(|| Device::create(0).unwrap())
-                .clone(),
-        ))
+        let mut devices = DEVICES.lock().unwrap();
+        if devices.contains_key(&id) {
+            Ok(Self(devices[&id].clone()))
+        } else {
+            let device = Device::create(id).map_err(Error::from)?;
+            devices.insert(id, device.clone());
+            Ok(Self(device))
+        }
     }
 }
 
