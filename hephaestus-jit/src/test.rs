@@ -995,148 +995,148 @@ fn dynamic_index(#[case] device: Device) {
 
     assert_eq!(values, reference);
 }
-#[rstest]
-#[case(vulkan())]
-fn example(#[case] device: Device) {
-    use rand::Rng;
-
-    let n = 128;
-
-    // Create random values and mask
-    let a = tr::array(
-        &(0..n)
-            .map(|_| rand::thread_rng().gen_range(0f32..1f32))
-            .collect::<Vec<_>>(),
-        &device,
-    );
-    let mask = tr::sized_literal(true, n);
-
-    let f = {
-        let a = a.clone();
-        tr::record(move || {
-            // Compress wavefront
-            let indices = mask.compress_dyn();
-            let b = a.gather(&indices);
-
-            // Do some (RR style) work on the values
-            let b = b.mul(&tr::literal(0.9f32));
-            let new_mask = b.gt(&tr::literal(0.1f32));
-
-            // Write wavefront back to arrays
-            new_mask.scatter(&mask, &indices);
-            b.scatter(&a, &indices);
-
-            a.schedule();
-        })
-    };
-
-    // Launch it multiple times
-    for _ in 0..10 {
-        f(&device, ());
-    }
-
-    // Read data back to CPU and print it
-    dbg!(a.to_vec::<f32>(..));
-}
-#[rstest]
-#[case(vulkan())]
-fn record_test(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| {
-        a.add(&tr::literal(1)).scatter(&a, &tr::sized_index(3));
-    });
-
-    let a = tr::array(&[1, 2, 3], &device);
-
-    f(&device, (a.clone(),));
-    assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
-
-    let b = tr::array(&[4, 5, 6], &device);
-
-    f(&device, (b.clone(),));
-    dbg!(&a);
-    dbg!(&b);
-    assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
-    assert_eq!(b.to_vec::<i32>(..), vec![5, 6, 7]);
-}
-#[rstest]
-#[case(vulkan())]
-fn record_output(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| {
-        let a = a.add(&tr::literal(1));
-        a
-    });
-
-    let a = tr::array(&[1, 2, 3], &device);
-
-    let a1 = f(&device, (a.clone(),));
-
-    let a2 = f(&device, (a.clone(),));
-
-    assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
-    assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4]);
-    assert_ne!(a1.id(), a2.id());
-}
-#[rstest]
-#[case(vulkan())]
-fn record_ident(#[case] device: Device) {
-    let c = tr::array(&[1, 2, 3], &device);
-    let cr = c.clone();
-
-    let f = tr::record(move |a: VarRef, b: VarRef| {
-        let a = a.add(&tr::literal(1));
-        a.schedule();
-        let c = cr.clone();
-        (b, c)
-    });
-
-    let a = tr::array(&[1, 2, 3], &device);
-    let b = tr::array(&[1, 2, 3], &device);
-
-    let (b1, c1) = f(&device, (a.clone(), b.clone()));
-
-    dbg!(c.id());
-    dbg!(c1.id());
-
-    assert_eq!(b1.to_vec::<i32>(..), vec![1, 2, 3]);
-    assert_eq!(c1.to_vec::<i32>(..), vec![1, 2, 3]);
-}
-
-#[rstest]
-#[case(vulkan())]
-fn record_change(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| a.add(&tr::literal(1)));
-
-    let a = tr::array(&[1, 2, 3], &device);
-
-    let a1 = f(&device, (a.clone(),));
-
-    let a = tr::array(&[1, 2, 3, 4], &device);
-
-    let a2 = f(&device, (a.clone(),));
-
-    assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
-    assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
-}
-#[rstest]
-#[case(vulkan())]
-fn record_scatter(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| {
-        tr::sized_literal(1, 3).scatter(&a, &tr::index());
-    });
-
-    let a = tr::sized_literal(0, 3);
-
-    let b = a.add(&tr::literal(1));
-
-    f(&device, (a.clone(),));
-
-    b.schedule();
-    let graph = tr::compile();
-    graph.launch(&device);
-
-    dbg!(a.to_vec::<i32>(..));
-    dbg!(b.to_vec::<i32>(..));
-}
+// #[rstest]
+// #[case(vulkan())]
+// fn example(#[case] device: Device) {
+//     use rand::Rng;
+//
+//     let n = 128;
+//
+//     // Create random values and mask
+//     let a = tr::array(
+//         &(0..n)
+//             .map(|_| rand::thread_rng().gen_range(0f32..1f32))
+//             .collect::<Vec<_>>(),
+//         &device,
+//     );
+//     let mask = tr::sized_literal(true, n);
+//
+//     let f = {
+//         let a = a.clone();
+//         tr::record(move || {
+//             // Compress wavefront
+//             let indices = mask.compress_dyn();
+//             let b = a.gather(&indices);
+//
+//             // Do some (RR style) work on the values
+//             let b = b.mul(&tr::literal(0.9f32));
+//             let new_mask = b.gt(&tr::literal(0.1f32));
+//
+//             // Write wavefront back to arrays
+//             new_mask.scatter(&mask, &indices);
+//             b.scatter(&a, &indices);
+//
+//             a.schedule();
+//         })
+//     };
+//
+//     // Launch it multiple times
+//     for _ in 0..10 {
+//         f(&device, ());
+//     }
+//
+//     // Read data back to CPU and print it
+//     dbg!(a.to_vec::<f32>(..));
+// }
+// #[rstest]
+// #[case(vulkan())]
+// fn record_test(#[case] device: Device) {
+//     let f = tr::record(|a: VarRef| {
+//         a.add(&tr::literal(1)).scatter(&a, &tr::sized_index(3));
+//     });
+//
+//     let a = tr::array(&[1, 2, 3], &device);
+//
+//     f(&device, (a.clone(),));
+//     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
+//
+//     let b = tr::array(&[4, 5, 6], &device);
+//
+//     f(&device, (b.clone(),));
+//     dbg!(&a);
+//     dbg!(&b);
+//     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
+//     assert_eq!(b.to_vec::<i32>(..), vec![5, 6, 7]);
+// }
+// #[rstest]
+// #[case(vulkan())]
+// fn record_output(#[case] device: Device) {
+//     let f = tr::record(|a: VarRef| {
+//         let a = a.add(&tr::literal(1));
+//         a
+//     });
+//
+//     let a = tr::array(&[1, 2, 3], &device);
+//
+//     let a1 = f(&device, (a.clone(),));
+//
+//     let a2 = f(&device, (a.clone(),));
+//
+//     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
+//     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4]);
+//     assert_ne!(a1.id(), a2.id());
+// }
+// #[rstest]
+// #[case(vulkan())]
+// fn record_ident(#[case] device: Device) {
+//     let c = tr::array(&[1, 2, 3], &device);
+//     let cr = c.clone();
+//
+//     let f = tr::record(move |a: VarRef, b: VarRef| {
+//         let a = a.add(&tr::literal(1));
+//         a.schedule();
+//         let c = cr.clone();
+//         (b, c)
+//     });
+//
+//     let a = tr::array(&[1, 2, 3], &device);
+//     let b = tr::array(&[1, 2, 3], &device);
+//
+//     let (b1, c1) = f(&device, (a.clone(), b.clone()));
+//
+//     dbg!(c.id());
+//     dbg!(c1.id());
+//
+//     assert_eq!(b1.to_vec::<i32>(..), vec![1, 2, 3]);
+//     assert_eq!(c1.to_vec::<i32>(..), vec![1, 2, 3]);
+// }
+//
+// #[rstest]
+// #[case(vulkan())]
+// fn record_change(#[case] device: Device) {
+//     let f = tr::record(|a: VarRef| a.add(&tr::literal(1)));
+//
+//     let a = tr::array(&[1, 2, 3], &device);
+//
+//     let a1 = f(&device, (a.clone(),));
+//
+//     let a = tr::array(&[1, 2, 3, 4], &device);
+//
+//     let a2 = f(&device, (a.clone(),));
+//
+//     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
+//     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
+// }
+// #[rstest]
+// #[case(vulkan())]
+// fn record_scatter(#[case] device: Device) {
+//     let f = tr::record(|a: VarRef| {
+//         tr::sized_literal(1, 3).scatter(&a, &tr::index());
+//     });
+//
+//     let a = tr::sized_literal(0, 3);
+//
+//     let b = a.add(&tr::literal(1));
+//
+//     f(&device, (a.clone(),));
+//
+//     b.schedule();
+//     let graph = tr::compile();
+//     graph.launch(&device);
+//
+//     dbg!(a.to_vec::<i32>(..));
+//     dbg!(b.to_vec::<i32>(..));
+// }
 #[rstest]
 #[case(vulkan())]
 fn record_fn(#[case] device: Device) {
@@ -1494,7 +1494,8 @@ fn fused_mlp(#[case] device: Device) {
         input.len(),
         (in_width * batch_size) * std::mem::size_of::<f16>()
     );
-    let input = bytemuck::cast_slice::<_, f16>(input);
+    let input = bytemuck::pod_collect_to_vec::<_, f16>(input);
+    // let input = bytemuck::cast_slice::<_, f16>(input);
 
     let weights = include_bytes!("backend/vulkan/builtin/test/data/weights.bin");
     assert_eq!(
@@ -1502,10 +1503,12 @@ fn fused_mlp(#[case] device: Device) {
         (width * width * ((hidden_layers - 1) as usize) + in_width * width + out_width * width)
             * std::mem::size_of::<f16>()
     );
-    let weights = bytemuck::cast_slice::<_, f16>(weights);
+    // let weights = bytemuck::cast_slice::<_, f16>(weights);
+    let weights = bytemuck::pod_collect_to_vec::<_, f16>(weights);
 
     let reference = include_bytes!("backend/vulkan/builtin/test/data/output.bin");
-    let reference = bytemuck::cast_slice::<_, f16>(reference);
+    // let reference = bytemuck::cast_slice::<_, f16>(reference);
+    let reference = bytemuck::pod_collect_to_vec::<_, f16>(reference);
 
     let input = tr::array(&input, &device);
     let weights = tr::array(&weights, &device);
@@ -1530,12 +1533,12 @@ fn fused_mlp(#[case] device: Device) {
 
     dbg!(output
         .iter()
-        .zip(reference.into_iter())
+        .zip(reference.iter())
         .map(|(a, b)| (a - b).abs())
         .reduce(|a, b| a.max(b)));
     let mean = output
         .iter()
-        .zip(reference.into_iter())
+        .zip(reference.iter())
         .map(|(&a, &b)| (a.to_f32() - b.to_f32()).powi(2))
         .reduce(|a, b| a + b)
         .unwrap()
@@ -1544,7 +1547,7 @@ fn fused_mlp(#[case] device: Device) {
     assert!(
         output
             .iter()
-            .zip(reference.into_iter())
+            .zip(reference.iter())
             .all(|(&a, &b)| (a - b).abs() < f16::from_f32(10.0)),
         "lhs = {output:?}\n is not equal to rhs = {reference:?}\n"
     );

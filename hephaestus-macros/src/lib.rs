@@ -1,6 +1,7 @@
 use syn::{parse_macro_input, DeriveInput};
 
-use self::attributes::record_impl;
+use self::attributes::recorded_impl;
+
 use self::traits::{derive_as_var_type_impl, derive_construct_impl, derive_traverse_impl};
 
 mod attributes;
@@ -28,5 +29,5 @@ pub fn recorded(
     func: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let func = parse_macro_input!(func as syn::ItemFn);
-    record_impl(func).into()
+    recorded_impl(func).into()
 }

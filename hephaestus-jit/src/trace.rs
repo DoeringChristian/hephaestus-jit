@@ -16,8 +16,6 @@ use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use slotmap::{DefaultKey, SlotMap};
 
-pub use crate::record::record;
-
 /// This struct describes a set of variables, which are scheduled for evaluation as well as groups
 /// of these variables, that can be evaluated at once.
 /// Where mitsuba calles `dr.eval` for certain operations, which causes evaluation and potential
