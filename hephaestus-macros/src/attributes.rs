@@ -61,9 +61,9 @@ pub fn recorded_impl(func: syn::ItemFn) -> TokenStream {
             use #crate_name::record::WrapInput;
             static FCACHE: #lazy<Mutex<FCache>> = #lazy::new(||Mutex::new(FCache::default()));
 
-            let wrapped_input_func = #ident.wrap_input();
+            let mut wrapped_input_func = #ident.wrap_input();
 
-            FCACHE.lock().unwrap().call(wrapped_input_func, device, #input_tuple_vars)
+            FCACHE.lock().unwrap().call(&mut wrapped_input_func, device, #input_tuple_vars)
         }
     }
 }

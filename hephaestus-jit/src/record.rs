@@ -5,6 +5,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
+use once_cell::sync::Lazy;
+
 use crate::{backend, graph, tr};
 
 use crate::tr::{schedule_eval, with_trace, VarRef, TS};
@@ -117,7 +119,7 @@ impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 pub trait WrapInput<Input, Output> {
     // type Input;
-    fn wrap_input(self) -> impl FnOnce(Input) -> Output + 'static;
+    fn wrap_input(self) -> impl Fn(Input) -> Output + 'static;
 }
 
 macro_rules! impl_wrap_input {
@@ -125,10 +127,10 @@ macro_rules! impl_wrap_input {
         #[allow(non_snake_case)]
         impl<$($param,)* Output, Fin> WrapInput<($($param,)*), Output> for Fin
         where
-            Fin: FnOnce($($param,)*) -> Output + 'static,
+            Fin: Fn($($param,)*) -> Output + 'static,
         {
             // type Input = ($($param,)*);
-            fn wrap_input(self) -> impl FnOnce(($($param,)*)) -> Output + 'static{
+            fn wrap_input(self) -> impl Fn(($($param,)*)) -> Output + 'static{
                 move |input|{
                     let ($($param,)*) = input;
                     self($($param),*)
@@ -193,6 +195,24 @@ macro_rules! if_record {
     };
 }
 
+pub fn record<Input, Output, F>(
+    f: F,
+) -> impl Fn(&backend::Device, Input) -> Option<(Output, backend::Report)>
+where
+    Input: Traverse,
+    Output: Traverse + Construct,
+    F: WrapInput<Input, Output>,
+{
+    static FCACHE: Lazy<Mutex<FCache>> = Lazy::new(|| Mutex::new(FCache::default()));
+
+    let f = f.wrap_input();
+    let f = Mutex::new(f);
+    move |device: &backend::Device, input: Input| {
+        let mut f = f.lock().unwrap();
+        FCACHE.lock().unwrap().call(&mut *f, device, input)
+    }
+}
+
 #[derive(Default)]
 pub struct FCache {
     graphs: HashMap<u64, graph::Graph>,
@@ -200,14 +220,14 @@ pub struct FCache {
 impl FCache {
     pub fn call<Input, Output, F>(
         &mut self,
-        f: F,
+        f: &mut F,
         device: &backend::Device,
         input: Input,
     ) -> Option<(Output, backend::Report)>
     where
         Input: Traverse,
         Output: Traverse + Construct,
-        F: FnOnce(Input) -> Output + 'static,
+        F: Fn(Input) -> Output + 'static,
     {
         // Traverse Input
         let mut inputs = vec![];
