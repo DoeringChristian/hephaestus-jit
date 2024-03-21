@@ -7,6 +7,7 @@ mod utils;
 mod vkdevice;
 mod vulkan_core;
 
+use std::backtrace::Backtrace;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -40,6 +41,10 @@ pub enum Error {
     TextureConversion,
     #[error("Could not convert acceleration structure to Vulkan!")]
     AccelConversion,
+    #[error("Resource {0} not found in environment!")]
+    ResourceNotFound(usize),
+    #[error("Other error!")]
+    Other,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -149,15 +154,18 @@ impl backend::BackendDevice for VulkanDevice {
         for (i, pass) in graph.passes().iter().enumerate() {
             let to_buffer = |id: crate::graph::ResourceId| {
                 env.buffer(id)
-                    .and_then(|buffer| Some(buffer.vulkan().ok()?.buffer.clone()))
+                    .ok_or(Error::ResourceNotFound(id.0))
+                    .and_then(|buffer| Ok(buffer.vulkan()?.buffer.clone()))
             };
             let to_image = |id: crate::graph::ResourceId| {
                 env.texture(id)
-                    .and_then(|image| Some(image.vulkan().ok()?.image.clone()))
+                    .ok_or(Error::ResourceNotFound(id.0))
+                    .and_then(|image| Ok(image.vulkan()?.image.clone()))
             };
             let to_accel = |id: crate::graph::ResourceId| {
                 env.accel(id)
-                    .and_then(|accel| Some(accel.vulkan().ok()?.accel.clone()))
+                    .ok_or(Error::ResourceNotFound(id.0))
+                    .and_then(|accel| Ok(accel.vulkan()?.accel.clone()))
             };
             let buffers = pass
                 .resources
@@ -191,7 +199,7 @@ impl backend::BackendDevice for VulkanDevice {
                     let size_buffer = pass
                         .size_buffer
                         .and_then(|id| env.buffer(id))
-                        .map(|buffer| buffer.vulkan().unwrap().buffer.clone())
+                        .and_then(|buffer| Some(buffer.vulkan().ok()?.buffer.clone()))
                         .unwrap_or_else(|| {
                             let mut size_buffer = Buffer::create(
                                 self,
@@ -266,11 +274,11 @@ impl backend::BackendDevice for VulkanDevice {
                         );
                     }
                     DeviceOp::Compress => {
-                        let index_out = to_buffer(pass.resources[0]).unwrap();
-                        let out_count = to_buffer(pass.resources[1]).unwrap();
-                        let src = to_buffer(pass.resources[2]).unwrap();
+                        let index_out = to_buffer(pass.resources[0])?;
+                        let out_count = to_buffer(pass.resources[1])?;
+                        let src = to_buffer(pass.resources[2])?;
 
-                        let size_buffer = pass.size_buffer.and_then(to_buffer);
+                        let size_buffer = pass.size_buffer.and_then(|res| to_buffer(res).ok());
 
                         let num = graph.buffer_desc(pass.resources[2]).size;
 
@@ -289,11 +297,15 @@ impl backend::BackendDevice for VulkanDevice {
                         max_m,
                         max_k,
                     } => {
-                        let mat_d = to_buffer(pass.resources[0]).unwrap();
-                        let mat_a = to_buffer(pass.resources[1]).unwrap();
-                        let mat_b = to_buffer(pass.resources[2]).unwrap();
-                        let mat_c = to_buffer(pass.resources[3]).unwrap();
-                        let config = pass.resources.get(4).cloned().and_then(to_buffer);
+                        let mat_d = to_buffer(pass.resources[0])?;
+                        let mat_a = to_buffer(pass.resources[1])?;
+                        let mat_b = to_buffer(pass.resources[2])?;
+                        let mat_c = to_buffer(pass.resources[3])?;
+                        let config = pass
+                            .resources
+                            .get(4)
+                            .cloned()
+                            .and_then(|res| to_buffer(res).ok());
 
                         let a_type = &graph.buffer_desc(pass.resources[1]).ty;
                         let c_type = &graph.buffer_desc(pass.resources[3]).ty;
@@ -320,10 +332,15 @@ impl backend::BackendDevice for VulkanDevice {
                         hidden_layers,
                         max_batch_size,
                     } => {
-                        let output = to_buffer(pass.resources[0]).unwrap();
-                        let input = to_buffer(pass.resources[1]).unwrap();
-                        let weights = to_buffer(pass.resources[2]).unwrap();
-                        let config = pass.resources.get(3).cloned().and_then(to_buffer);
+                        let output = to_buffer(pass.resources[0])?;
+                        let input = to_buffer(pass.resources[1])?;
+                        let weights = to_buffer(pass.resources[2])?;
+                        let config = pass
+                            .resources
+                            .get(3)
+                            .cloned()
+                            .and_then(|res| to_buffer(res).ok());
+
                         fused_mlp::mlp_inference(
                             &self,
                             &mut rgraph,
