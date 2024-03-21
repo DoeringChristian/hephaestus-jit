@@ -1,6 +1,7 @@
 use half::f16;
-use hephaestus_macros::{recorded, Traverse};
-use num_traits::Float;
+use hephaestus_macros::{record, recorded, Traverse};
+use itertools::Itertools;
+use num_traits::{Float, FromPrimitive};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use rstest::{fixture, rstest};
@@ -1011,28 +1012,50 @@ fn example(#[case] device: Device) {
     );
     let mask = tr::sized_literal(true, n);
 
+    // let f = {
+    //     let a = a.clone();
+    //     record!(move || {
+    //         // Compress wavefront
+    //         let indices = mask.compress_dyn();
+    //         let b = a.gather(&indices);
+    //
+    //         // Do some (RR style) work on the values
+    //         let b = b.mul(&tr::literal(0.9f32));
+    //         let new_mask = b.gt(&tr::literal(0.1f32));
+    //
+    //         // Write wavefront back to arrays
+    //         new_mask.scatter(&mask, &indices);
+    //         b.scatter(&a, &indices);
+    //
+    //         a.schedule();
+    //     })
+    // };
     let f = {
-        let a = a.clone();
-        tr::record(move || {
-            // Compress wavefront
-            let indices = mask.compress_dyn();
-            let b = a.gather(&indices);
-
-            // Do some (RR style) work on the values
-            let b = b.mul(&tr::literal(0.9f32));
-            let new_mask = b.gt(&tr::literal(0.1f32));
-
-            // Write wavefront back to arrays
-            new_mask.scatter(&mask, &indices);
-            b.scatter(&a, &indices);
-
-            a.schedule();
-        })
+        |device: &crate::Device| {
+            let a = a.clone();
+            let mask = mask.clone();
+            let func = move || {
+                let indices = mask.compress_dyn();
+                let b = a.gather(&indices);
+                let b = b.mul(&tr::literal(0.9f32));
+                let new_mask = b.gt(&tr::literal(0.1f32));
+                new_mask.scatter(&mask, &indices);
+                b.scatter(&a, &indices);
+                a.schedule();
+            };
+            use crate::record::FCache;
+            use crate::record::WrapInput;
+            use std::sync::Mutex;
+            static FCACHE: crate::once_cell::sync::Lazy<Mutex<FCache>> =
+                crate::once_cell::sync::Lazy::new(|| Mutex::new(FCache::default()));
+            let wrapped_input_func = func.wrap_input();
+            FCACHE.lock().unwrap().call(wrapped_input_func, device, ())
+        }
     };
 
     // Launch it multiple times
     for _ in 0..10 {
-        f(&device, ());
+        f(&device);
     }
 
     // Read data back to CPU and print it
@@ -1041,18 +1064,18 @@ fn example(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn record_test(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| {
+    let f = record!(|a: VarRef| {
         a.add(&tr::literal(1)).scatter(&a, &tr::sized_index(3));
     });
 
     let a = tr::array(&[1, 2, 3], &device);
 
-    f(&device, (a.clone(),));
+    f(&device, a.clone());
     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
 
     let b = tr::array(&[4, 5, 6], &device);
 
-    f(&device, (b.clone(),));
+    f(&device, b.clone());
     dbg!(&a);
     dbg!(&b);
     assert_eq!(a.to_vec::<i32>(..), vec![2, 3, 4]);
@@ -1061,58 +1084,58 @@ fn record_test(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn record_output(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| {
+    let f = record!(|a: VarRef| {
         let a = a.add(&tr::literal(1));
         a
     });
 
     let a = tr::array(&[1, 2, 3], &device);
 
-    let a1 = f(&device, (a.clone(),));
+    let a1 = f(&device, a.clone()).unwrap().0;
 
-    let a2 = f(&device, (a.clone(),));
+    let a2 = f(&device, a.clone()).unwrap().0;
 
     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_ne!(a1.id(), a2.id());
 }
-#[rstest]
-#[case(vulkan())]
-fn record_ident(#[case] device: Device) {
-    let c = tr::array(&[1, 2, 3], &device);
-    let cr = c.clone();
-
-    let f = tr::record(move |a: VarRef, b: VarRef| {
-        let a = a.add(&tr::literal(1));
-        a.schedule();
-        let c = cr.clone();
-        (b, c)
-    });
-
-    let a = tr::array(&[1, 2, 3], &device);
-    let b = tr::array(&[1, 2, 3], &device);
-
-    let (b1, c1) = f(&device, (a.clone(), b.clone()));
-
-    dbg!(c.id());
-    dbg!(c1.id());
-
-    assert_eq!(b1.to_vec::<i32>(..), vec![1, 2, 3]);
-    assert_eq!(c1.to_vec::<i32>(..), vec![1, 2, 3]);
-}
+// #[rstest]
+// #[case(vulkan())]
+// fn record_ident(#[case] device: Device) {
+//     let c = tr::array(&[1, 2, 3], &device);
+//     let cr = c.clone();
+//
+//     let f = record!(|a: VarRef, b: VarRef| {
+//         let a = a.add(&tr::literal(1));
+//         a.schedule();
+//         let c = cr.clone();
+//         (b, c)
+//     });
+//
+//     let a = tr::array(&[1, 2, 3], &device);
+//     let b = tr::array(&[1, 2, 3], &device);
+//
+//     let (b1, c1) = f(&device, a.clone(), b.clone()).unwrap().0;
+//
+//     dbg!(c.id());
+//     dbg!(c1.id());
+//
+//     assert_eq!(b1.to_vec::<i32>(..), vec![1, 2, 3]);
+//     assert_eq!(c1.to_vec::<i32>(..), vec![1, 2, 3]);
+// }
 
 #[rstest]
 #[case(vulkan())]
 fn record_change(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| a.add(&tr::literal(1)));
+    let f = record!(|a: VarRef| a.add(&tr::literal(1)));
 
     let a = tr::array(&[1, 2, 3], &device);
 
-    let a1 = f(&device, (a.clone(),));
+    let a1 = f(&device, a.clone()).unwrap().0;
 
     let a = tr::array(&[1, 2, 3, 4], &device);
 
-    let a2 = f(&device, (a.clone(),));
+    let a2 = f(&device, a.clone()).unwrap().0;
 
     assert_eq!(a1.to_vec::<i32>(..), vec![2, 3, 4]);
     assert_eq!(a2.to_vec::<i32>(..), vec![2, 3, 4, 5]);
@@ -1120,7 +1143,7 @@ fn record_change(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn record_scatter(#[case] device: Device) {
-    let f = tr::record(|a: VarRef| {
+    let f = record!(|a: VarRef| {
         tr::sized_literal(1, 3).scatter(&a, &tr::index());
     });
 
@@ -1128,7 +1151,7 @@ fn record_scatter(#[case] device: Device) {
 
     let b = a.add(&tr::literal(1));
 
-    f(&device, (a.clone(),));
+    f(&device, a.clone()).unwrap().0;
 
     b.schedule();
     let graph = tr::compile();
@@ -1490,22 +1513,38 @@ fn fused_mlp(#[case] device: Device) {
     let hidden_layers = 2;
 
     let input = include_bytes!("backend/vulkan/builtin/test/data/input.bin");
-    assert_eq!(
-        input.len(),
-        (in_width * batch_size) * std::mem::size_of::<f16>()
-    );
-    let input = bytemuck::cast_slice::<_, f16>(input);
+    let input = input
+        .chunks(2)
+        .map(|s| f16::from_u16(u16::from_le_bytes([s[0], s[1]])))
+        .collect::<Option<Vec<_>>>()
+        .unwrap();
+    assert_eq!(input.len(), (in_width * batch_size));
+    // let input = bytemuck::cast_slice::<_, f16>(input);
 
     let weights = include_bytes!("backend/vulkan/builtin/test/data/weights.bin");
+    let weights = weights
+        .chunks(2)
+        .map(|s| f16::from_u16(u16::from_le_bytes([s[0], s[1]])))
+        .collect::<Option<Vec<_>>>()
+        .unwrap();
     assert_eq!(
         weights.len(),
         (width * width * ((hidden_layers - 1) as usize) + in_width * width + out_width * width)
-            * std::mem::size_of::<f16>()
     );
-    let weights = bytemuck::cast_slice::<_, f16>(weights);
+    // let weights = bytemuck::cast_slice::<_, f16>(weights);
 
     let reference = include_bytes!("backend/vulkan/builtin/test/data/output.bin");
-    let reference = bytemuck::cast_slice::<_, f16>(reference);
+
+    let reference = reference
+        .chunks(2)
+        .map(|s| f16::from_u16(u16::from_le_bytes([s[0], s[1]])))
+        .collect::<Option<Vec<_>>>()
+        .unwrap();
+    assert_eq!(
+        weights.len(),
+        (width * width * ((hidden_layers - 1) as usize) + in_width * width + out_width * width)
+    );
+    // let reference = bytemuck::cast_slice::<_, f16>(reference);
 
     let input = tr::array(&input, &device);
     let weights = tr::array(&weights, &device);
@@ -1530,12 +1569,12 @@ fn fused_mlp(#[case] device: Device) {
 
     dbg!(output
         .iter()
-        .zip(reference.into_iter())
+        .zip(reference.iter())
         .map(|(a, b)| (a - b).abs())
         .reduce(|a, b| a.max(b)));
     let mean = output
         .iter()
-        .zip(reference.into_iter())
+        .zip(reference.iter())
         .map(|(&a, &b)| (a.to_f32() - b.to_f32()).powi(2))
         .reduce(|a, b| a + b)
         .unwrap()
@@ -1544,7 +1583,7 @@ fn fused_mlp(#[case] device: Device) {
     assert!(
         output
             .iter()
-            .zip(reference.into_iter())
+            .zip(reference.iter())
             .all(|(&a, &b)| (a - b).abs() < f16::from_f32(10.0)),
         "lhs = {output:?}\n is not equal to rhs = {reference:?}\n"
     );

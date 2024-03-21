@@ -4,7 +4,7 @@ use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::{parse_quote, FnArg, Ident, Signature, Token};
 
-pub fn record_impl(func: syn::ItemFn) -> TokenStream {
+pub fn recorded_impl(func: syn::ItemFn) -> TokenStream {
     let crate_name = crate_name();
 
     let ident = &func.sig.ident;
