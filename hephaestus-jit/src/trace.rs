@@ -487,7 +487,7 @@ pub fn compile() -> graph::Graph {
         let ts = std::mem::take(&mut (*ts));
         let graph = graph::compile(&ts, &[], &[]);
         graph
-    })
+    }).unwrap()
 }
 ///
 /// Schedules the current group of scheduled variables for evaluation (see [Schedule]).

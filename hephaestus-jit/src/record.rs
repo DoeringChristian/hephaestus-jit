@@ -234,7 +234,7 @@ macro_rules! if_record {
 
 pub fn record<Input, Output, F>(
     f: F,
-) -> impl Fn(&backend::Device, Input) -> Option<(Output, backend::Report)>
+) -> impl Fn(&backend::Device, Input) -> graph::Result<(Output, backend::Report)>
 where
     Input: Traverse,
     Output: Traverse + Construct,
@@ -260,7 +260,7 @@ impl FCache {
         f: &mut F,
         device: &backend::Device,
         input: Input,
-    ) -> Option<(Output, backend::Report)>
+    ) -> graph::Result<(Output, backend::Report)>
     where
         Input: Traverse,
         Output: Traverse + Construct,
@@ -318,21 +318,21 @@ impl FCache {
                 let mut s = s.borrow_mut();
                 let ts = std::mem::take(&mut (*s));
                 graph::compile(&ts, &inputs, &outputs)
-            });
+            })?;
 
             self.graphs.insert(hash, (graph, layout));
         }
 
         // Get the correct graph, launch it and construct the output struct.
         let (graph, layout) = &self.graphs[&hash];
-        let (report, output) = graph.launch_with(device, &inputs)?;
+        let (report, output) = graph.launch_with(device, &inputs).unwrap();
 
         let mut output = output.into_iter();
         let mut layout = layout.iter().copied();
         let output = Output::construct(&mut output, &mut layout);
         assert_eq!(layout.next(), None);
 
-        Some((output, report))
+        Ok((output, report))
     }
 }
 

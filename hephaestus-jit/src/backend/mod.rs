@@ -231,20 +231,23 @@ pub struct ExecReport {
     pub passes: Vec<PassReport>,
 }
 
+#[derive(Default)]
 pub struct Report {
-    pub exec: ExecReport,
+    pub exec: Option<ExecReport>,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Passes:")?;
-        for pass in self.exec.passes.iter() {
-            writeln!(
-                f,
-                "\t{name: <50} {duration:?} @ {start:?}",
-                name = pass.name,
-                duration = pass.duration,
-                start = pass.start,
-            )?;
+        if let Some(exec) = &self.exec {
+            for pass in exec.passes.iter() {
+                writeln!(
+                    f,
+                    "\t{name: <50} {duration:?} @ {start:?}",
+                    name = pass.name,
+                    duration = pass.duration,
+                    start = pass.start,
+                )?;
+            }
         }
         Ok(())
     }
@@ -252,10 +255,9 @@ impl std::fmt::Display for Report {
 impl Report {
     pub fn submit_to_profiler(&self) {
         #[cfg(feature = "profile-with-puffin")]
-        {
+        if let Some(exec) = &self.exec {
             use profiling::puffin;
-            let start_ns = self
-                .exec
+            let start_ns = exec
                 .cpu_start
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -263,8 +265,7 @@ impl Report {
             // let start_ns = puffin::now_ns();
             let mut stream = puffin::Stream::default();
 
-            let scope_details = self
-                .exec
+            let scope_details = exec
                 .passes
                 .iter()
                 .map(|pass| puffin::ScopeDetails::from_scope_name(pass.name.clone()))
@@ -272,7 +273,7 @@ impl Report {
 
             let ids = puffin::GlobalProfiler::lock().register_user_scopes(&scope_details);
 
-            for (pass, id) in self.exec.passes.iter().zip(ids.into_iter()) {
+            for (pass, id) in exec.passes.iter().zip(ids.into_iter()) {
                 let start = stream.begin_scope(|| start_ns + pass.start.as_nanos() as i64, id, "");
                 stream.end_scope(
                     start.0,
@@ -292,8 +293,8 @@ impl Report {
                     range_ns: (
                         start_ns,
                         start_ns
-                            + (self.exec.passes.last().unwrap().start.as_nanos()
-                                + self.exec.passes.last().unwrap().duration.as_nanos())
+                            + (exec.passes.last().unwrap().start.as_nanos()
+                                + exec.passes.last().unwrap().duration.as_nanos())
                                 as i64,
                     ),
                 }

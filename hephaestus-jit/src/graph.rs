@@ -1,3 +1,4 @@
+use std::backtrace::Backtrace;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -8,6 +9,20 @@ use crate::resource::{BufferDesc, Resource, ResourceDesc, TextureDesc};
 use crate::{backend, vartype};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to add a resource to the graph!")]
+    PushResourceError(Backtrace),
+    #[error("Resource does not match variable type!")]
+    ResourceMissmatch,
+    #[error("Undefined error!")]
+    None(Backtrace),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 ///
 /// Specifies a Graph Resource.
@@ -52,9 +67,9 @@ impl GraphBuilder {
         &mut self,
         trace: &trace::Trace,
         id: trace::VarId,
-    ) -> Option<ResourceId> {
+    ) -> Result<ResourceId> {
         if let Some(id) = self.resources.get_index_of(&id) {
-            Some(ResourceId(id))
+            Ok(ResourceId(id))
         } else {
             let var = trace.var(id);
             let desc = match var.op.resulting_op() {
@@ -72,9 +87,9 @@ impl GraphBuilder {
                     })
                 }
                 op::Op::Accel => ResourceDesc::AccelDesc(var.extent.accel_desc().clone()),
-                _ => return None,
+                _ => return Err(Error::ResourceMissmatch),
             };
-            Some(ResourceId(self.resources.insert_full(id, desc).0))
+            Ok(ResourceId(self.resources.insert_full(id, desc).0))
         }
     }
     pub fn push_pass(&mut self, pass: Pass) -> PassId {
@@ -144,8 +159,8 @@ impl Graph {
     pub fn n_passes(&self) -> usize {
         self.passes.len()
     }
-    pub fn launch(&self, device: &backend::Device) -> Option<backend::Report> {
-        Some(self.launch_with(device, &[])?.0)
+    pub fn launch(&self, device: &backend::Device) -> Result<backend::Report> {
+        Ok(self.launch_with(device, &[])?.0)
     }
     ///
     /// This function launches the recorded graph with changed input variables.
@@ -160,11 +175,8 @@ impl Graph {
         &self,
         device: &backend::Device,
         inputs: &[trace::VarRef],
-    ) -> Option<(backend::Report, Vec<trace::VarRef>)> {
+    ) -> Result<(backend::Report, Vec<trace::VarRef>)> {
         log::trace!("Launching graph: {self:?}");
-        if self.passes.is_empty() {
-            return None;
-        }
         //
         // At first capture the current environment from referenced variables of the graph.
         //
@@ -200,7 +212,11 @@ impl Graph {
 
         // Execute the graph with the captured environment on the device.
         log::trace!("Launching Graph");
-        let report = device.execute_graph(self, &env).unwrap();
+        let report = if self.passes.is_empty() {
+            backend::Report::default()
+        } else {
+            device.execute_graph(self, &env).unwrap()
+        };
         log::trace!("Report:\n {report}");
 
         // Update variables from environment.
@@ -269,7 +285,7 @@ impl Graph {
             });
 
         profiling::finish_frame!();
-        Some((report, output))
+        Ok((report, output))
     }
 }
 
@@ -310,7 +326,7 @@ pub fn compile(
     ts: &trace::ThreadState,
     input: &[trace::VarRef],
     output: &[trace::VarRef],
-) -> Graph {
+) -> Result<Graph> {
     // TODO: Not sure if we should lock the graph for the whole compilation?
     trace::with_trace(|trace| {
         let mut graph_builder = GraphBuilder::default();
@@ -320,12 +336,12 @@ pub fn compile(
 
         let inputs = input
             .iter()
-            .map(|r| graph_builder.try_push_resource(&trace, r.id()).unwrap())
-            .collect::<Vec<_>>();
+            .map(|r| graph_builder.try_push_resource(&trace, r.id()))
+            .collect::<Result<Vec<_>>>()?;
         let outputs = output
             .iter()
-            .map(|r| graph_builder.try_push_resource(&trace, r.id()).unwrap())
-            .collect::<Vec<_>>();
+            .map(|r| graph_builder.try_push_resource(&trace, r.id()))
+            .collect::<Result<Vec<_>>>()?;
         let input_set = inputs.iter().copied().collect::<HashSet<_>>();
 
         // Get scheduled variables from thread state in order
@@ -374,7 +390,7 @@ pub fn compile(
             // TODO: validate, that the the size_buffer is a buffer
             let size_buffer = match first_var.extent {
                 Extent::DynSize { size: size_dep, .. } => {
-                    graph_builder.try_push_resource(trace, size_dep)
+                    graph_builder.try_push_resource(trace, size_dep).ok()
                 }
                 _ => None,
             };
@@ -477,6 +493,6 @@ pub fn compile(
             inputs,
             outputs,
         };
-        graph
+        Ok(graph)
     })
 }

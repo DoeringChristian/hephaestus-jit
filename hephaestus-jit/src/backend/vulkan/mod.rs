@@ -316,7 +316,7 @@ impl backend::BackendDevice for VulkanDevice {
         let execution_report = rgraph.submit(self);
 
         Ok(backend::Report {
-            exec: execution_report,
+            exec: Some(execution_report),
         })
     }
 
