@@ -100,12 +100,15 @@ impl VulkanDevice {
     #[profiling::function]
     pub fn create(id: usize) -> backend::Result<Self> {
         let mut devices = DEVICES.lock().unwrap();
-        if devices.contains_key(&id) {
-            Ok(Self(devices[&id].clone()))
-        } else {
-            let device = Device::create(id).map_err(Error::from)?;
-            devices.insert(id, device.clone());
-            Ok(Self(device))
+        match devices.entry(id) {
+            std::collections::hash_map::Entry::Occupied(occupied) => {
+                Ok(Self(occupied.get().clone()))
+            }
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                let device = Device::create(id).map_err(Error::from)?;
+                vacant.insert(device.clone());
+                Ok(Self(device))
+            }
         }
     }
 }
