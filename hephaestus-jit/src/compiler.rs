@@ -64,6 +64,7 @@ impl Compiler {
         self.ir.n_accels = self.accels.len();
     }
     pub fn collect(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
+        // TODO: use entry
         if self.visited.contains_key(&id) {
             return self.visited[&id];
         }
@@ -132,6 +133,7 @@ impl Compiler {
         internal_id
     }
     pub fn collect_data(&mut self, trace: &trace::Trace, id: trace::VarId) -> ir::VarId {
+        // TODO: use entry
         if self.visited.contains_key(&id) {
             return self.visited[&id];
         }

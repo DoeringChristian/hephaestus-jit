@@ -277,8 +277,8 @@ impl FCache {
             input.schedule();
         }
         // Evaluate all iput variables
-        let graph = tr::compile();
-        graph.launch(&device);
+        let graph = tr::compile()?;
+        graph.launch(&device)?;
 
         // Calculate hash of function + input
         let mut hasher = DefaultHasher::new();
@@ -301,26 +301,29 @@ impl FCache {
         let hash = hasher.finish();
 
         // If the correct graph could not be found, compile and insert it into the cache.
-        if !self.graphs.contains_key(&hash) {
-            let output = f(input);
+        match self.graphs.entry(hash) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let output = f(input);
 
-            let mut outputs = vec![];
-            let mut layout = vec![];
-            output.traverse(&mut outputs, &mut layout);
+                let mut outputs = vec![];
+                let mut layout = vec![];
+                output.traverse(&mut outputs, &mut layout);
 
-            // Compile with params
-            for v in &outputs {
-                v.schedule();
+                // Compile with params
+                for v in &outputs {
+                    v.schedule();
+                }
+                schedule_eval();
+
+                let graph = TS.with(|s| {
+                    let mut s = s.borrow_mut();
+                    let ts = std::mem::take(&mut (*s));
+                    graph::compile(&ts, &inputs, &outputs)
+                })?;
+
+                entry.insert((graph, layout));
             }
-            schedule_eval();
-
-            let graph = TS.with(|s| {
-                let mut s = s.borrow_mut();
-                let ts = std::mem::take(&mut (*s));
-                graph::compile(&ts, &inputs, &outputs)
-            })?;
-
-            self.graphs.insert(hash, (graph, layout));
+            _ => {}
         }
 
         // Get the correct graph, launch it and construct the output struct.

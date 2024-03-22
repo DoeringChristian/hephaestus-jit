@@ -480,14 +480,14 @@ pub fn if_end(if_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<Item =
 /// launched on any device.
 /// This captures the current environment (variables which are already evaluated).
 ///
-pub fn compile() -> graph::Graph {
+pub fn compile() -> graph::Result<graph::Graph> {
     schedule_eval();
     TS.with(|s| {
         let mut ts = s.borrow_mut();
         let ts = std::mem::take(&mut (*ts));
         let graph = graph::compile(&ts, &[], &[]);
         graph
-    }).unwrap()
+    })
 }
 ///
 /// Schedules the current group of scheduled variables for evaluation (see [Schedule]).

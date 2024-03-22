@@ -58,7 +58,7 @@ fn simple1(#[case] device: Device) {
         dbg!(&s);
     });
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     dbg!(&graph);
     for i in 0..1000 {
         graph.launch(&device);
@@ -87,7 +87,7 @@ fn simple_u16(#[case] device: Device) {
     tr::TS.with(|s| {
         dbg!(&s);
     });
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -101,7 +101,7 @@ fn simple_f16(#[case] device: Device) {
 
     c.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     let reference = (0..10).map(|i| f16::from_f32(i as _)).collect::<Vec<_>>();
@@ -127,7 +127,7 @@ fn scatter_chain1(#[case] device: Device) {
         dbg!(&s);
     });
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -145,7 +145,7 @@ fn scatter_chain2(#[case] device: Device) {
 
     b.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -171,7 +171,7 @@ fn extract(#[case] device: Device) {
     a.schedule();
     b.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile().unwrap().launch(&device);
 
     dbg!(v.to_vec::<f32>(..));
     dbg!(a.to_vec::<f32>(..));
@@ -187,7 +187,7 @@ fn extract2(#[case] device: Device) {
 
     s.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile().unwrap().launch(&device);
 
     dbg!(&s.to_vec::<u8>(..));
 }
@@ -208,7 +208,7 @@ fn test_struct(#[case] device: Device) {
     a.schedule();
     b.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile().unwrap().launch(&device);
 
     dbg!(s.to_vec::<u8>(..));
     dbg!(a.to_vec::<u8>(..));
@@ -232,7 +232,7 @@ fn texture2df32(#[case] device: Device) {
     let v = tex.tex_lookup(&[&x, &y]);
 
     v.schedule();
-    tr::compile().launch(&device);
+    tr::compile().unwrap().launch(&device);
 
     tr::with_trace(|trace| {
         dbg!(&trace);
@@ -258,7 +258,7 @@ fn texture3df32(#[case] device: Device) {
 
     v.schedule();
 
-    tr::compile().launch(&device);
+    tr::compile().unwrap().launch(&device);
 
     tr::with_trace(|trace| {
         dbg!(&trace);
@@ -283,7 +283,7 @@ fn texture2di32(#[case] device: Device) {
     let v = tex.tex_lookup(&[&x, &y]);
 
     v.schedule();
-    tr::compile().launch(&device);
+    tr::compile().unwrap().launch(&device);
 
     assert_eq!(v.to_vec::<i32>(..), vec![1; 8]);
 }
@@ -318,7 +318,7 @@ fn conditionals(#[case] device: Device) {
 
     dst.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
@@ -343,7 +343,7 @@ fn conditional_scatter(#[case] device: Device) {
 
     dst.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
@@ -363,7 +363,7 @@ fn conditional_gather(#[case] device: Device) {
     let dst = src.gather_if(&tr::sized_index(10), &active);
     dst.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -380,7 +380,7 @@ fn select(#[case] device: Device) {
     let res = cond.select(&true_val, &false_val);
     res.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     insta::assert_debug_snapshot!(graph);
     graph.launch(&device);
 
@@ -454,7 +454,7 @@ fn accel(#[case] device: Device) {
         }
     });
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     dbg!(intersection.to_vec::<i32>(..));
@@ -483,7 +483,7 @@ fn reduce_max(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let max = x.reduce_max();
             max.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(max.to_vec::<$ty>(..)[0], reduced)
@@ -509,7 +509,7 @@ fn reduce_min(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let min = x.reduce_min();
             min.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(min.to_vec::<$ty>(..)[0], reduced)
@@ -544,7 +544,7 @@ fn reduce_sum(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -579,7 +579,7 @@ fn reduce_prod(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -600,7 +600,7 @@ fn reduce_prod(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             let res = sum.to_vec::<$ty>(..)[0];
@@ -648,7 +648,7 @@ fn reduce_and(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -667,7 +667,7 @@ fn reduce_and(#[case] device: Device) {
         let x = tr::array(&x, &device);
         let res = x.reduce_and();
         res.schedule();
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         graph.launch(&device);
 
         assert_eq!(res.to_vec::<bool>(..)[0], reduced)
@@ -699,7 +699,7 @@ fn reduce_or(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -718,7 +718,7 @@ fn reduce_or(#[case] device: Device) {
         let x = tr::array(&x, &device);
         let res = x.reduce_or();
         res.schedule();
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         graph.launch(&device);
 
         assert_eq!(res.to_vec::<bool>(..)[0], reduced)
@@ -749,7 +749,7 @@ fn reduce_xor(#[case] device: Device) {
             let x = tr::array(&x, &device);
             let sum = x.$jit_red();
             sum.schedule();
-            let graph = tr::compile();
+            let graph = tr::compile().unwrap();
             graph.launch(&device);
 
             assert_eq!(sum.to_vec::<$ty>(..)[0], reduced)
@@ -768,7 +768,7 @@ fn reduce_xor(#[case] device: Device) {
         let x = tr::array(&x, &device);
         let res = x.reduce_or();
         res.schedule();
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         graph.launch(&device);
 
         assert_eq!(res.to_vec::<bool>(..)[0], reduced)
@@ -794,7 +794,7 @@ fn uop_cos(#[case] device: Device) {
     let pred = x.cos();
     pred.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     for (reference, pred) in reference
@@ -824,7 +824,7 @@ fn scatter_atomic(#[case] device: Device) {
     // result as it could lead to unintended evaluation of the result.
     prev.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
@@ -854,7 +854,7 @@ fn scatter_reduce(#[case] device: Device) {
 
     src.scatter_reduce(&dst, &idx, crate::op::ReduceOp::Sum);
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(dst.to_vec::<u32>(..)[0], n as u32);
@@ -882,7 +882,7 @@ fn compress_small(#[case] device: Device) {
 
     let (count, index) = src_tr.compress();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     let count = count.to_vec::<u32>(..)[0] as usize;
@@ -914,7 +914,7 @@ fn compress_large(#[case] device: Device) {
 
     let (count, index) = src_tr.compress();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     let count = count.to_vec::<u32>(..)[0] as usize;
@@ -938,7 +938,7 @@ fn prefix_sum(#[case] device: Device) {
     let prediction = x.prefix_sum(true);
     prediction.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     let reference = input
@@ -981,7 +981,7 @@ fn dynamic_index(#[case] device: Device) {
 
     values.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(values.capacity(), n);
@@ -1131,7 +1131,7 @@ fn record_scatter(#[case] device: Device) {
     f(&device, (a.clone(),));
 
     b.schedule();
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     dbg!(a.to_vec::<i32>(..));
@@ -1257,7 +1257,7 @@ fn matrix_times_matrix(#[case] device: Device) {
     let res = m0.mul(&m1);
     res.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     dbg!(&graph);
     graph.launch(&device);
 
@@ -1273,7 +1273,7 @@ fn array(#[case] device: Device) {
     let array = tr::arr(&[&a0, &a1, &a2]);
     array.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(array.to_vec::<[i32; 3]>(..), vec![[1, 2, 3], [1, 2, 3]]);
@@ -1292,7 +1292,7 @@ fn dyn_extract(#[case] device: Device) {
     let res = array.extract_dyn(&idx);
     res.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     dbg!(res.to_vec::<i32>(..));
@@ -1307,7 +1307,7 @@ fn vec3_memory_layout(#[case] device: Device) {
     vec.schedule();
     tmp.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
@@ -1326,7 +1326,7 @@ fn cast_array_vec(#[case] device: Device) {
     vec.schedule();
     arr.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     // assert_eq!(vec.to_vec::<i32>(..), vec![1, 2, 3, 1, 2, 3]);
@@ -1342,7 +1342,7 @@ fn atomic_inc(#[case] device: Device) {
 
     ids.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     // dbg!(ids.to_vec::<u32>(..));
@@ -1372,7 +1372,7 @@ fn atomic_inc_rand(#[case] device: Device) {
 
     uids.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     // dbg!(ids.to_vec::<u32>(..));
@@ -1405,7 +1405,7 @@ fn if_record1(#[case] device: Device) {
 
     i.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(i.to_vec::<i32>(..), vec![1, 0]);
@@ -1434,7 +1434,7 @@ fn loop_record1(#[case] device: Device) {
 
     i.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
@@ -1457,7 +1457,7 @@ fn loop_record2(#[case] device: Device) {
     i.schedule();
     c.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(i.to_vec::<i32>(..), vec![2, 2]);
@@ -1481,7 +1481,7 @@ fn loop_record_side_effect(#[case] device: Device) {
 
     i.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     assert_eq!(dst.to_vec::<i32>(..), vec![1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
@@ -1514,7 +1514,7 @@ fn matmul_linspace(#[case] device: Device) {
     B.schedule();
     D.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     graph.launch(&device);
 
     let D_ref = {
@@ -1586,7 +1586,7 @@ fn fused_mlp(#[case] device: Device) {
 
     output.schedule();
 
-    let graph = tr::compile();
+    let graph = tr::compile().unwrap();
     let report = graph.launch(&device).unwrap();
     println!("{report}");
 
