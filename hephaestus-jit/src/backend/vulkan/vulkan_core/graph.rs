@@ -174,10 +174,10 @@ impl From<Arc<AccelerationStructure>> for Resource {
 /// This let's us deduplicate resources (a better mechanism wouls be use indices)
 pub struct RGraph {
     passes: Vec<Pass>,
-    // We deduplicate resources by the pointers to their Arcs
-    // Could also do enum instead of dyn, allowing for Rcs as well
-    // resources: IndexMap<usize, Arc<dyn Resource>>,
-    resources: IndexMap<usize, Resource>,
+    // We deduplicate resources by the pointers to their Arcs.
+    // resources: IndexMap<usize, Resource>,
+    resources: Vec<Resource>,
+    external: HashMap<usize, ResourceId>,
 }
 impl Debug for RGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -193,6 +193,7 @@ impl RGraph {
             // profiler: ProfilerData::new(&device.device, ProfilerBackend::new(&device)),
             passes: Default::default(),
             resources: Default::default(),
+            external: Default::default(),
         }
     }
     pub fn resource<R>(&mut self, resource: &Arc<R>) -> ResourceId
@@ -200,10 +201,15 @@ impl RGraph {
         Arc<R>: Into<Resource>,
     {
         let key = Arc::as_ptr(&resource) as *const () as usize;
-        let entry = self.resources.entry(key);
-        let id = ResourceId(entry.index());
-        entry.or_insert_with(|| resource.clone().into());
-        id
+        match self.external.entry(key) {
+            std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let id = ResourceId(self.resources.len());
+                self.resources.push(resource.clone().into());
+                entry.insert(id);
+                id
+            }
+        }
     }
 }
 
@@ -460,11 +466,7 @@ impl RGraph {
             .map(|_| AccessType::Nothing)
             .collect::<Vec<_>>();
 
-        let resources = self
-            .resources
-            .into_iter()
-            .map(|(_, r)| r)
-            .collect::<Vec<_>>();
+        let resources = self.resources.into_iter().collect::<Vec<_>>();
 
         let mut tmp_resource_pool = RGraphPool::new(device);
 
