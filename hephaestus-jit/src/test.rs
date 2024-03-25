@@ -1617,7 +1617,7 @@ fn fused_mlp(#[case] device: Device) {
 #[case(vulkan())]
 fn aliasing1(#[case] device: Device) {
     {
-        let x = tr::array(&[1], &device);
+        let x = tr::sized_literal(1, 1);
         x.schedule();
         dbg!(x.id());
         tr::schedule_eval();

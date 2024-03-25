@@ -215,46 +215,75 @@ impl Graph {
                     GraphResource::Captured { r } => trace::with_trace(|trace| {
                         resources[i] = Some(trace.var(r.id()).data.clone());
                     }),
-                    GraphResource::Internal { .. } => {
-                        // TODO: error handling
+                    GraphResource::Internal { id }
+                        if trace::with_trace(|trace| trace.get_var(*id).is_some()) =>
+                    {
                         resources[i] = Some(Resource::create(device, &self.resource_descs[i]))
+                        // TODO: error handling
                     }
                     _ => {}
                 }
             }
         }
 
-        // Calculate resource aliasing
+        // Calculate resource aliasing for internal resources
         // NOTE: aliasing in the backend might be more efficient.
-        let mut resource_livetimes: Vec<Option<Range<usize>>> = vec![None; resources.len()];
-        for (pass_id, pass) in self.passes.iter().enumerate() {
-            for &resource_id in &pass.resources {
-                resource_livetimes[resource_id.0] = Some(
-                    if let Some(livetime) = resource_livetimes[resource_id.0].clone() {
-                        livetime.start.min(pass_id)..livetime.end.max(pass_id + 1)
-                    } else {
-                        pass_id..pass_id + 1
-                    },
-                )
+
+        // Livetimes of resources (inclusive range)
+        let mut livetimes: Vec<_> = vec![(resources.len(), 0); resources.len()];
+        for (pid, pass) in self.passes.iter().enumerate() {
+            for &rid in &pass.resources {
+                let livetime = &mut livetimes[rid.0];
+                *livetime = (livetime.0.min(pid), livetime.1.max(pid))
             }
         }
-        dbg!(resource_livetimes);
-        // let mut cache: HashMap<ResourceDesc, Vec<_>> = HashMap::new();
-        // for pass in &self.passes {
-        //     for id in &pass.resources {
-        //         if resources[id.0].is_none() {
-        //             //Allocate resource
-        //             let desc = self.resource_descs[id.0].round_up();
-        //             let resource = match cache.entry(desc) {
-        //                 std::collections::hash_map::Entry::Occupied(mut entry) => entry
-        //                     .get_mut()
-        //                     .pop()
-        //                     .unwrap_or_else(|| Resource::create(device, entry.key())),
-        //                 std::collections::hash_map::Entry::Vacant(entry) => todo!(),
-        //             };
-        //         }
-        //     }
-        // }
+
+        let mut n_internal = 0usize;
+        let internal = resources
+            .iter()
+            .map(|r| {
+                n_internal += 1;
+                r.is_none()
+            })
+            .collect::<Vec<_>>();
+
+        let mut misses = 0usize;
+        let mut cache: HashMap<ResourceDesc, Vec<_>> = HashMap::new();
+        for (pid, pass) in self.passes.iter().enumerate() {
+            for rid in &pass.resources {
+                let livetime = livetimes[rid.0];
+                if internal[rid.0] {
+                    if livetime.0 == pid {
+                        assert!(resources[rid.0].is_none());
+                        // Allocate or reuse resource at the beginning of it's livetime
+                        let desc = self.resource_descs[rid.0].round_up();
+
+                        let resource = cache
+                            .entry(desc.clone())
+                            .or_insert_with(|| vec![])
+                            .pop()
+                            .unwrap_or_else(|| {
+                                misses += 1;
+                                Resource::create(device, &desc)
+                            });
+                        resources[rid.0] = Some(resource);
+                    }
+                    if livetime.1 == pid {
+                        // Deallocate / Reinsert into cache
+                        let desc = self.resource_descs[rid.0].round_up();
+                        cache
+                            .get_mut(&desc)
+                            .unwrap()
+                            .push(resources[rid.0].as_ref().unwrap().clone());
+                    }
+                }
+            }
+        }
+
+        log::trace!(
+            "Calculated aliasing: {n_internal} internal resources, {misses} cache misses, {hit_rate}% hit rate",
+            hit_rate = (1.0 - (misses as f32 / n_internal as f32)) * 100.
+        );
 
         let resources = resources
             .into_iter()
@@ -520,7 +549,6 @@ pub fn compile(
             .enumerate()
             .map(|(i, var_id)| {
                 let resource_id = ResourceId(i);
-                dbg!(var_id);
                 let res = if input_set.contains(&resource_id) {
                     GraphResource::Input
                 } else if matches!(

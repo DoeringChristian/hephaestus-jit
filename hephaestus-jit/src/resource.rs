@@ -3,7 +3,7 @@ pub use crate::backend::{AccelDesc, BufferDesc, TextureDesc};
 use crate::utils;
 use crate::vartype::VarType;
 // TODO: maybe move to backend?
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ResourceDesc {
     BufferDesc(BufferDesc),
     TextureDesc(TextureDesc),
