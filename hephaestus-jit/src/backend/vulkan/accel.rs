@@ -5,7 +5,7 @@ use vk_sync::AccessType;
 
 use super::vulkan_core::buffer::{Buffer, BufferInfo, MemoryLocation};
 use super::vulkan_core::device::Device;
-use super::vulkan_core::graph::RGraph;
+use super::vulkan_core::graph::{RGraph, ResourceId};
 use super::{vulkan_core::acceleration_structure::*, VulkanDevice};
 
 use crate::backend::vulkan::vulkan_core::pipeline::Pipeline;
@@ -22,7 +22,7 @@ pub enum AccelGeometryBuildInfo<'a> {
 }
 pub struct AccelBuildInfo<'a> {
     pub geometries: &'a [AccelGeometryBuildInfo<'a>],
-    pub instances: &'a Arc<Buffer>,
+    pub instances: ResourceId,
 }
 
 #[derive(Debug)]
@@ -171,6 +171,7 @@ impl Accel {
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&references));
         let references_buffer = Arc::new(references_buffer);
+        let references_buffer = rgraph.external(&references_buffer);
 
         let copy2instances = Pipeline::create(
             &self.device,
@@ -183,29 +184,29 @@ impl Accel {
         {
             let n_instances = self.info.instances;
             let desc_instance_buffer = desc.instances.clone();
-            let instance_buffer = self.instance_buffer.clone();
+            let instance_buffer = rgraph.external(&self.instance_buffer);
             rgraph
                 .pass("Create VkAccelerationStructureInstanceKHR")
-                .read(&references_buffer, AccessType::ComputeShaderReadOther)
-                .read(&desc_instance_buffer, AccessType::ComputeShaderReadOther)
-                .write(&instance_buffer, AccessType::ComputeShaderWrite)
-                .record(move |device, cb, pool| {
+                .read(references_buffer, AccessType::ComputeShaderReadOther)
+                .read(desc_instance_buffer, AccessType::ComputeShaderReadOther)
+                .write(instance_buffer, AccessType::ComputeShaderWrite)
+                .record(move |device, cb, ctx| {
                     copy2instances.submit(
                         cb,
-                        pool,
+                        ctx,
                         device,
                         &[WriteSet {
                             set: 0,
                             binding: 0,
                             buffers: &[
                                 BufferWriteInfo {
-                                    buffer: &desc_instance_buffer,
+                                    buffer: &ctx.buffer(desc_instance_buffer),
                                 },
                                 BufferWriteInfo {
-                                    buffer: &references_buffer,
+                                    buffer: &ctx.buffer(references_buffer),
                                 },
                                 BufferWriteInfo {
-                                    buffer: &instance_buffer,
+                                    buffer: &ctx.buffer(instance_buffer),
                                 },
                             ],
                         }],

@@ -51,12 +51,12 @@ impl Pipeline {
     pub fn submit(
         &self,
         cb: vk::CommandBuffer,
-        pool: &mut RGraphContext,
+        ctx: &mut RGraphContext,
         device: &Device,
         write_sets: &[WriteSet],
         extent: (u32, u32, u32),
     ) {
-        let desc_sets = pool.desc_sets(&self.desc_set_layouts);
+        let desc_sets = ctx.desc_sets(&self.desc_set_layouts);
         log::trace!("Recording Pipeline pass with extent {extent:?}");
 
         let buffer_infos = write_sets

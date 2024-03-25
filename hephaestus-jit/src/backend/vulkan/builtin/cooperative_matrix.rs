@@ -15,7 +15,7 @@ use crate::vartype::VarType;
 use crate::{
     backend::vulkan::vulkan_core::{
         buffer::{Buffer, BufferInfo},
-        graph::RGraph,
+        graph::{RGraph, ResourceId},
     },
     vartype::MatMulConfig,
 };
@@ -101,11 +101,11 @@ pub fn multiply(
     M: u32,
     N: u32,
     K: u32,
-    config: Option<Arc<Buffer>>,
-    mat_a: Arc<Buffer>,
-    mat_b: Arc<Buffer>,
-    mat_c: Arc<Buffer>,
-    mat_d: Arc<Buffer>,
+    config: Option<ResourceId>,
+    mat_a: ResourceId,
+    mat_b: ResourceId,
+    mat_c: ResourceId,
+    mat_d: ResourceId,
 ) {
     let subgroup_size = device.physical_device.subgroup_properties.subgroup_size;
 
@@ -204,50 +204,58 @@ pub fn multiply(
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[MatMulConfig { M, N, K }]));
 
-        Arc::new(config_buffer)
+        rgraph.external(&Arc::new(config_buffer))
     });
 
     {
         rgraph
             .pass("Cooperative Matrix Multiply")
-            .read(&config_buffer, AccessType::ComputeShaderReadOther)
-            .read(&mat_a, AccessType::ComputeShaderReadOther)
-            .read(&mat_b, AccessType::ComputeShaderReadOther)
-            .read(&mat_c, AccessType::ComputeShaderReadOther)
-            .read(&mat_d, AccessType::ComputeShaderReadOther)
-            .write(&mat_d, AccessType::ComputeShaderWrite)
-            .record(move |device, cb, pool| {
+            .read(config_buffer, AccessType::ComputeShaderReadOther)
+            .read(mat_a, AccessType::ComputeShaderReadOther)
+            .read(mat_b, AccessType::ComputeShaderReadOther)
+            .read(mat_c, AccessType::ComputeShaderReadOther)
+            .read(mat_d, AccessType::ComputeShaderReadOther)
+            .write(mat_d, AccessType::ComputeShaderWrite)
+            .record(move |device, cb, ctx| {
                 pipeline.submit(
                     cb,
-                    pool,
+                    ctx,
                     device,
                     &[
                         WriteSet {
                             set: 0,
                             binding: 0,
                             buffers: &[BufferWriteInfo {
-                                buffer: &config_buffer,
+                                buffer: ctx.buffer(config_buffer),
                             }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 1,
-                            buffers: &[BufferWriteInfo { buffer: &mat_a }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: ctx.buffer(mat_a),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 2,
-                            buffers: &[BufferWriteInfo { buffer: &mat_b }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: ctx.buffer(mat_b),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 3,
-                            buffers: &[BufferWriteInfo { buffer: &mat_c }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: ctx.buffer(mat_c),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 4,
-                            buffers: &[BufferWriteInfo { buffer: &mat_d }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: &ctx.buffer(mat_d),
+                            }],
                         },
                     ],
                     (dispatch_x, dispatch_y, 1),

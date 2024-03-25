@@ -6,7 +6,7 @@ use vk_sync::AccessType;
 
 use super::super::vulkan_core::{
     buffer::{Buffer, BufferInfo},
-    graph::RGraph,
+    graph::{RGraph, ResourceId},
 };
 use super::prefix_sum::prefix_sum_scratch_buffer;
 use super::utils::*;
@@ -42,9 +42,9 @@ pub fn compress_small(
     device: &VulkanDevice,
     rgraph: &mut RGraph,
     num: u32,
-    out_count: &Arc<Buffer>,
-    src: &Arc<Buffer>,
-    dst: &Arc<Buffer>,
+    out_count: ResourceId,
+    src: ResourceId,
+    dst: ResourceId,
 ) {
     const ITEMS_PER_THREAD: u32 = 4;
     let thread_count = utils::u32::round_pow2((num + ITEMS_PER_THREAD - 1) / ITEMS_PER_THREAD);
@@ -79,6 +79,7 @@ pub fn compress_small(
         .mapped_slice_mut()
         .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
     let size_buffer = Arc::new(size_buffer);
+    let size_buffer = rgraph.external(&size_buffer);
 
     // let pipeline = device.get_pipeline(&PipelineInfo {
     //     code: &shader,
@@ -110,42 +111,48 @@ pub fn compress_small(
 
     log::trace!("Counting {num} elements with count_small");
     {
-        let src = src.clone();
-        let size_buffer = size_buffer.clone();
-        let dst = dst.clone();
-        let out_count = out_count.clone();
+        // let src = src.clone();
+        // let size_buffer = size_buffer.clone();
+        // let dst = dst.clone();
+        // let out_count = out_count.clone();
         rgraph
             .pass("Compress Small")
-            .read(&src, AccessType::ComputeShaderReadOther)
-            .read(&size_buffer, AccessType::ComputeShaderReadOther)
-            .write(&dst, AccessType::ComputeShaderWrite)
-            .write(&out_count, AccessType::ComputeShaderWrite)
-            .record(move |device, cb, pool| {
+            .read(src, AccessType::ComputeShaderReadOther)
+            .read(size_buffer, AccessType::ComputeShaderReadOther)
+            .write(dst, AccessType::ComputeShaderWrite)
+            .write(out_count, AccessType::ComputeShaderWrite)
+            .record(move |device, cb, ctx| {
                 pipeline.submit(
                     cb,
-                    pool,
+                    ctx,
                     device,
                     &[
                         WriteSet {
                             set: 0,
                             binding: 0,
-                            buffers: &[BufferWriteInfo { buffer: &src }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: &ctx.buffer(src),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 1,
-                            buffers: &[BufferWriteInfo { buffer: &dst }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: &ctx.buffer(dst),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 2,
-                            buffers: &[BufferWriteInfo { buffer: &out_count }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: &ctx.buffer(out_count),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 3,
                             buffers: &[BufferWriteInfo {
-                                buffer: &size_buffer,
+                                buffer: &ctx.buffer(size_buffer),
                             }],
                         },
                     ],
@@ -158,10 +165,10 @@ pub fn compress_large(
     device: &VulkanDevice,
     rgraph: &mut RGraph,
     num: usize,
-    size_buffer: Option<Arc<Buffer>>,
-    out_count: &Arc<Buffer>,
-    src: &Arc<Buffer>,
-    dst: &Arc<Buffer>,
+    size_buffer: Option<ResourceId>,
+    out_count: ResourceId,
+    src: ResourceId,
+    dst: ResourceId,
 ) {
     let items_per_thread = 16;
     let block_size = 128;
@@ -221,25 +228,20 @@ pub fn compress_large(
         size_buffer
             .mapped_slice_mut()
             .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
-        Arc::new(size_buffer)
+        rgraph.external(&Arc::new(size_buffer))
     });
 
     let scratch_buffer = prefix_sum_scratch_buffer(device, rgraph, scratch_items as _);
 
     {
-        let size_buffer = size_buffer.clone();
-        let src = src.clone();
-        let scratch_buffer = scratch_buffer.clone();
-        let dst = dst.clone();
-        let out_count = out_count.clone();
         rgraph
             .pass("Compress Large")
-            .read(&size_buffer, AccessType::ComputeShaderReadOther)
-            .read(&src, AccessType::ComputeShaderReadOther)
-            .read(&scratch_buffer, AccessType::ComputeShaderReadOther)
-            .write(&out_count, AccessType::ComputeShaderWrite)
-            .write(&scratch_buffer, AccessType::ComputeShaderWrite)
-            .write(&dst, AccessType::ComputeShaderWrite)
+            .read(size_buffer, AccessType::ComputeShaderReadOther)
+            .read(src, AccessType::ComputeShaderReadOther)
+            .read(scratch_buffer, AccessType::ComputeShaderReadOther)
+            .write(out_count, AccessType::ComputeShaderWrite)
+            .write(scratch_buffer, AccessType::ComputeShaderWrite)
+            .write(dst, AccessType::ComputeShaderWrite)
             .record(move |device, cb, pool| {
                 compress_large.submit(
                     cb,

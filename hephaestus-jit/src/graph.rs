@@ -107,26 +107,26 @@ impl GraphBuilder {
 
 #[derive(Debug, Default, Clone)]
 pub struct Env {
-    resources: Vec<Resource>,
+    resources: Vec<Option<Resource>>,
 }
 impl Env {
     pub fn buffer(&self, id: ResourceId) -> Option<&backend::Buffer> {
-        match &self.resources[id.0] {
+        self.resources[id.0].as_ref().and_then(|r| match r {
             Resource::Buffer(buffer) => Some(buffer),
             _ => None,
-        }
+        })
     }
     pub fn texture(&self, id: ResourceId) -> Option<&backend::Texture> {
-        match &self.resources[id.0] {
+        self.resources[id.0].as_ref().and_then(|r| match r {
             Resource::Texture(texture) => Some(texture),
             _ => None,
-        }
+        })
     }
     pub fn accel(&self, id: ResourceId) -> Option<&backend::Accel> {
-        match &self.resources[id.0] {
+        self.resources[id.0].as_ref().and_then(|r| match r {
             Resource::Accel(accel) => Some(accel),
             _ => None,
-        }
+        })
     }
 }
 
@@ -142,6 +142,9 @@ pub struct Graph {
 impl Graph {
     pub fn passes(&self) -> &[Pass] {
         &self.passes
+    }
+    pub fn resource_descs(&self) -> &[ResourceDesc] {
+        &self.resource_descs
     }
     pub fn buffer_desc(&self, id: ResourceId) -> &BufferDesc {
         match &self.resource_descs[id.0] {

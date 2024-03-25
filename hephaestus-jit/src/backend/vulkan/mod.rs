@@ -156,6 +156,34 @@ impl backend::BackendDevice for VulkanDevice {
         use crate::graph::PassOp;
         let mut rgraph = RGraph::new();
 
+        let resources = graph
+            .resource_descs()
+            .into_iter()
+            .enumerate()
+            .map(|(i, desc)| {
+                let x = 1;
+                match desc {
+                    crate::resource::ResourceDesc::BufferDesc(desc) => {
+                        if let Some(buffer) = env.buffer(crate::graph::ResourceId(i)) {
+                            rgraph.external(&buffer.vulkan().unwrap().buffer)
+                        } else {
+                            rgraph.internal(BufferInfo {
+                                size: desc.size * desc.ty.size(),
+                                alignment: desc.ty.alignment(),
+                                usage: vk::BufferUsageFlags::TRANSFER_SRC
+                                    | vk::BufferUsageFlags::TRANSFER_DST
+                                    | vk::BufferUsageFlags::STORAGE_BUFFER
+                                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                                    | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
+                                memory_location: MemoryLocation::GpuOnly,
+                            })
+                        }
+                    }
+                    crate::resource::ResourceDesc::TextureDesc(desc) => todo!(),
+                    crate::resource::ResourceDesc::AccelDesc(desc) => todo!(),
+                }
+            });
+
         for (i, pass) in graph.passes().iter().enumerate() {
             let to_buffer = |id: crate::graph::ResourceId| {
                 env.buffer(id)

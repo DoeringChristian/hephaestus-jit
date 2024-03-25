@@ -6,7 +6,7 @@ use vk_sync::AccessType;
 
 use super::super::vulkan_core::{
     buffer::{Buffer, BufferInfo},
-    graph::RGraph,
+    graph::{RGraph, ResourceId},
 };
 use super::utils::*;
 use crate::backend::vulkan::vulkan_core::pipeline::{Pipeline, ShaderKind};
@@ -23,8 +23,8 @@ pub fn prefix_sum(
     ty: &VarType,
     num: usize,
     inclusive: bool,
-    input: &Arc<Buffer>,
-    output: &Arc<Buffer>,
+    input: ResourceId,
+    output: ResourceId,
 ) {
     prefix_sum_large(device, rgraph, ty, num, inclusive, input, output)
 }
@@ -34,8 +34,8 @@ pub fn prefix_sum_large(
     ty: &VarType,
     num: usize,
     inclusive: bool,
-    input: &Arc<Buffer>,
-    output: &Arc<Buffer>,
+    input: ResourceId,
+    output: ResourceId,
 ) {
     let vector_size = 4; // M
     let loads_per_thread = 4; // N
@@ -108,7 +108,7 @@ pub fn prefix_sum_large(
     size_buffer
         .mapped_slice_mut()
         .copy_from_slice(bytemuck::cast_slice(&[num as u32]));
-    let size_buffer = Arc::new(size_buffer);
+    let size_buffer = rgraph.external(&Arc::new(size_buffer));
 
     // NOTE: don't need barrier here, as scratch buffer init is not depending on anything
 
@@ -119,39 +119,43 @@ pub fn prefix_sum_large(
         let input = input.clone();
         rgraph
             .pass("Prefix Sum Large")
-            .read(&size_buffer, AccessType::ComputeShaderReadOther)
-            .read(&input, AccessType::ComputeShaderReadOther)
-            .read(&scratch_buffer, AccessType::ComputeShaderReadOther)
-            .write(&scratch_buffer, AccessType::ComputeShaderWrite)
-            .write(&output, AccessType::ComputeShaderWrite)
-            .record(move |device, cb, pool| {
+            .read(size_buffer, AccessType::ComputeShaderReadOther)
+            .read(input, AccessType::ComputeShaderReadOther)
+            .read(scratch_buffer, AccessType::ComputeShaderReadOther)
+            .write(scratch_buffer, AccessType::ComputeShaderWrite)
+            .write(output, AccessType::ComputeShaderWrite)
+            .record(move |device, cb, ctx| {
                 prefix_sum_large.submit(
                     cb,
-                    pool,
+                    ctx,
                     device,
                     &[
                         WriteSet {
                             set: 0,
                             binding: 0,
-                            buffers: &[BufferWriteInfo { buffer: &input }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: &ctx.buffer(input),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 1,
-                            buffers: &[BufferWriteInfo { buffer: &output }],
+                            buffers: &[BufferWriteInfo {
+                                buffer: &ctx.buffer(output),
+                            }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 2,
                             buffers: &[BufferWriteInfo {
-                                buffer: &size_buffer,
+                                buffer: &ctx.buffer(size_buffer),
                             }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 3,
                             buffers: &[BufferWriteInfo {
-                                buffer: &scratch_buffer,
+                                buffer: &ctx.buffer(scratch_buffer),
                             }],
                         },
                     ],
@@ -165,7 +169,7 @@ pub fn prefix_sum_scratch_buffer(
     device: &VulkanDevice,
     rgraph: &mut RGraph,
     scratch_items: usize,
-) -> Arc<Buffer> {
+) -> ResourceId {
     let LaunchConfig {
         block_size,
         grid_size,
@@ -203,17 +207,14 @@ pub fn prefix_sum_scratch_buffer(
     //     }],
     // });
 
-    let scratch_buffer = Arc::new(Buffer::create(
-        device,
-        BufferInfo {
-            size: std::mem::size_of::<u64>() * scratch_items as usize,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-            memory_location: MemoryLocation::GpuOnly,
-            ..Default::default()
-        },
-    ));
+    let scratch_buffer = rgraph.internal(BufferInfo {
+        size: std::mem::size_of::<u64>() * scratch_items as usize,
+        usage: vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::STORAGE_BUFFER,
+        memory_location: MemoryLocation::GpuOnly,
+        ..Default::default()
+    });
 
     let mut size_buffer = Buffer::create(
         device,
@@ -230,32 +231,31 @@ pub fn prefix_sum_scratch_buffer(
     size_buffer
         .mapped_slice_mut()
         .copy_from_slice(bytemuck::cast_slice(&[scratch_items as u32]));
-    let size_buffer = Arc::new(size_buffer);
+    let size_buffer = rgraph.external(&Arc::new(size_buffer));
 
     {
-        let scratch_buffer = scratch_buffer.clone();
         rgraph
             .pass("Initialize prefix sum scratch buffer")
-            .read(&size_buffer, AccessType::ComputeShaderReadOther)
-            .write(&scratch_buffer, AccessType::ComputeShaderWrite)
-            .record(move |device, cb, pool| {
+            .read(size_buffer, AccessType::ComputeShaderReadOther)
+            .write(scratch_buffer, AccessType::ComputeShaderWrite)
+            .record(move |device, cb, ctx| {
                 prefix_sum_large_init.submit(
                     cb,
-                    pool,
+                    ctx,
                     device,
                     &[
                         WriteSet {
                             set: 0,
                             binding: 0,
                             buffers: &[BufferWriteInfo {
-                                buffer: &scratch_buffer,
+                                buffer: ctx.buffer(scratch_buffer),
                             }],
                         },
                         WriteSet {
                             set: 0,
                             binding: 1,
                             buffers: &[BufferWriteInfo {
-                                buffer: &size_buffer,
+                                buffer: ctx.buffer(size_buffer),
                             }],
                         },
                     ],

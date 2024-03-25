@@ -19,6 +19,32 @@ use std::sync::Arc;
 use vk_sync::cmd::pipeline_barrier;
 use vk_sync::{AccessType, ImageLayout};
 
+// pub trait Binding {
+//     fn bind(&self, rgraph: &mut RGraph) -> ResourceId;
+// }
+//
+// impl Binding for Arc<Buffer> {
+//     fn bind(&self, rgraph: &mut RGraph) -> ResourceId {
+//         rgraph.external(self)
+//     }
+// }
+// impl Binding for Arc<Image> {
+//     fn bind(&self, rgraph: &mut RGraph) -> ResourceId {
+//         rgraph.external(self)
+//     }
+// }
+// impl Binding for Arc<AccelerationStructure> {
+//     fn bind(&self, rgraph: &mut RGraph) -> ResourceId {
+//         rgraph.external(self)
+//     }
+// }
+//
+// impl Binding for BufferInfo{
+//     fn bind(&self, rgraph: &mut RGraph) -> ResourceId {
+//         rgraph.external(self)
+//     }
+// }
+
 #[derive(Debug)]
 struct ImageBarrier {
     pub prev: AccessType,
@@ -293,24 +319,32 @@ pub struct PassBuilder<'a> {
 }
 
 impl<'a> PassBuilder<'a> {
-    pub fn read<R>(mut self, resource: &Arc<R>, access: AccessType) -> Self
-    where
-        Arc<R>: Into<Resource>,
-    {
-        let id = self.graph.external(resource);
-        let access = access.into();
+    pub fn read(mut self, id: ResourceId, access: AccessType) -> Self {
         self.read.push((id, access));
         self
     }
-    pub fn write<R>(mut self, resource: &Arc<R>, access: AccessType) -> Self
-    where
-        Arc<R>: Into<Resource>,
-    {
-        let id = self.graph.external(resource);
-        let access = access.into();
+    pub fn write(mut self, id: ResourceId, access: AccessType) -> Self {
         self.write.push((id, access));
         self
     }
+    // pub fn read<R>(mut self, resource: &Arc<R>, access: AccessType) -> Self
+    // where
+    //     Arc<R>: Into<Resource>,
+    // {
+    //     let id = self.graph.external(resource);
+    //     let access = access.into();
+    //     self.read.push((id, access));
+    //     self
+    // }
+    // pub fn write<R>(mut self, resource: &Arc<R>, access: AccessType) -> Self
+    // where
+    //     Arc<R>: Into<Resource>,
+    // {
+    //     let id = self.graph.external(resource);
+    //     let access = access.into();
+    //     self.write.push((id, access));
+    //     self
+    // }
     pub fn record(
         self,
         f: impl FnOnce(&Device, vk::CommandBuffer, &mut RGraphContext) + 'static,
