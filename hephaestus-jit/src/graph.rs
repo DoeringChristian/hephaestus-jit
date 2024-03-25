@@ -211,7 +211,7 @@ impl Graph {
                     GraphResource::Captured { r } => trace::with_trace(|trace| {
                         resources[i] = Some(trace.var(r.id()).data.clone());
                     }),
-                    GraphResource::Internal { id } => {
+                    GraphResource::Internal { .. } => {
                         // TODO: error handling
                         resources[i] = Some(Resource::create(device, &self.resource_descs[i]))
                     }
@@ -348,7 +348,7 @@ pub fn compile(
     trace::with_trace(|trace| {
         let mut graph_builder = GraphBuilder::default();
         for r in input.iter().chain(output.iter()) {
-            graph_builder.try_push_resource(&trace, r.id());
+            graph_builder.try_push_resource(&trace, r.id())?;
         }
 
         let inputs = input
