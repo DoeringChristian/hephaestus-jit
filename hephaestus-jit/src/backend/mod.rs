@@ -199,19 +199,21 @@ pub struct TextureDesc {
     pub format: &'static VarType,
 }
 
+#[derive(Debug)]
 pub struct PassReport {
     pub name: String,
     pub start: std::time::Duration, // duration since start of frame
     pub duration: std::time::Duration,
 }
 
+#[derive(Debug)]
 pub struct ExecReport {
     pub cpu_start: std::time::SystemTime,
     pub cpu_duration: std::time::Duration,
     pub passes: Vec<PassReport>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Report {
     pub exec: Option<ExecReport>,
 }

@@ -1616,7 +1616,8 @@ fn fused_mlp(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn aliasing1(#[case] device: Device) {
-    {
+    #[recorded]
+    fn kernel() {
         let x = tr::sized_literal(1, 1);
         x.schedule();
         dbg!(x.id());
@@ -1633,6 +1634,6 @@ fn aliasing1(#[case] device: Device) {
         tr::schedule_eval();
     }
 
-    let graph = tr::compile().unwrap();
-    graph.launch(&device).unwrap();
+    let report = kernel(&device).unwrap().1;
+    approx::assert_abs_diff_eq!(report.aliasing_rate, 0.66666666, epsilon = 0.0001);
 }

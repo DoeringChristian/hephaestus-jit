@@ -38,7 +38,7 @@ pub fn recorded_impl(func: syn::ItemFn) -> TokenStream {
         syn::ReturnType::Type(_, ty) => quote!(#ty),
     };
     let wrapped_output_type =
-        quote!(#crate_name::graph::Result<(#output_type, #crate_name::backend::Report)>);
+        quote!(#crate_name::graph::Result<(#output_type, #crate_name::graph::Report)>);
 
     let lazy = quote!(#crate_name::once_cell::sync::Lazy);
     let input_tuple_type = quote!((#(#input_types,)*));

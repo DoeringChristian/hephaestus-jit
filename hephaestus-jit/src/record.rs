@@ -234,7 +234,7 @@ macro_rules! if_record {
 
 pub fn record<Input, Output, F>(
     f: F,
-) -> impl Fn(&backend::Device, Input) -> graph::Result<(Output, backend::Report)>
+) -> impl Fn(&backend::Device, Input) -> graph::Result<(Output, graph::Report)>
 where
     Input: Traverse,
     Output: Traverse + Construct,
@@ -260,7 +260,7 @@ impl FCache {
         f: &mut F,
         device: &backend::Device,
         input: Input,
-    ) -> graph::Result<(Output, backend::Report)>
+    ) -> graph::Result<(Output, graph::Report)>
     where
         Input: Traverse,
         Output: Traverse + Construct,
