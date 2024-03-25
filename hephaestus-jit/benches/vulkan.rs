@@ -29,7 +29,7 @@ mod benches {
 
         input.schedule();
         weights.schedule();
-        tr::compile().launch(&device);
+        tr::compile().unwrap().launch(&device);
 
         let output = tr::fused_mlp_inference(
             &input,
@@ -44,17 +44,19 @@ mod benches {
 
         let graph = tr::compile();
 
-        let report = graph.launch(&device).unwrap();
+        let report = graph.unwrap().launch(&device).unwrap();
 
-        let pass = report
-            .exec
-            .passes
-            .into_iter()
-            .find(|pass| pass.name == "Fused MLP")
-            .unwrap();
+        // let pass = report
+        //     .backend
+        //     .exec
+        //     .unwrap()
+        //     .passes
+        //     .into_iter()
+        //     .find(|pass| pass.name == "Fused MLP")
+        //     .unwrap();
 
         // pass.duration
-        report.exec.cpu_duration
+        report.backend.exec.unwrap().cpu_duration
     }
 
     #[allow(non_snake_case)]
@@ -80,18 +82,20 @@ mod benches {
         B.schedule();
         C.schedule();
 
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         graph.launch(&device);
 
         let C = tr::matfma(&A, &B, &C, m, n, k);
 
         C.schedule();
 
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         let report = graph.launch(&device).unwrap();
 
         let pass = report
+            .backend
             .exec
+            .unwrap()
             .passes
             .into_iter()
             .find(|pass| pass.name == "Cooperative Matrix Multiply")
@@ -105,13 +109,15 @@ mod benches {
 
         let (count, index) = src_tr.compress();
 
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         let report = graph.launch(&device).unwrap();
 
         assert_eq!(count.item::<u32>(), n as u32);
 
         let pass = report
+            .backend
             .exec
+            .unwrap()
             .passes
             .into_iter()
             .find(|pass| pass.name == "Compress Large")
@@ -127,13 +133,15 @@ mod benches {
 
         let pfs = src.prefix_sum(false);
 
-        let graph = tr::compile();
+        let graph = tr::compile().unwrap();
         let report = graph.launch(&device).unwrap();
 
         assert_eq!(pfs.to_vec::<T>(n - 1..n)[0], sum);
 
         let pass = report
+            .backend
             .exec
+            .unwrap()
             .passes
             .into_iter()
             .find(|pass| pass.name == "Prefix Sum Large")
