@@ -1,7 +1,8 @@
 use std::backtrace::Backtrace;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::ops::Range;
 
 use crate::extent::Extent;
 use crate::prehashed::Prehashed;
@@ -71,7 +72,7 @@ pub struct GraphBuilder {
 impl GraphBuilder {
     pub fn try_push_resource(
         &mut self,
-        trace: &trace::Trace,
+        trace: &mut trace::Trace,
         id: trace::VarId,
     ) -> Result<ResourceId> {
         if let Some(id) = self.resources.get_index_of(&id) {
@@ -95,6 +96,9 @@ impl GraphBuilder {
                 op::Op::Accel => ResourceDesc::AccelDesc(var.extent.accel_desc().clone()),
                 _ => return Err(Error::ResourceMissmatch),
             };
+            //NOTE: we increment the rc of the variable, to prevent premature dropping of resources
+            //by the `advance` function
+            trace.inc_rc(id);
             Ok(ResourceId(self.resources.insert_full(id, desc).0))
         }
     }
@@ -219,6 +223,38 @@ impl Graph {
                 }
             }
         }
+
+        // Calculate resource aliasing
+        // NOTE: aliasing in the backend might be more efficient.
+        let mut resource_livetimes: Vec<Option<Range<usize>>> = vec![None; resources.len()];
+        for (pass_id, pass) in self.passes.iter().enumerate() {
+            for &resource_id in &pass.resources {
+                resource_livetimes[resource_id.0] = Some(
+                    if let Some(livetime) = resource_livetimes[resource_id.0].clone() {
+                        livetime.start.min(pass_id)..livetime.end.max(pass_id + 1)
+                    } else {
+                        pass_id..pass_id + 1
+                    },
+                )
+            }
+        }
+        dbg!(resource_livetimes);
+        // let mut cache: HashMap<ResourceDesc, Vec<_>> = HashMap::new();
+        // for pass in &self.passes {
+        //     for id in &pass.resources {
+        //         if resources[id.0].is_none() {
+        //             //Allocate resource
+        //             let desc = self.resource_descs[id.0].round_up();
+        //             let resource = match cache.entry(desc) {
+        //                 std::collections::hash_map::Entry::Occupied(mut entry) => entry
+        //                     .get_mut()
+        //                     .pop()
+        //                     .unwrap_or_else(|| Resource::create(device, entry.key())),
+        //                 std::collections::hash_map::Entry::Vacant(entry) => todo!(),
+        //             };
+        //         }
+        //     }
+        // }
 
         let resources = resources
             .into_iter()
@@ -348,16 +384,16 @@ pub fn compile(
     trace::with_trace(|trace| {
         let mut graph_builder = GraphBuilder::default();
         for r in input.iter().chain(output.iter()) {
-            graph_builder.try_push_resource(&trace, r.id())?;
+            graph_builder.try_push_resource(trace, r.id())?;
         }
 
         let inputs = input
             .iter()
-            .map(|r| graph_builder.try_push_resource(&trace, r.id()))
+            .map(|r| graph_builder.try_push_resource(trace, r.id()))
             .collect::<Result<Vec<_>>>()?;
         let outputs = output
             .iter()
-            .map(|r| graph_builder.try_push_resource(&trace, r.id()))
+            .map(|r| graph_builder.try_push_resource(trace, r.id()))
             .collect::<Result<Vec<_>>>()?;
         let input_set = inputs.iter().copied().collect::<HashSet<_>>();
 
@@ -403,15 +439,16 @@ pub fn compile(
         // We can now insert the variables as well as the
         for group in groups.iter() {
             let first_id = vars[group.start];
-            let first_var = trace.var(first_id);
+            let extent = trace.var(first_id).extent.clone();
             // Note: we know, that all variables in a group have the same size
             // TODO: validate, that the the size_buffer is a buffer
-            let size_buffer = match first_var.extent {
+            let size_buffer = match extent {
                 Extent::DynSize { size: size_dep, .. } => {
                     graph_builder.try_push_resource(trace, size_dep).ok()
                 }
                 _ => None,
             };
+            let first_var = trace.var(first_id);
 
             let pass = if first_var.op.is_device_op() {
                 // Handle Device Ops (precompiled)
@@ -483,7 +520,8 @@ pub fn compile(
             .enumerate()
             .map(|(i, var_id)| {
                 let resource_id = ResourceId(i);
-                if input_set.contains(&resource_id) {
+                dbg!(var_id);
+                let res = if input_set.contains(&resource_id) {
                     GraphResource::Input
                 } else if matches!(
                     trace.var(*var_id).data,
@@ -494,7 +532,10 @@ pub fn compile(
                     }
                 } else {
                     GraphResource::Internal { id: *var_id }
-                }
+                };
+                // NOTE: decrement rc of resource again
+                trace.dec_rc(*var_id);
+                res
             })
             .collect::<Vec<_>>();
 

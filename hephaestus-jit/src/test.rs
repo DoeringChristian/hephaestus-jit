@@ -1613,3 +1613,26 @@ fn fused_mlp(#[case] device: Device) {
         "lhs = {output:?}\n is not equal to rhs = {reference:?}\n"
     );
 }
+#[rstest]
+#[case(vulkan())]
+fn aliasing1(#[case] device: Device) {
+    {
+        let x = tr::array(&[1], &device);
+        x.schedule();
+        dbg!(x.id());
+        tr::schedule_eval();
+
+        let y = x.add(&tr::literal(1));
+        y.schedule();
+        dbg!(y.id());
+        tr::schedule_eval();
+
+        let z = y.add(&tr::literal(1));
+        z.schedule();
+        dbg!(z.id());
+        tr::schedule_eval();
+    }
+
+    let graph = tr::compile().unwrap();
+    graph.launch(&device).unwrap();
+}

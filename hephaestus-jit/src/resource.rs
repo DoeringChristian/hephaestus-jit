@@ -1,5 +1,6 @@
 use crate::backend::{Accel, Buffer, Device, Texture};
 pub use crate::backend::{AccelDesc, BufferDesc, TextureDesc};
+use crate::utils;
 use crate::vartype::VarType;
 // TODO: maybe move to backend?
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -7,6 +8,18 @@ pub enum ResourceDesc {
     BufferDesc(BufferDesc),
     TextureDesc(TextureDesc),
     AccelDesc(AccelDesc),
+}
+impl ResourceDesc {
+    pub fn round_up(&self) -> Self {
+        match self {
+            ResourceDesc::BufferDesc(desc) => ResourceDesc::BufferDesc(BufferDesc {
+                size: utils::u64::round_pow2(desc.size as _) as usize,
+                ty: desc.ty,
+            }),
+            ResourceDesc::TextureDesc(desc) => ResourceDesc::TextureDesc(desc.clone()),
+            ResourceDesc::AccelDesc(desc) => todo!(),
+        }
+    }
 }
 
 ///
