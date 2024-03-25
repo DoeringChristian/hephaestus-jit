@@ -7,10 +7,10 @@ use slice_group_by::GroupBy;
 use crate::backend::vulkan::vulkan_core::profiler::TimedScope;
 use crate::backend::{self, PassReport};
 
-use super::acceleration_structure::AccelerationStructure;
-use super::buffer::Buffer;
+use super::acceleration_structure::{AccelerationStructure, AccelerationStructureInfo};
+use super::buffer::{Buffer, BufferInfo};
 use super::device::Device;
-use super::image::Image;
+use super::image::{Image, ImageInfo};
 use super::profiler::Profiler;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -108,12 +108,52 @@ impl Barriers {
 }
 
 #[derive(Debug)]
+pub enum ResourceInfo {
+    BufferInfo(BufferInfo),
+    ImageInfo(ImageInfo),
+    AccelerationStructureInfo(AccelerationStructureInfo),
+}
+impl From<BufferInfo> for ResourceInfo {
+    fn from(value: BufferInfo) -> Self {
+        Self::BufferInfo(value)
+    }
+}
+impl From<ImageInfo> for ResourceInfo {
+    fn from(value: ImageInfo) -> Self {
+        Self::ImageInfo(value)
+    }
+}
+impl From<AccelerationStructureInfo> for ResourceInfo {
+    fn from(value: AccelerationStructureInfo) -> Self {
+        Self::AccelerationStructureInfo(value)
+    }
+}
+
+#[derive(Debug)]
 pub enum Resource {
     Buffer(Arc<Buffer>),
     Image(Arc<Image>),
     AccelerationStructure(Arc<AccelerationStructure>),
 }
 impl Resource {
+    pub fn create(info: ResourceInfo, device: &Arc<Device>) -> Self {
+        match info {
+            ResourceInfo::BufferInfo(info) => Self::Buffer(Arc::new(Buffer::create(device, info))),
+            ResourceInfo::ImageInfo(info) => Self::Image(Arc::new(Image::create(device, info))),
+            ResourceInfo::AccelerationStructureInfo(info) => {
+                Self::AccelerationStructure(Arc::new(AccelerationStructure::create(device, info)))
+            }
+        }
+    }
+    fn info(&self) -> ResourceInfo {
+        match self {
+            Resource::Buffer(buffer) => ResourceInfo::BufferInfo(buffer.info().clone()),
+            Resource::Image(image) => ResourceInfo::ImageInfo(image.info().clone()),
+            Resource::AccelerationStructure(acceleration_structure) => {
+                ResourceInfo::AccelerationStructureInfo(acceleration_structure.info().clone())
+            }
+        }
+    }
     fn transition(&self, barriers: &mut Barriers, prev: AccessType, next: AccessType) {
         // TODO: Image Layout transitions
         match self {
@@ -172,31 +212,27 @@ impl From<Arc<AccelerationStructure>> for Resource {
 /// * `resources`: A hashmap mapping from the pointer addresses of resources to their owned types
 /// usize -> (Arc<dyn Resouce>)
 /// This let's us deduplicate resources (a better mechanism wouls be use indices)
+#[derive(Default, Debug)]
 pub struct RGraph {
     passes: Vec<Pass>,
     // We deduplicate resources by the pointers to their Arcs.
     // resources: IndexMap<usize, Resource>,
-    resources: Vec<Resource>,
+    resources: Vec<(ResourceInfo, Option<Resource>)>,
     external: HashMap<usize, ResourceId>,
-}
-impl Debug for RGraph {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RGraph")
-            .field("passes", &self.passes)
-            .field("resources", &self.resources)
-            .finish()
-    }
 }
 impl RGraph {
     pub fn new() -> Self {
-        Self {
-            // profiler: ProfilerData::new(&device.device, ProfilerBackend::new(&device)),
-            passes: Default::default(),
-            resources: Default::default(),
-            external: Default::default(),
-        }
+        Self::default()
     }
-    pub fn resource<R>(&mut self, resource: &Arc<R>) -> ResourceId
+    pub fn internal<I>(&mut self, info: I) -> ResourceId
+    where
+        I: Into<ResourceInfo>,
+    {
+        let id = ResourceId(self.resources.len());
+        self.resources.push((info.into(), None));
+        id
+    }
+    pub fn external<R>(&mut self, resource: &Arc<R>) -> ResourceId
     where
         Arc<R>: Into<Resource>,
     {
@@ -204,8 +240,15 @@ impl RGraph {
         match self.external.entry(key) {
             std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
             std::collections::hash_map::Entry::Vacant(entry) => {
+                let resource = resource.clone().into();
+
                 let id = ResourceId(self.resources.len());
-                self.resources.push(resource.clone().into());
+
+                let info = resource.info();
+
+                // Add resource
+                self.resources.push((info, Some(resource)));
+
                 entry.insert(id);
                 id
             }
@@ -225,7 +268,7 @@ pub struct Pass {
     name: String,
     read: Vec<(ResourceId, AccessType)>,
     write: Vec<(ResourceId, AccessType)>,
-    render_fn: Option<Box<dyn FnOnce(&Device, vk::CommandBuffer, &mut RGraphPool)>>,
+    render_fn: Option<Box<dyn FnOnce(&Device, vk::CommandBuffer, &mut RGraphContext)>>,
 }
 impl Debug for Pass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -254,7 +297,7 @@ impl<'a> PassBuilder<'a> {
     where
         Arc<R>: Into<Resource>,
     {
-        let id = self.graph.resource(resource);
+        let id = self.graph.external(resource);
         let access = access.into();
         self.read.push((id, access));
         self
@@ -263,14 +306,14 @@ impl<'a> PassBuilder<'a> {
     where
         Arc<R>: Into<Resource>,
     {
-        let id = self.graph.resource(resource);
+        let id = self.graph.external(resource);
         let access = access.into();
         self.write.push((id, access));
         self
     }
     pub fn record(
         self,
-        f: impl FnOnce(&Device, vk::CommandBuffer, &mut RGraphPool) + 'static,
+        f: impl FnOnce(&Device, vk::CommandBuffer, &mut RGraphContext) + 'static,
     ) -> PassId {
         let id = PassId(self.graph.passes.len());
         self.graph.passes.push(Pass {
@@ -285,19 +328,39 @@ impl<'a> PassBuilder<'a> {
 
 /// A Resource Pool for temporary resources such as image views or descriptor sets
 #[derive(Debug)]
-pub struct RGraphPool {
+pub struct RGraphContext {
     pub device: Arc<Device>,
     pub desc_sets: Vec<vk::DescriptorSet>,
     pub desc_pools: Vec<vk::DescriptorPool>,
+    pub resources: Vec<Resource>,
 }
 
-impl RGraphPool {
+impl RGraphContext {
     pub fn new(device: &Arc<Device>) -> Self {
         Self {
             device: device.clone(),
             // image_views: vec![],
             desc_sets: vec![],
             desc_pools: vec![],
+            resources: vec![],
+        }
+    }
+    pub fn buffer(&self, id: ResourceId) -> &Arc<Buffer> {
+        match &self.resources[id.0] {
+            Resource::Buffer(buffer) => buffer,
+            _ => todo!(),
+        }
+    }
+    pub fn image(&self, id: ResourceId) -> &Arc<Image> {
+        match &self.resources[id.0] {
+            Resource::Image(image) => image,
+            _ => todo!(),
+        }
+    }
+    pub fn acceleration_structure(&self, id: ResourceId) -> &Arc<AccelerationStructure> {
+        match &self.resources[id.0] {
+            Resource::AccelerationStructure(acceleration_structure) => acceleration_structure,
+            _ => todo!(),
         }
     }
     pub fn desc_sets(&mut self, set_layouts: &[vk::DescriptorSetLayout]) -> &[vk::DescriptorSet] {
@@ -339,7 +402,7 @@ impl RGraphPool {
     }
 }
 
-impl Drop for RGraphPool {
+impl Drop for RGraphContext {
     fn drop(&mut self) {
         unsafe {
             for pool in self.desc_pools.drain(..) {
@@ -450,14 +513,14 @@ impl RGraph {
         }
 
         // Use pass ids to gather passes from graph
-        let mut prev_passes = self
+        let mut self_passes = self
             .passes
             .into_iter()
             .map(|pass| Some(pass))
             .collect::<Vec<_>>();
         let mut passes = passes
             .into_iter()
-            .map(|id| prev_passes[id.0].take().unwrap())
+            .map(|id| self_passes[id.0].take().unwrap())
             .collect::<Vec<_>>();
 
         let mut resource_accesses = self
@@ -466,9 +529,25 @@ impl RGraph {
             .map(|_| AccessType::Nothing)
             .collect::<Vec<_>>();
 
-        let resources = self.resources.into_iter().collect::<Vec<_>>();
+        // Allocate and alias resources
+        let resources = self
+            .resources
+            .into_iter()
+            .map(|(info, resource)| {
+                if let Some(resource) = resource {
+                    resource
+                } else {
+                    Resource::create(info, device)
+                }
+            })
+            .collect::<Vec<_>>();
 
-        let mut tmp_resource_pool = RGraphPool::new(device);
+        let mut context = RGraphContext {
+            device: device.clone(),
+            desc_sets: vec![],
+            desc_pools: vec![],
+            resources,
+        };
 
         let mut profiler = Profiler::new(device, passes.len());
         let mut pass_names = vec![];
@@ -517,7 +596,7 @@ impl RGraph {
                 {
                     let prev = &mut resource_accesses[id.0];
                     if *prev != *access {
-                        resources[id.0].transition(&mut barriers, *prev, *access);
+                        context.resources[id.0].transition(&mut barriers, *prev, *access);
                         log::trace!(
                             "\tTransition Resource {resource:?} {prev:?} -> {read:?}",
                             resource = id.0,
@@ -531,7 +610,7 @@ impl RGraph {
                 // Record content of pass
                 for pass in &mut passes[group] {
                     let render_fn = pass.render_fn.take().unwrap();
-                    render_fn(device, cb, &mut tmp_resource_pool);
+                    render_fn(device, cb, &mut context);
                 }
 
                 profiler.end_scope(cb, scope);
@@ -553,7 +632,7 @@ impl RGraph {
             })
             .collect::<Vec<_>>();
 
-        drop(tmp_resource_pool);
+        drop(context);
 
         backend::ExecReport {
             cpu_start,

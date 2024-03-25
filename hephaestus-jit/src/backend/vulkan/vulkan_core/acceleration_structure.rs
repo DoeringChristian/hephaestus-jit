@@ -321,6 +321,9 @@ impl AccelerationStructure {
             handle = self.accel
         );
     }
+    pub fn info(&self) -> &AccelerationStructureInfo {
+        &self.info
+    }
 }
 
 impl Drop for AccelerationStructure {

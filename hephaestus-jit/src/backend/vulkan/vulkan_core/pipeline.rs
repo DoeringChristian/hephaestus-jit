@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::acceleration_structure::AccelerationStructure;
 use super::buffer::Buffer;
 use super::device::Device;
-use super::graph::RGraphPool;
+use super::graph::RGraphContext;
 use super::image::{Image, ImageViewInfo};
 use ash::vk;
 
@@ -51,7 +51,7 @@ impl Pipeline {
     pub fn submit(
         &self,
         cb: vk::CommandBuffer,
-        pool: &mut RGraphPool,
+        pool: &mut RGraphContext,
         device: &Device,
         write_sets: &[WriteSet],
         extent: (u32, u32, u32),
@@ -108,7 +108,7 @@ impl Pipeline {
     pub fn submit_to_cbuffer(
         &self,
         cb: vk::CommandBuffer,
-        pool: &mut RGraphPool,
+        pool: &mut RGraphContext,
         num: usize,
         buffers: &[Arc<Buffer>],
         images: &[Arc<Image>],

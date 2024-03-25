@@ -163,8 +163,8 @@ impl Buffer {
             .mapped_slice_mut()
             .unwrap()[0..self.info.size as usize]
     }
-    pub fn info(&self) -> BufferInfo {
-        self.info
+    pub fn info(&self) -> &BufferInfo {
+        &self.info
     }
     pub fn size(&self) -> usize {
         self.info().size
