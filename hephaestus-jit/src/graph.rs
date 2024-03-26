@@ -264,6 +264,7 @@ impl Graph {
             })
             .collect::<Vec<_>>();
 
+        // Calculate aliasing using cache and linear sweep
         let mut misses = 0usize;
         let mut cache: HashMap<ResourceDesc, Vec<_>> = HashMap::new();
         for (pid, pass) in self.passes.iter().enumerate() {
