@@ -1,0 +1,43 @@
+---
+source: src/test.rs
+expression: graph
+---
+Graph {
+    passes: [
+        Pass {
+            resources: [
+                ResourceId(
+                    0,
+                ),
+            ],
+            size_buffer: None,
+            op: Kernel {
+                ir: IR {
+                    vars: [
+                    	var0: Bool = Literal(1)
+                    	var1: Bool = BufferRef(0)
+                    	var2: U32 = Index()
+                    	var3: Void = Scatter(var1, var0, var2)
+                    ],
+                    n_buffers: 1,
+                    n_textures: 0,
+                    n_accels: 0,
+                },
+                size: 100,
+            },
+        },
+    ],
+    resource_descs: [
+        BufferDesc(
+            BufferDesc {
+                size: 100,
+                ty: Bool,
+            },
+        ),
+    ],
+    resources: [
+        Internal,
+    ],
+    inputs: [],
+    outputs: [],
+}
