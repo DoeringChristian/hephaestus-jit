@@ -494,7 +494,7 @@ pub fn compile(
             })
             .collect::<Vec<_>>();
 
-        // We can now insert the variables as well as the
+        // We can now create a pass for every group
         for group in groups.iter() {
             let first_id = vars[group.start];
             let extent = trace.var(first_id).extent.clone();
