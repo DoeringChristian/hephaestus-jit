@@ -16,18 +16,17 @@ use crate::tr::VarRef;
 use crate::vartype::{self, AsVarType, Instance, Intersection};
 use crate::{backend, tr, Device};
 
-static DEBUG: Once = Once::new();
+static DEBUG: Lazy<puffin_http::Server> = Lazy::new(|| {
+    pretty_env_logger::init();
+    let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+    let puffin_server = puffin_http::Server::new(&server_addr).unwrap();
+    puffin::set_scopes_on(true);
+    puffin_server
+});
 
 fn vulkan() -> Device {
-    DEBUG.call_once(|| {
-        pretty_env_logger::init();
-        #[cfg(feature = "profile-with-puffin")]
-        {
-            let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-            let _puffin_server = puffin_http::Server::new(&server_addr).unwrap();
-            puffin::set_scopes_on(true);
-        }
-    });
+    let _ = *DEBUG;
+
     backend::vulkan(0)
 }
 
@@ -1614,13 +1613,6 @@ fn fused_mlp(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn aliasing1(#[case] device: Device) {
-    // #[test]
-    // fn aliasing1() {
-    //     let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-    //     let _puffin_server = puffin_http::Server::new(&server_addr).unwrap();
-    //     puffin::set_scopes_on(true);
-    //     let device = backend::vulkan(0);
-
     #[recorded]
     fn kernel() {
         // profiling::scope!("recording");
