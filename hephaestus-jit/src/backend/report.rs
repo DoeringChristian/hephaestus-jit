@@ -12,11 +12,11 @@ pub struct ExecReport {
     pub passes: Vec<PassReport>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Report {
     pub exec: ExecReport,
 }
-impl std::fmt::Display for Report {
+impl std::fmt::Debug for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Passes:")?;
         for pass in self.exec.passes.iter() {

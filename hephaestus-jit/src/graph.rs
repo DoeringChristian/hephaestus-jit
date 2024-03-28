@@ -2,7 +2,8 @@ use std::backtrace::Backtrace;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::ops::{Div, Range};
+use std::ops::Div;
+use std::time::{Duration, Instant};
 
 use crate::extent::Extent;
 use crate::prehashed::Prehashed;
@@ -11,7 +12,6 @@ use crate::{backend, vartype};
 use crate::{compiler, ir, op, trace};
 use indexmap::IndexMap;
 
-use num_traits::Float;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -139,12 +139,7 @@ impl Env {
 pub struct Report {
     pub backend: backend::Report,
     pub aliasing_rate: f32,
-}
-impl std::fmt::Display for Report {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Backend:\n {}", self.backend)?;
-        Ok(())
-    }
+    pub aliasing_duration: Duration,
 }
 
 #[derive(Debug)]
@@ -241,6 +236,7 @@ impl Graph {
 
         // Calculate resource aliasing for internal resources
         // NOTE: aliasing in the backend might be more efficient.
+        let start_aliasing = Instant::now();
 
         // Livetimes of resources (inclusive range)
         let mut livetimes: Vec<_> = vec![(resources.len(), 0); resources.len()];
@@ -297,9 +293,10 @@ impl Graph {
                 }
             }
         }
+        let end_aliasing = Instant::now();
 
         let hit_rate = {
-            let hit_rate = (1.0 - (misses as f32).div(n_internal as f32));
+            let hit_rate = 1.0 - (misses as f32).div(n_internal as f32);
             if hit_rate.is_nan() {
                 0.
             } else {
@@ -324,7 +321,7 @@ impl Graph {
         } else {
             device.execute_graph(self, &env)?
         };
-        log::trace!("Backend:\n {backend_report}");
+        log::trace!("Backend:\n {backend_report:#?}");
 
         // Update variables from environment.
         // This does the following things:
@@ -395,6 +392,7 @@ impl Graph {
         let report = Report {
             backend: backend_report,
             aliasing_rate: hit_rate,
+            aliasing_duration: end_aliasing - start_aliasing,
         };
         Ok((report, output))
     }
