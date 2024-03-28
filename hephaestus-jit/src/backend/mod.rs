@@ -31,9 +31,7 @@ pub trait BackendDevice: Clone + Send + Sync {
     fn create_buffer_from_slice(&self, slice: &[u8]) -> Result<Self::Buffer>;
     fn create_texture(&self, desc: &TextureDesc) -> Result<Self::Texture>;
     fn create_accel(&self, desc: &AccelDesc) -> Result<Self::Accel>;
-    fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<Report> {
-        todo!()
-    }
+    fn execute_graph(&self, graph: &Graph, env: &crate::graph::Env) -> Result<Report>;
 }
 
 pub trait BackendBuffer: Clone + Send + Sync {

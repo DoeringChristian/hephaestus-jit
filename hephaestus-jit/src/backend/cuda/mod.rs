@@ -46,6 +46,14 @@ impl BackendDevice for CudaDevice {
     fn create_accel(&self, desc: &AccelDesc) -> backend::Result<Self::Accel> {
         todo!()
     }
+
+    fn execute_graph(
+        &self,
+        graph: &crate::Graph,
+        env: &crate::graph::Env,
+    ) -> backend::Result<backend::Report> {
+        todo!()
+    }
 }
 
 impl BackendBuffer for CudaBuffer {
