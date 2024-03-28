@@ -6,6 +6,7 @@ use rand::Rng;
 use rstest::{fixture, rstest};
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, Once};
 use std::thread;
 
@@ -16,13 +17,35 @@ use crate::tr::VarRef;
 use crate::vartype::{self, AsVarType, Instance, Intersection};
 use crate::{backend, tr, Device};
 
+static TRC: AtomicUsize = AtomicUsize::new(0);
+
+struct AtExit(usize);
+impl AtExit {
+    pub fn new() -> Self {
+        let tid = TRC.fetch_add(1, Ordering::Relaxed);
+        Self(tid)
+    }
+}
+impl Drop for AtExit {
+    fn drop(&mut self) {
+        if TRC.fetch_sub(1, Ordering::Relaxed) == 1 {
+            profiling::finish_frame!();
+        }
+    }
+}
+thread_local! {
+    pub static AT_EXIT: AtExit = AtExit::new();
+}
+
 static DEBUG: Lazy<()> = Lazy::new(|| {
     pretty_env_logger::init();
     #[cfg(feature = "profile-with-puffin")]
     {
+        AT_EXIT.with(|_| {});
         let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
         Box::leak(Box::new(puffin_http::Server::new(&server_addr).unwrap()));
         puffin::set_scopes_on(true);
+        profiling::finish_frame!();
     }
 });
 
@@ -1637,11 +1660,11 @@ fn aliasing1(#[case] device: Device) {
     // warmeup
     for _ in 0..10 {
         kernel(&device).unwrap();
-        profiling::finish_frame!();
+        // profiling::finish_frame!();
     }
 
     let report = kernel(&device).unwrap().1;
     println!("{report:#?}");
     approx::assert_abs_diff_eq!(report.aliasing_rate, 0.66666666, epsilon = 0.0001);
-    profiling::finish_frame!();
+    // profiling::finish_frame!();
 }
