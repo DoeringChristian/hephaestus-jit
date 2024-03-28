@@ -556,7 +556,7 @@ impl RGraph {
         drop(tmp_resource_pool);
 
         backend::ExecReport {
-            cpu_start,
+            cpu_start: Some(cpu_start),
             cpu_duration,
             passes,
         }

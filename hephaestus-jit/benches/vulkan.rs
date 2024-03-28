@@ -56,7 +56,7 @@ mod benches {
         //     .unwrap();
 
         // pass.duration
-        report.backend.exec.unwrap().cpu_duration
+        report.backend.exec.cpu_duration
     }
 
     #[allow(non_snake_case)]
@@ -95,7 +95,6 @@ mod benches {
         let pass = report
             .backend
             .exec
-            .unwrap()
             .passes
             .into_iter()
             .find(|pass| pass.name == "Cooperative Matrix Multiply")
@@ -117,7 +116,6 @@ mod benches {
         let pass = report
             .backend
             .exec
-            .unwrap()
             .passes
             .into_iter()
             .find(|pass| pass.name == "Compress Large")
@@ -141,7 +139,6 @@ mod benches {
         let pass = report
             .backend
             .exec
-            .unwrap()
             .passes
             .into_iter()
             .find(|pass| pass.name == "Prefix Sum Large")
