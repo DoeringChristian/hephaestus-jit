@@ -388,7 +388,6 @@ impl Graph {
                 _ => {}
             });
 
-        profiling::finish_frame!();
         let report = Report {
             backend: backend_report,
             aliasing_rate: hit_rate,

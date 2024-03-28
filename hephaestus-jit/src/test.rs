@@ -23,11 +23,9 @@ fn vulkan() -> Device {
         pretty_env_logger::init();
         #[cfg(feature = "profile-with-puffin")]
         {
-            // let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-            let _puffin_server = puffin_http::Server::new("127.0.0.1:8585").unwrap();
+            let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+            let _puffin_server = puffin_http::Server::new(&server_addr).unwrap();
             puffin::set_scopes_on(true);
-            profiling::finish_frame!();
-            profiling::finish_frame!();
         }
     });
     backend::vulkan(0)
@@ -1616,8 +1614,16 @@ fn fused_mlp(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn aliasing1(#[case] device: Device) {
+    // #[test]
+    // fn aliasing1() {
+    //     let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+    //     let _puffin_server = puffin_http::Server::new(&server_addr).unwrap();
+    //     puffin::set_scopes_on(true);
+    //     let device = backend::vulkan(0);
+
     #[recorded]
     fn kernel() {
+        // profiling::scope!("recording");
         let x = tr::sized_literal(1, 100);
         x.schedule();
         dbg!(x.id());
@@ -1634,7 +1640,14 @@ fn aliasing1(#[case] device: Device) {
         tr::schedule_eval();
     }
 
+    // warmeup
+    for _ in 0..10 {
+        kernel(&device).unwrap();
+        profiling::finish_frame!();
+    }
+
     let report = kernel(&device).unwrap().1;
     println!("{report:#?}");
     approx::assert_abs_diff_eq!(report.aliasing_rate, 0.66666666, epsilon = 0.0001);
+    profiling::finish_frame!();
 }
