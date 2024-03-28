@@ -16,12 +16,14 @@ use crate::tr::VarRef;
 use crate::vartype::{self, AsVarType, Instance, Intersection};
 use crate::{backend, tr, Device};
 
-static DEBUG: Lazy<puffin_http::Server> = Lazy::new(|| {
+static DEBUG: Lazy<()> = Lazy::new(|| {
     pretty_env_logger::init();
-    let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-    let puffin_server = puffin_http::Server::new(&server_addr).unwrap();
-    puffin::set_scopes_on(true);
-    puffin_server
+    #[cfg(feature = "profile-with-puffin")]
+    {
+        let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+        Box::leak(Box::new(puffin_http::Server::new(&server_addr).unwrap()));
+        puffin::set_scopes_on(true);
+    }
 });
 
 fn vulkan() -> Device {
