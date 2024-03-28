@@ -482,6 +482,7 @@ impl RGraph {
             // We could flip both, but since passes within a group are per definition
             // interchangable, we only have to reverse the group order.
             for group in groups.into_iter().rev() {
+                profiling::scope!("recording group");
                 let scope = profiler.begin_scope(cb);
 
                 let group_name = Itertools::intersperse(
@@ -506,32 +507,38 @@ impl RGraph {
                 let mut barriers = Barriers::default();
 
                 // Record barriers for all the passes in a group by transitioning their states
-                for (id, access) in passes[group.clone()]
-                    .iter()
-                    .flat_map(|pass| pass.read.iter())
-                    .chain(
-                        passes[group.clone()]
-                            .iter()
-                            .flat_map(|pass| pass.write.iter()),
-                    )
                 {
-                    let prev = &mut resource_accesses[id.0];
-                    if *prev != *access {
-                        resources[id.0].transition(&mut barriers, *prev, *access);
-                        log::trace!(
-                            "\tTransition Resource {resource:?} {prev:?} -> {read:?}",
-                            resource = id.0,
-                            read = access
-                        );
-                        *prev = *access;
+                    profiling::scope!("transitioning resources");
+                    for (id, access) in passes[group.clone()]
+                        .iter()
+                        .flat_map(|pass| pass.read.iter())
+                        .chain(
+                            passes[group.clone()]
+                                .iter()
+                                .flat_map(|pass| pass.write.iter()),
+                        )
+                    {
+                        let prev = &mut resource_accesses[id.0];
+                        if *prev != *access {
+                            resources[id.0].transition(&mut barriers, *prev, *access);
+                            log::trace!(
+                                "\tTransition Resource {resource:?} {prev:?} -> {read:?}",
+                                resource = id.0,
+                                read = access
+                            );
+                            *prev = *access;
+                        }
                     }
+                    barriers.record(device, cb);
                 }
-                barriers.record(device, cb);
 
                 // Record content of pass
-                for pass in &mut passes[group] {
-                    let render_fn = pass.render_fn.take().unwrap();
-                    render_fn(device, cb, &mut tmp_resource_pool);
+                {
+                    profiling::scope!("recording passes");
+                    for pass in &mut passes[group] {
+                        let render_fn = pass.render_fn.take().unwrap();
+                        render_fn(device, cb, &mut tmp_resource_pool);
+                    }
                 }
 
                 profiler.end_scope(cb, scope);
