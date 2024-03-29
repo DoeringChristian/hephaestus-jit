@@ -184,7 +184,7 @@ fn extract(#[case] device: Device) {
     let a = tr::sized_literal(1f32, 10);
     let b = tr::sized_literal(2f32, 10);
 
-    let v = tr::vec(&[&a, &b]);
+    let v = tr::vec(&[a, b]);
 
     let a = v.extract(0);
     let b = v.extract(1);
@@ -205,7 +205,7 @@ fn extract2(#[case] device: Device) {
     let b = tr::sized_literal(0xffu8, 2);
     let a = tr::sized_literal(2u32, 2);
 
-    let s = tr::composite(&[&a, &b]);
+    let s = tr::composite(&[a, b]);
 
     s.schedule();
 
@@ -221,7 +221,7 @@ fn test_struct(#[case] device: Device) {
     let a = tr::sized_literal(1u8, 10);
     let b = tr::sized_literal(2u32, 10);
 
-    let s = tr::composite(&[&a, &b]);
+    let s = tr::composite(&[a, b]);
 
     let a = s.extract(0);
     let b = s.extract(1);
@@ -249,7 +249,7 @@ fn texture2df32(#[case] device: Device) {
 
     let x = tr::sized_literal(0.5f32, 2);
     let y = tr::sized_literal(0.5f32, 2);
-    let pos = tr::vec(&[&x, &y]);
+    let pos = tr::vec(&[x, y]);
     // let z = tr::sized_literal(0.5f32, 2);
 
     let v = tex.tex_lookup(&pos);
@@ -276,7 +276,7 @@ fn texture3df32(#[case] device: Device) {
     let x = tr::sized_literal(0.5f32, 2);
     let y = tr::sized_literal(0.3f32, 2);
     let z = tr::sized_literal(0.6f32, 2);
-    let pos = tr::vec(&[&x, &y, &z]);
+    let pos = tr::vec(&[x, y, z]);
 
     let v = tex.tex_lookup(&pos);
 
@@ -302,7 +302,7 @@ fn texture2di32(#[case] device: Device) {
 
     let x = tr::sized_literal(0.5f32, 2);
     let y = tr::sized_literal(0.5f32, 2);
-    let pos = tr::vec(&[&x, &y]);
+    let pos = tr::vec(&[x, y]);
 
     let v = tex.tex_lookup(&pos);
 
@@ -416,7 +416,7 @@ fn accel(#[case] device: Device) {
     let x = tr::array(&[1f32, 0f32, 1f32], &device);
     let y = tr::array(&[0f32, 1f32, 1f32], &device);
     let z = tr::array(&[0f32, 0f32, 0f32], &device);
-    let vertices = tr::vec(&[&x, &y, &z]);
+    let vertices = tr::vec(&[x, y, z]);
 
     let triangles = tr::array(&[[0u32, 1u32, 2u32]], &device);
 
@@ -450,11 +450,11 @@ fn accel(#[case] device: Device) {
     let y = tr::array(&[0.6f32, 0.3f32], &device);
     let z = tr::array(&[0.1f32, 0.1f32], &device);
 
-    let o = tr::vec(&[&x, &y, &z]);
+    let o = tr::vec(&[x, y, z]);
     let d = tr::vec(&[
-        &tr::sized_literal(0f32, 2),
-        &tr::literal(0f32),
-        &tr::literal(-1f32),
+        tr::sized_literal(0f32, 2),
+        tr::literal(0f32),
+        tr::literal(-1f32),
     ]);
     let tmin = tr::literal(0f32);
     let tmax = tr::literal(10_000f32);
@@ -1270,13 +1270,13 @@ fn record_struct(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn matrix_times_matrix(#[case] device: Device) {
-    let c0 = tr::vec(&[&tr::sized_literal(1f32, 1), &tr::literal(3f32)]);
-    let c1 = tr::vec(&[&tr::literal(2f32), &tr::literal(4f32)]);
-    let m0 = tr::mat(&[&c0, &c1]);
+    let c0 = tr::vec(&[tr::sized_literal(1f32, 1), tr::literal(3f32)]);
+    let c1 = tr::vec(&[tr::literal(2f32), tr::literal(4f32)]);
+    let m0 = tr::mat(&[c0, c1]);
 
-    let c0 = tr::vec(&[&tr::literal(5f32), &tr::literal(7f32)]);
-    let c1 = tr::vec(&[&tr::literal(6f32), &tr::literal(8f32)]);
-    let m1 = tr::mat(&[&c0, &c1]);
+    let c0 = tr::vec(&[tr::literal(5f32), tr::literal(7f32)]);
+    let c1 = tr::vec(&[tr::literal(6f32), tr::literal(8f32)]);
+    let m1 = tr::mat(&[c0, c1]);
 
     let res = m0.mul(&m1);
     res.schedule();
@@ -1294,7 +1294,7 @@ fn array(#[case] device: Device) {
     let a1 = tr::literal(2);
     let a2 = tr::literal(3);
 
-    let array = tr::arr(&[&a0, &a1, &a2]);
+    let array = tr::arr(&[a0, a1, a2]);
     array.schedule();
 
     let graph = tr::compile().unwrap();
@@ -1309,7 +1309,7 @@ fn dyn_extract(#[case] device: Device) {
     let a1 = tr::literal(2);
     let a2 = tr::literal(3);
 
-    let array = tr::arr(&[&a0, &a1, &a2]);
+    let array = tr::arr(&[a0, a1, a2]);
 
     let idx = tr::sized_index(2);
 
@@ -1324,7 +1324,7 @@ fn dyn_extract(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn vec3_memory_layout(#[case] device: Device) {
-    let vec = tr::vec(&[&tr::sized_literal(1, 2), &tr::literal(2), &tr::literal(3)]);
+    let vec = tr::vec(&[tr::sized_literal(1, 2), tr::literal(2), tr::literal(3)]);
 
     let tmp = vec.gather(&tr::sized_index(2));
 
@@ -1340,9 +1340,9 @@ fn vec3_memory_layout(#[case] device: Device) {
 #[case(vulkan())]
 fn cast_array_vec(#[case] device: Device) {
     let arr = tr::arr(&[
-        &tr::sized_literal(1f32, 2),
-        &tr::literal(2f32),
-        &tr::literal(3f32),
+        tr::sized_literal(1f32, 2),
+        tr::literal(2f32),
+        tr::literal(3f32),
     ]);
     let vec = arr.cast(vartype::vector(f32::var_ty(), 3));
     let arr = vec.cast(vartype::array(i32::var_ty(), 3));
@@ -1417,13 +1417,13 @@ fn if_record1(#[case] device: Device) {
     let i = tr::array(&[0, 0], &device);
     let c = tr::array(&[true, false], &device);
 
-    let (if_start, mut state) = tr::if_start(&[&c, &i]);
+    let (if_start, mut state) = tr::if_start(&[c, i]);
     let c = state.next().unwrap();
     let i = state.next().unwrap();
 
     let i = i.add(&tr::literal(1));
 
-    let mut state = tr::if_end(&if_start, &[&c, &i]);
+    let mut state = tr::if_end(&if_start, &[c, i]);
     let c = state.next().unwrap();
     let i = state.next().unwrap();
 
@@ -1445,14 +1445,14 @@ fn loop_record1(#[case] device: Device) {
     let c = tr::literal(true);
 
     // Start the loop recording
-    let (loop_start, mut state) = tr::loop_start(&[&c, &i]);
+    let (loop_start, mut state) = tr::loop_start(&[c, i]);
     let c = state.next().unwrap();
     let i = state.next().unwrap();
 
     let i = i.add(&tr::literal(1));
     let c = c.and(&i.lt(&tr::literal(2)));
 
-    let mut state = tr::loop_end(&loop_start, &[&c, &i]);
+    let mut state = tr::loop_end(&loop_start, &[c, i]);
     let c = state.next().unwrap();
     let i = state.next().unwrap();
 

@@ -202,7 +202,7 @@ impl_wrap_input!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 #[macro_export]
 macro_rules! loop_record {
     ([$($vars:ident),*] while $cond:ident $content:block) => {
-        let cond_vars = [&$cond, $(&$vars),*];
+        let cond_vars = [$cond, $($vars),*];
         let (loop_start, mut state) = $crate::tr::loop_start(cond_vars.as_slice());
 
         $cond = state.next().unwrap();
@@ -210,7 +210,7 @@ macro_rules! loop_record {
 
         $content
 
-        let cond_vars = [&$cond, $(&$vars),*];
+        let cond_vars = [$cond, $($vars),*];
         let mut state = $crate::tr::loop_end(&loop_start, cond_vars.as_slice());
 
         $cond = state.next().unwrap();

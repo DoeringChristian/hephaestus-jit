@@ -326,7 +326,7 @@ pub(crate) fn new_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>
 /// We could introduce a 'namespace' cosntruct type, that would allow us to not actually use spir-v
 /// variables.
 ///
-pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>) {
+pub fn loop_start(state_vars: &[VarRef]) -> (VarRef, impl Iterator<Item = VarRef>) {
     let state = composite(state_vars);
 
     let ty = state.ty();
@@ -353,7 +353,7 @@ pub fn loop_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRe
 
     (loop_start, state)
 }
-pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<Item = VarRef> {
+pub fn loop_end(loop_start: &VarRef, state_vars: &[VarRef]) -> impl Iterator<Item = VarRef> {
     let state = composite(state_vars);
 
     let ty = state.ty();
@@ -383,7 +383,7 @@ pub fn loop_end(loop_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<It
 
     state
 }
-pub fn if_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>) {
+pub fn if_start(state_vars: &[VarRef]) -> (VarRef, impl Iterator<Item = VarRef>) {
     let state = composite(state_vars);
 
     let ty = state.ty();
@@ -410,7 +410,7 @@ pub fn if_start(state_vars: &[&VarRef]) -> (VarRef, impl Iterator<Item = VarRef>
     (if_start, state)
 }
 
-pub fn if_end(if_start: &VarRef, state_vars: &[&VarRef]) -> impl Iterator<Item = VarRef> {
+pub fn if_end(if_start: &VarRef, state_vars: &[VarRef]) -> impl Iterator<Item = VarRef> {
     let state = composite(state_vars);
 
     let ty = state.ty();
@@ -587,13 +587,13 @@ fn resulting_extent<'a>(refs: impl IntoIterator<Item = &'a VarRef>) -> Extent {
 ///
 /// Creates a composite struct, over a number of variables.
 ///
-pub fn composite(refs: &[&VarRef]) -> VarRef {
+pub fn composite(refs: &[VarRef]) -> VarRef {
     let tys = refs.iter().map(|r| r.ty()).collect::<Vec<_>>();
     let ty = vartype::composite(&tys);
 
     log::trace!("Constructing composite struct {ty:?}.");
 
-    let extent = resulting_extent(refs.iter().map(|r| *r));
+    let extent = resulting_extent(refs.iter());
     new_var(
         Var {
             op: Op::KernelOp(KernelOp::Construct),
@@ -601,14 +601,14 @@ pub fn composite(refs: &[&VarRef]) -> VarRef {
             extent,
             ..Default::default()
         },
-        refs.into_iter().cloned(),
+        refs.into_iter(),
     )
 }
-pub fn arr(refs: &[&VarRef]) -> VarRef {
+pub fn arr(refs: &[VarRef]) -> VarRef {
     // TODO: validate
     let ty = refs[0].ty();
 
-    let extent = resulting_extent(refs.iter().map(|r| *r));
+    let extent = resulting_extent(refs.iter());
 
     let ty = vartype::array(ty, refs.len());
 
@@ -619,19 +619,19 @@ pub fn arr(refs: &[&VarRef]) -> VarRef {
             extent,
             ..Default::default()
         },
-        refs.iter().cloned(),
+        refs.iter(),
     )
 }
 ///
 /// Returns a variable of type [VarType::Vec], from the elements given.
 /// The input variables should all have the same type.
 ///
-pub fn vec(refs: &[&VarRef]) -> VarRef {
+pub fn vec(refs: &[VarRef]) -> VarRef {
     // TODO: validate
     //
     let ty = refs[0].ty();
 
-    let extent = resulting_extent(refs.iter().map(|r| *r));
+    let extent = resulting_extent(refs.iter());
 
     let ty = vartype::vector(ty, refs.len());
 
@@ -642,11 +642,11 @@ pub fn vec(refs: &[&VarRef]) -> VarRef {
             extent,
             ..Default::default()
         },
-        refs.iter().cloned(),
+        refs.iter(),
     )
 }
 
-pub fn mat(columns: &[&VarRef]) -> VarRef {
+pub fn mat(columns: &[VarRef]) -> VarRef {
     // TODO: valiate
     let ty = columns[0].ty();
     let cols = columns.len();
@@ -655,7 +655,7 @@ pub fn mat(columns: &[&VarRef]) -> VarRef {
         _ => todo!(),
     };
 
-    let extent = resulting_extent(columns.iter().map(|r| *r));
+    let extent = resulting_extent(columns.iter());
 
     let ty = vartype::matrix(ty, cols, rows);
 
@@ -666,7 +666,7 @@ pub fn mat(columns: &[&VarRef]) -> VarRef {
             extent,
             ..Default::default()
         },
-        columns.iter().cloned(),
+        columns.iter(),
     )
 }
 
