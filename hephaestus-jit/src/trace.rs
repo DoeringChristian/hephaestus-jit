@@ -1286,10 +1286,9 @@ impl VarRef {
             [self, true_val, false_val],
         )
     }
-    pub fn tex_lookup(&self, pos: &[&VarRef]) -> Self {
-        assert!(pos.len() >= 1 && pos.len() <= 3);
-
-        let pos = vec(pos);
+    pub fn tex_lookup(&self, pos: &VarRef) -> Self {
+        let elements = pos.ty().num_elements().unwrap();
+        assert!(elements>= 1 && elements<= 3);
 
         let extent = pos.extent();
 

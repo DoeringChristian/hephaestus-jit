@@ -5,5 +5,7 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-hephaestus-jit = { path = "./hephaestus-jit" }
+jit = { path = "./hephaestus-jit", package = "hephaestus-jit" }
 hephaestus-macros = { path = "./hephaestus-macros" }
+
+mint = "0.5.9"

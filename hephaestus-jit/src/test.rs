@@ -249,9 +249,10 @@ fn texture2df32(#[case] device: Device) {
 
     let x = tr::sized_literal(0.5f32, 2);
     let y = tr::sized_literal(0.5f32, 2);
+    let pos = tr::vec(&[&x, &y]);
     // let z = tr::sized_literal(0.5f32, 2);
 
-    let v = tex.tex_lookup(&[&x, &y]);
+    let v = tex.tex_lookup(&pos);
 
     v.schedule();
     tr::compile().unwrap().launch(&device);
@@ -275,8 +276,9 @@ fn texture3df32(#[case] device: Device) {
     let x = tr::sized_literal(0.5f32, 2);
     let y = tr::sized_literal(0.3f32, 2);
     let z = tr::sized_literal(0.6f32, 2);
+    let pos = tr::vec(&[&x, &y, &z]);
 
-    let v = tex.tex_lookup(&[&x, &y, &z]);
+    let v = tex.tex_lookup(&pos);
 
     v.schedule();
 
@@ -300,9 +302,9 @@ fn texture2di32(#[case] device: Device) {
 
     let x = tr::sized_literal(0.5f32, 2);
     let y = tr::sized_literal(0.5f32, 2);
-    // let z = tr::sized_literal(0.5f32, 2);
+    let pos = tr::vec(&[&x, &y]);
 
-    let v = tex.tex_lookup(&[&x, &y]);
+    let v = tex.tex_lookup(&pos);
 
     v.schedule();
     tr::compile().unwrap().launch(&device);

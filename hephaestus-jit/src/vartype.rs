@@ -303,6 +303,80 @@ impl<const N: usize, T: AsVarType + 'static> AsVarType for [T; N] {
     }
 }
 
+// MINT types
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::Vector2<T> {
+    fn var_ty() -> &'static VarType {
+        vector(T::var_ty(), 2)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::Vector3<T> {
+    fn var_ty() -> &'static VarType {
+        vector(T::var_ty(), 3)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::Vector4<T> {
+    fn var_ty() -> &'static VarType {
+        vector(T::var_ty(), 4)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix2<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 2, 2)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix2x3<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 3, 2)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix2x4<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 4, 2)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix3<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 3, 3)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix3x2<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 2, 3)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix3x4<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 4, 3)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix4<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 4, 4)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix4x2<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 2, 4)
+    }
+}
+#[cfg(feature = "mint")]
+impl<T: AsVarType> AsVarType for mint::ColumnMatrix4x3<T> {
+    fn var_ty() -> &'static VarType {
+        matrix(T::var_ty(), 3, 4)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

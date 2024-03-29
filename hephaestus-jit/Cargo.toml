@@ -48,13 +48,16 @@ spirq = "1.1.1"
 
 hephaestus-macros = { workspace = true }
 
+mint = { workspace = true, optional = true }
+
 [features]
-default = ["profile-with-puffin"]
+default = ["profile-with-puffin", "mint"]
 profile-with-puffin = ["profiling/profile-with-puffin"]
 profile-with-optick = ["profiling/profile-with-optick"]
 profile-with-superluminal = ["profiling/profile-with-superluminal"]
 profile-with-tracing = ["profiling/profile-with-tracing"]
 profile-with-tracy = ["profiling/profile-with-tracy"]
+mint = ["dep:mint"]
 
 [dev-dependencies]
 rusty-hook = "^0.11.2"

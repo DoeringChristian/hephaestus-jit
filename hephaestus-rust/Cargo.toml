@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hephaestus-jit = { workspace = true, package = "hephaestus-jit" }
-paste = "1.0.14"
+jit = { workspace = true }
+mint = { workspace = true }

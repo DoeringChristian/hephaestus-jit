@@ -1,5 +1,6 @@
-use hephaestus_jit as jit;
+use jit;
 
+mod texture;
 mod var;
 
 pub use jit::{

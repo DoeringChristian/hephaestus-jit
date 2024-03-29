@@ -570,6 +570,7 @@ dependencies = [
  "itertools 0.11.0",
  "lazy_static",
  "log",
+ "mint",
  "ndarray",
  "num-traits",
  "once_cell",
@@ -605,7 +606,7 @@ name = "hephaestus-rust"
 version = "0.1.0"
 dependencies = [
  "hephaestus-jit",
- "paste",
+ "mint",
 ]
 
 [[package]]
@@ -816,6 +817,12 @@ name = "memchr"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "523dc4f511e55ab87b694dc30d0f820d60906ef06413f93d4d7a1385599cc149"
+
+[[package]]
+name = "mint"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53debba6bda7a793e5f99b8dacf19e626084f525f7829104ba9898f367d85ff"
 
 [[package]]
 name = "ndarray"

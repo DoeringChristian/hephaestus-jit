@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use hephaestus_jit as jit;
+use jit;
 
-pub struct Var<T>(jit::VarRef, PhantomData<T>);
+pub struct Var<T>(pub(crate) jit::VarRef, pub(crate) PhantomData<T>);
 
 impl<T> jit::Traverse for Var<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
