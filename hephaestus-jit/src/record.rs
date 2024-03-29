@@ -22,7 +22,7 @@ pub trait Traverse {
 }
 pub trait Construct {
     fn construct(
-        iter: &mut impl Iterator<Item = VarRef>,
+        vars: &mut impl Iterator<Item = VarRef>,
         layout: &mut impl Iterator<Item = usize>,
     ) -> Self;
 }

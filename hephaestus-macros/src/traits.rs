@@ -127,10 +127,11 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                     .iter()
                     .map(|field| &field.ty)
                     .collect::<Vec<_>>();
+                let n_params = types.len();
                 quote! {
                     impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
                         fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
-                            layout.next().unwrap();
+                            assert_eq!(layout.next().unwrap(), #n_params);
                             Self{
                                 #(#names: <#types as #crate_name::Construct>::construct(vars, layout),)*
                             }
@@ -138,16 +139,18 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                     }
                 }
             }
+
             syn::Fields::Unnamed(fields) => {
                 let types = fields
                     .unnamed
                     .iter()
                     .map(|field| &field.ty)
                     .collect::<Vec<_>>();
+                let n_params = types.len();
                 quote! {
                     impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
                         fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
-                            layout.next().unwrap();
+                            assert_eq!(layout.next().unwrap(), #n_params);
                             Self(#(<#types as #crate_name::Construct>::construct(vars, layout),)*)
                         }
                     }

@@ -10,6 +10,15 @@ impl<T> jit::Traverse for Var<T> {
         vars.push(self.0.clone());
     }
 }
+impl<T> jit::Construct for Var<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = jit::VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        assert_eq!(layout.next().unwrap(), 0);
+        Self(vars.next().unwrap(), PhantomData)
+    }
+}
 
 impl<T> AsRef<jit::VarRef> for Var<T> {
     fn as_ref(&self) -> &jit::VarRef {
@@ -82,20 +91,44 @@ impl<'a, T: jit::AsVarType> CompositeBuilder<'a, T> {
     }
 }
 
+impl<T: jit::AsVarType> Var<T> {
+    pub fn to_vec(&self) -> Vec<T> {
+        self.0.to_vec(..)
+    }
+    pub fn to_vec_range(&self, range: impl std::ops::RangeBounds<usize>) -> Vec<T> {
+        self.0.to_vec(range)
+    }
+    pub fn item(&self) -> T {
+        self.0.item()
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::*;
     use jit::AsVarType;
     #[test]
     fn composite() {
+        let device = vulkan(0);
+
         #[repr(C)]
-        #[derive(AsVarType, Clone, Copy)]
+        #[derive(AsVarType, Clone, Copy, Debug, PartialEq, Eq)]
         pub struct VecI3 {
             x: i32,
             y: i32,
         }
-        let x = Var::sized_literal(1, 10);
-        let y = Var::literal(1);
-        let v = Var::<VecI3>::composite().elem(&x).elem(&y).construct();
+
+        #[recorded]
+        fn kernel() -> Var<VecI3> {
+            let x = Var::sized_literal(1, 10);
+            let y = Var::literal(2);
+            let v = Var::<VecI3>::composite().elem(&x).elem(&y).construct();
+            v
+        }
+
+        let v = kernel(&device).unwrap().0;
+        let reference = (0..10).map(|_| VecI3 { x: 1, y: 2 }).collect::<Vec<_>>();
+
+        assert_eq!(v.to_vec(), reference);
     }
 }

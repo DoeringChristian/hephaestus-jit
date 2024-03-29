@@ -3,7 +3,7 @@
 pub mod backend;
 mod compiler;
 mod extent;
-mod graph;
+pub mod graph;
 pub mod ir;
 mod op;
 mod prehashed;
