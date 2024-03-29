@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 jit = { workspace = true }
 mint = { workspace = true }
+half = { workspace = true }

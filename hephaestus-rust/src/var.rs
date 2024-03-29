@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use half::f16;
 use jit;
 
 pub struct Var<T>(pub(crate) jit::VarRef, pub(crate) PhantomData<T>);
@@ -53,33 +54,89 @@ pub fn dyn_index(capacity: usize, size: impl AsRef<Var<u32>>) -> Var<u32> {
     Var::<u32>(jit::dynamic_index(capacity, &size.as_ref().0), PhantomData)
 }
 // Composite Constructors
-pub fn arr<'a, T: jit::AsVarType + 'a>(vars: impl IntoIterator<Item = &'a Var<T>>) -> Var<T> {
+pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl AsRef<Var<T>>; N]) -> Var<T> {
     // TODO: use threadlocal vec to collect
-    let refs = vars
-        .into_iter()
-        .map(|var| var.0.clone())
-        .collect::<Vec<_>>();
-    Var::<T>(jit::arr(&refs), PhantomData)
-}
-pub fn vec<'a, T: jit::AsVarType + 'a, A: AsRef<Var<T>>>(
-    vars: impl IntoIterator<Item = A>,
-) -> Var<T> {
-    // TODO: use threadlocal vec to collect
-    // Also, figure out better collection method
     let refs = vars
         .into_iter()
         .map(|var| var.as_ref().0.clone())
         .collect::<Vec<_>>();
-    Var::<T>(jit::vec(&refs), PhantomData)
+    Var::<T>(jit::arr(&refs), PhantomData)
+}
+pub fn vec2<T: jit::AsVarType>(x: impl AsRef<Var<T>>, y: impl AsRef<Var<T>>) -> Vector2<T> {
+    Var::<mint::Vector2<T>>(
+        jit::vec(&[x.as_ref().0.clone(), y.as_ref().0.clone()]),
+        PhantomData,
+    )
+}
+pub fn vec3<T: jit::AsVarType>(
+    x: impl AsRef<Var<T>>,
+    y: impl AsRef<Var<T>>,
+    z: impl AsRef<Var<T>>,
+) -> Vector3<T> {
+    Var::<mint::Vector3<T>>(
+        jit::vec(&[
+            x.as_ref().0.clone(),
+            y.as_ref().0.clone(),
+            z.as_ref().0.clone(),
+        ]),
+        PhantomData,
+    )
+}
+pub fn vec4<T: jit::AsVarType>(
+    x: impl AsRef<Var<T>>,
+    y: impl AsRef<Var<T>>,
+    z: impl AsRef<Var<T>>,
+    w: impl AsRef<Var<T>>,
+) -> Vector4<T> {
+    Var::<mint::Vector4<T>>(
+        jit::vec(&[
+            x.as_ref().0.clone(),
+            y.as_ref().0.clone(),
+            z.as_ref().0.clone(),
+            w.as_ref().0.clone(),
+        ]),
+        PhantomData,
+    )
 }
 
-pub fn mat<'a, T: jit::AsVarType + 'a>(columns: impl IntoIterator<Item = &'a Var<T>>) -> Var<T> {
-    // TODO: use threadlocal vec to collect
-    let refs = columns
-        .into_iter()
-        .map(|var| var.0.clone())
-        .collect::<Vec<_>>();
-    Var::<T>(jit::mat(&refs), PhantomData)
+pub fn mat2<T: jit::AsVarType>(
+    c0: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+    c1: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+) -> Var<mint::ColumnMatrix2<T>> {
+    Var::<mint::ColumnMatrix2<T>>(
+        jit::mat(&[c0.as_ref().0.clone(), c1.as_ref().0.clone()]),
+        PhantomData,
+    )
+}
+pub fn mat3<T: jit::AsVarType>(
+    c0: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+    c1: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+    c2: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+) -> Var<mint::ColumnMatrix3<T>> {
+    Var::<mint::ColumnMatrix3<T>>(
+        jit::mat(&[
+            c0.as_ref().0.clone(),
+            c1.as_ref().0.clone(),
+            c2.as_ref().0.clone(),
+        ]),
+        PhantomData,
+    )
+}
+pub fn mat4<T: jit::AsVarType>(
+    c0: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+    c1: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+    c2: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+    c3: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
+) -> Var<mint::ColumnMatrix4<T>> {
+    Var::<mint::ColumnMatrix4<T>>(
+        jit::mat(&[
+            c0.as_ref().0.clone(),
+            c1.as_ref().0.clone(),
+            c2.as_ref().0.clone(),
+            c3.as_ref().0.clone(),
+        ]),
+        PhantomData,
+    )
 }
 
 pub fn composite<T: jit::AsVarType>() -> CompositeBuilder<T> {
@@ -328,6 +385,32 @@ impl<T: jit::AsVarType> Var<T> {
         )
     }
 }
+
+pub type Float16 = Var<f16>;
+pub type Float32 = Var<f32>;
+pub type Float64 = Var<f64>;
+
+pub type Int8 = Var<i8>;
+pub type Int16 = Var<i16>;
+pub type Int32 = Var<i32>;
+pub type Int64 = Var<i64>;
+
+pub type UInt8 = Var<u8>;
+pub type UInt16 = Var<u16>;
+pub type UInt32 = Var<u32>;
+pub type UInt64 = Var<u64>;
+
+pub type Vector2<T> = Var<mint::Vector2<T>>;
+pub type Vector3<T> = Var<mint::Vector3<T>>;
+pub type Vector4<T> = Var<mint::Vector4<T>>;
+
+pub type Vector2f = Var<mint::Vector2<f32>>;
+pub type Vector3f = Var<mint::Vector3<f32>>;
+pub type Vector4f = Var<mint::Vector4<f32>>;
+
+pub type Vector2d = Var<mint::Vector2<f64>>;
+pub type Vector3d = Var<mint::Vector3<f64>>;
+pub type Vector4d = Var<mint::Vector4<f64>>;
 
 #[cfg(test)]
 mod test {

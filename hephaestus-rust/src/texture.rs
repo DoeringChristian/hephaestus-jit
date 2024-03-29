@@ -62,6 +62,15 @@ mod test {
         let x = sized_literal(0.5f32, 2);
         let y = literal(0.3f32);
         let z = literal(0.5f32);
-        let pos = vec([x, y, z]);
+        let pos = vec3(x, y, z);
+
+        let res = tex.lookup(pos).collect::<Vec<_>>();
+
+        res[0].schedule();
+
+        let graph = compile().unwrap();
+        graph.launch(&device).unwrap();
+
+        assert_eq!(res[0].to_vec(), vec![1.0; 2]);
     }
 }

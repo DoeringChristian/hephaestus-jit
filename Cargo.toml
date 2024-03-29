@@ -9,3 +9,4 @@ jit = { path = "./hephaestus-jit", package = "hephaestus-jit" }
 hephaestus-macros = { path = "./hephaestus-macros" }
 
 mint = "0.5.9"
+half = { version = "2.3.1", features = ["num-traits", "bytemuck"]}

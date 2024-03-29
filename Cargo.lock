@@ -605,6 +605,7 @@ dependencies = [
 name = "hephaestus-rust"
 version = "0.1.0"
 dependencies = [
+ "half 2.3.1",
  "hephaestus-jit",
  "mint",
 ]
