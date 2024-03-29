@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "hephaestus-jit", "hephaestus-macros",
+    "hephaestus-jit", "hephaestus-macros", "hephaestus-rust",
 ]
 resolver = "2"
 

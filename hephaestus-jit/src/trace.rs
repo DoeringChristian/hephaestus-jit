@@ -27,7 +27,7 @@ use slotmap::{DefaultKey, SlotMap};
 /// The equivalent struct in Dr.Jit would be `ThreadState`
 ///
 #[derive(Debug)]
-pub struct ThreadState {
+pub(crate) struct ThreadState {
     // Scheduled variables
     // TODO: maybe use IndexSet
     pub scheduled: IndexMap<VarId, VarRef>,
@@ -36,8 +36,6 @@ pub struct ThreadState {
     // Start of the next group
     pub start: usize,
 
-    // Represents the current scope
-    pub scope: usize,
 
     // Keeps a stack of side effect variables for recording loops.
     // These will be made dependencies of the loop.
@@ -57,13 +55,6 @@ impl ThreadState {
             self.start = end;
         }
     }
-    pub fn scope(&self) -> ScopeId {
-        ScopeId(self.scope)
-    }
-    pub fn new_scope(&mut self) -> ScopeId {
-        self.scope = with_trace(|trace| trace.new_scope()).0;
-        self.scope()
-    }
 }
 impl Default for ThreadState {
     fn default() -> Self {
@@ -71,18 +62,17 @@ impl Default for ThreadState {
             scheduled: Default::default(),
             groups: Default::default(),
             start: Default::default(),
-            scope: with_trace(|trace| trace.new_scope()).0,
             recorded_se_start: Default::default(),
             recorded_se: Default::default(),
         }
     }
 }
 
-pub static TRACE: Lazy<Mutex<Trace>> = Lazy::new(|| Mutex::new(Trace::default()));
+pub(crate) static TRACE: Lazy<Mutex<Trace>> = Lazy::new(|| Mutex::new(Trace::default()));
 
 thread_local! {
     // pub static TRACE: RefCell<Trace> = RefCell::new(Default::default());
-    pub static TS: RefCell<ThreadState> = RefCell::new(Default::default());
+    pub(crate) static TS: RefCell<ThreadState> = RefCell::new(Default::default());
 }
 
 ///
@@ -92,9 +82,8 @@ thread_local! {
 /// The Dr.Jit equivalent would be the `State` struct
 ///
 #[derive(Default, Debug)]
-pub struct Trace {
+pub(crate) struct Trace {
     vars: SlotMap<DefaultKey, Var>,
-    scope_ctr: usize,
 }
 impl Trace {
     pub fn var(&self, id: VarId) -> &Var {
@@ -171,11 +160,6 @@ impl Trace {
     pub fn is_empty(&self) -> bool {
         self.vars.is_empty()
     }
-    pub fn new_scope(&mut self) -> ScopeId {
-        let scope = ScopeId(self.scope_ctr);
-        self.scope_ctr += 1;
-        scope
-    }
 }
 pub fn is_empty() -> bool {
     with_trace(|trace| trace.is_empty())
@@ -193,10 +177,6 @@ impl Drop for Trace {
 ///
 #[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VarId(DefaultKey);
-
-/// TODO: maybe make non-null
-#[derive(Default, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScopeId(pub(crate) usize);
 
 ///
 /// This is a wrapper over the [VarId] id struct.
@@ -287,7 +267,7 @@ impl Default for Var {
         }
     }
 }
-pub fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
+pub(crate) fn with_trace<T, F: FnOnce(&mut Trace) -> T>(f: F) -> T {
     let mut t = TRACE.lock().unwrap();
     f(&mut *t)
     // TRACE.with(|t| {
@@ -325,16 +305,6 @@ pub(crate) fn new_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>
         schedule_eval();
     }
 
-    // // Set scope as max between thread state and dependencies
-    // v.scope = [TS.with(|s| s.borrow().scope())]
-    //     .into_iter()
-    //     .chain(
-    //         deps.iter()
-    //             .map(|id| with_trace(|trace| trace.var(*id).scope)),
-    //     )
-    //     .max()
-    //     .unwrap();
-
     // Set dependencies
 
     v.deps = deps;
@@ -348,9 +318,6 @@ pub(crate) fn new_var<'a>(mut v: Var, deps: impl IntoIterator<Item = &'a VarRef>
     }
     // TODO: maybe mark variables dirty that have been referenced with RefMut
     res
-}
-pub fn new_scope() -> ScopeId {
-    TS.with(|ts| ts.borrow_mut().new_scope())
 }
 
 // Loop stuff
@@ -858,18 +825,6 @@ impl VarRef {
     pub fn dirty(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).dirty)
     }
-    /// Schedule the variable for execution in the current group
-    // pub fn schedule(&self) {
-    //     // We should not be able to schedule already evaluated variables as well as ones who's
-    //     // extent is unsized
-    //     if self.is_evaluated() || self.is_unsized() {
-    //         return;
-    //     }
-    //     TS.with(|s| {
-    //         let mut s = s.borrow_mut();
-    //         s.scheduled.entry(self.id()).or_insert_with(|| self.clone());
-    //     })
-    // }
     pub fn schedule(&self) {
         // We should not be able to schedule already evaluated variables as well as ones who's
         // extent is unsized
