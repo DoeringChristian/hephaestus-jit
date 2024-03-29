@@ -605,6 +605,7 @@ name = "hephaestus-rust"
 version = "0.1.0"
 dependencies = [
  "hephaestus-jit",
+ "paste",
 ]
 
 [[package]]

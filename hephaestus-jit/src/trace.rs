@@ -36,7 +36,6 @@ pub(crate) struct ThreadState {
     // Start of the next group
     pub start: usize,
 
-
     // Keeps a stack of side effect variables for recording loops.
     // These will be made dependencies of the loop.
     pub recorded_se_start: Vec<usize>,
@@ -949,15 +948,6 @@ impl VarRef {
             [self],
         )
     }
-    // pub fn reinterpret(&self, ty: VarType) -> Self {
-    //     // TODO: for indirect dispatch, we have to change the dynamic size
-    //
-    //     let bytesize = self.extent().capacity() * self.ty().size();
-    //     assert!(bytesize % ty.size() == 0);
-    //
-    //     todo!()
-    //     // assert!(self.size() * self.ty().size() % ty.size())
-    // }
 
     pub fn bitcast(&self, ty: &'static VarType) -> Self {
         let extent = resulting_extent([self]);

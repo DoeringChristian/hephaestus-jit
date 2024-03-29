@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 hephaestus-jit = { workspace = true, package = "hephaestus-jit" }
+paste = "1.0.14"

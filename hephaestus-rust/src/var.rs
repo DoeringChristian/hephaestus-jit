@@ -91,6 +91,17 @@ impl<'a, T: jit::AsVarType> CompositeBuilder<'a, T> {
     }
 }
 
+// Extraction
+impl<'a, T: jit::AsVarType> Var<T> {
+    pub fn extract<U: jit::AsVarType>(&self, elem: usize) -> Var<U> {
+        Var::<U>(self.0.extract(elem), PhantomData)
+    }
+    pub fn extract_dyn<U: jit::AsVarType>(&self, elem: &Var<u32>) -> Var<U> {
+        Var::<U>(self.0.extract_dyn(&elem.0), PhantomData)
+    }
+}
+
+// To Host functions
 impl<T: jit::AsVarType> Var<T> {
     pub fn to_vec(&self) -> Vec<T> {
         self.0.to_vec(..)
@@ -100,6 +111,162 @@ impl<T: jit::AsVarType> Var<T> {
     }
     pub fn item(&self) -> T {
         self.0.item()
+    }
+}
+
+// Utility functions
+impl<T: jit::AsVarType> Var<T> {
+    pub fn id(&self) -> jit::VarId {
+        self.0.id()
+    }
+    pub fn schedule(&self) {
+        self.0.schedule()
+    }
+    pub fn is_evaluated(&self) -> bool {
+        self.0.is_evaluated()
+    }
+    pub fn rc(&self) -> usize {
+        self.0.rc()
+    }
+    pub fn ty(&self) -> &'static jit::VarType {
+        self.0.ty()
+    }
+}
+
+macro_rules! uop {
+    ($op:ident) => {
+        pub fn $op(&self) -> Self {
+            Self(self.0.$op(), PhantomData)
+        }
+    };
+}
+
+// Unary Operations
+impl<T: jit::AsVarType> Var<T> {
+    uop!(neg);
+    uop!(sqrt);
+    uop!(abs);
+    uop!(sin);
+    uop!(cos);
+    uop!(exp2);
+    uop!(log2);
+}
+
+macro_rules! bop {
+    ($op:ident -> $result_type:ident) => {
+        pub fn $op(&self, other: &Self) -> Var<$result_type> {
+            Var::<$result_type>(self.0.$op(&other.0), PhantomData)
+        }
+    };
+    ($op:ident) => {
+        pub fn $op(&self, other: &Self) -> Self {
+            Self(self.0.$op(&other.0), PhantomData)
+        }
+    };
+}
+
+// Binary Operations
+impl<T: jit::AsVarType> Var<T> {
+    // Binary operations returing the same type
+    bop!(add);
+    bop!(sub);
+    bop!(mul);
+    bop!(div);
+    bop!(modulus);
+    bop!(min);
+    bop!(max);
+
+    // Bitwise
+    bop!(and);
+    bop!(or);
+    bop!(xor);
+
+    // Comparisons
+    bop!(eq -> bool);
+    bop!(neq -> bool);
+    bop!(lt -> bool);
+    bop!(le -> bool);
+    bop!(gt -> bool);
+    bop!(ge -> bool);
+
+    // Shift
+    pub fn shr(&self, offset: &Var<i32>) -> Self {
+        Self(self.0.shr(&offset.0), PhantomData)
+    }
+    pub fn shl(&self, offset: &Var<i32>) -> Self {
+        Self(self.0.shl(&offset.0), PhantomData)
+    }
+}
+
+// Trinary Operations
+impl<T: jit::AsVarType> Var<T> {
+    pub fn fma(&self, b: &Self, c: &Self) -> Self {
+        Self(self.0.fma(&b.0, &c.0), PhantomData)
+    }
+}
+impl Var<bool> {
+    pub fn select<T: jit::AsVarType>(&self, true_val: &Var<T>, false_val: &Var<T>) -> Var<T> {
+        Var::<T>(self.0.select(&true_val.0, &false_val.0), PhantomData)
+    }
+}
+
+// Casting
+impl<T: jit::AsVarType> Var<T> {
+    pub fn cast<U: jit::AsVarType>(&self) -> Var<U> {
+        Var::<U>(self.0.cast(U::var_ty()), PhantomData)
+    }
+    pub fn bitcast<U: jit::AsVarType>(&self) -> Var<U> {
+        Var::<U>(self.0.bitcast(U::var_ty()), PhantomData)
+    }
+}
+
+// Gather/Scatter
+impl<T: jit::AsVarType> Var<T> {
+    pub fn gather(&self, index: &Var<u32>) -> Self {
+        Self(self.0.gather(&index.0), PhantomData)
+    }
+    pub fn gather_if(&self, index: &Var<u32>, condition: &Var<bool>) -> Self {
+        Self(self.0.gather_if(&index.0, &condition.0), PhantomData)
+    }
+
+    pub fn scatter(&self, dst: &Self, index: &Var<u32>) {
+        self.0.scatter(&dst.0, &index.0)
+    }
+    pub fn scatter_if(&self, dst: &Self, index: &Var<u32>, condition: &Var<bool>) {
+        self.0.scatter_if(&dst.0, &index.0, &condition.0)
+    }
+
+    pub fn scatter_reduce(&self, dst: &Self, index: &Var<u32>, op: jit::ReduceOp) {
+        self.0.scatter_reduce(&dst.0, &index.0, op)
+    }
+    pub fn scatter_reduce_if(
+        &self,
+        dst: &Self,
+        index: &Var<u32>,
+        condition: &Var<bool>,
+        op: jit::ReduceOp,
+    ) {
+        self.0.scatter_reduce_if(&dst.0, &index.0, &condition.0, op)
+    }
+
+    pub fn scatter_atomic(&self, dst: &Self, index: &Var<u32>, op: jit::ReduceOp) -> Self {
+        Self(self.0.scatter_atomic(&dst.0, &index.0, op), PhantomData)
+    }
+    pub fn scatter_atomic_if(
+        &self,
+        dst: &Self,
+        index: &Var<u32>,
+        condition: &Var<bool>,
+        op: jit::ReduceOp,
+    ) -> Self {
+        Self(
+            self.0.scatter_atomic_if(&dst.0, &index.0, &condition.0, op),
+            PhantomData,
+        )
+    }
+
+    pub fn atomic_inc(&self, index: &Var<u32>, condition: &Var<bool>) -> Self {
+        Self(self.0.atomic_inc(&index.0, &condition.0), PhantomData)
     }
 }
 
