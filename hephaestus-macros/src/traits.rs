@@ -53,7 +53,7 @@ pub fn derive_as_var_type_impl(input: DeriveInput) -> TokenStream {
     quote! {
         impl #impl_generics #crate_name::vartype::AsVarType for #ident #ty_generics #where_clause{
             fn var_ty() -> &'static #crate_name::vartype::VarType{
-                composite(&[
+                #crate_name::vartype::composite(&[
                     #(<#types as #crate_name::vartype::AsVarType>::var_ty()),*
                 ])
             }

@@ -12,8 +12,12 @@ use crate::{backend, graph, tr};
 use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 
 pub trait Traverse {
-    // This operation flattens the structure to it's VarRef components
-    // fn traverse<'a>(&'a self);
+    /// Flattens the collection of variables, and records the layout.
+    ///
+    /// The layout vector records the number of direct elemenmts in a collection.
+    /// Therefore 0 for VarRef and N for [T; N] where T: Traverse.
+    /// This is used by the [`Construct`] trait to allocate vectors.
+    ///
     fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>);
 }
 pub trait Construct {
@@ -25,13 +29,13 @@ pub trait Construct {
 
 impl Traverse for VarRef {
     fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(1);
+        layout.push(0);
         vars.push(self.clone())
     }
 }
 impl<T: Traverse> Traverse for &T {
     fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(1);
+        layout.push(0);
         (**self).traverse(vars, layout);
     }
 }
@@ -41,7 +45,7 @@ impl Construct for VarRef {
         vars: &mut impl Iterator<Item = VarRef>,
         layout: &mut impl Iterator<Item = usize>,
     ) -> Self {
-        layout.next().unwrap();
+        assert_eq!(layout.next().unwrap(), 0);
         vars.next().unwrap()
     }
 }
