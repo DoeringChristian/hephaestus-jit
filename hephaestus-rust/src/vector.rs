@@ -74,6 +74,12 @@ impl<T: jit::AsVarType> Vector2<T> {
     pub fn y(&self) -> Var<T> {
         self.0.extract(1).into()
     }
+    pub fn xy(&self) -> Vector2<T> {
+        vec2(self.x(), self.y())
+    }
+    pub fn yx(&self) -> Vector2<T> {
+        vec2(self.y(), self.x())
+    }
 }
 impl<T: jit::AsVarType> Vector3<T> {
     pub fn x(&self) -> Var<T> {
@@ -84,6 +90,41 @@ impl<T: jit::AsVarType> Vector3<T> {
     }
     pub fn z(&self) -> Var<T> {
         self.0.extract(2).into()
+    }
+
+    pub fn xy(&self) -> Vector2<T> {
+        vec2(self.x(), self.y())
+    }
+    pub fn yx(&self) -> Vector2<T> {
+        vec2(self.y(), self.x())
+    }
+    pub fn xz(&self) -> Vector2<T> {
+        vec2(self.x(), self.z())
+    }
+    pub fn zx(&self) -> Vector2<T> {
+        vec2(self.z(), self.x())
+    }
+    pub fn zy(&self) -> Vector2<T> {
+        vec2(self.z(), self.y())
+    }
+
+    pub fn xyz(&self) -> Vector3<T> {
+        vec3(self.x(), self.y(), self.z())
+    }
+    pub fn xzy(&self) -> Vector3<T> {
+        vec3(self.x(), self.z(), self.y())
+    }
+    pub fn yxz(&self) -> Vector3<T> {
+        vec3(self.y(), self.x(), self.z())
+    }
+    pub fn yzx(&self) -> Vector3<T> {
+        vec3(self.y(), self.z(), self.x())
+    }
+    pub fn zxy(&self) -> Vector3<T> {
+        vec3(self.z(), self.x(), self.y())
+    }
+    pub fn zyx(&self) -> Vector3<T> {
+        vec3(self.z(), self.y(), self.x())
     }
 }
 impl<T: jit::AsVarType> Vector4<T> {
