@@ -10,7 +10,7 @@ pub enum Bop {
     Max,
 
     // Vector
-    Dot,
+    Inner, // Inner/dot product
 
     // Bitwise
     And,

@@ -802,7 +802,15 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::Bop::Min => writeln!(s, "\t{glsl_ty} {dst} = min({lhs}, {rhs});")?,
                     crate::op::Bop::Max => writeln!(s, "\t{glsl_ty} {dst} = max({lhs}, {rhs});")?,
                     // Vector
-                    crate::op::Bop::Dot => writeln!(s, "\t{glsl_ty} {dst} = dot({lhs}, {rhs});")?,
+                    crate::op::Bop::Inner => {
+                        let src_ty = ir.var(deps[0]).ty;
+                        match (ty, src_ty) {
+                            (VarType::Vec { .. }, VarType::Vec { .. }) => {
+                                writeln!(s, "\t{glsl_ty} {dst} = dot({lhs}, {rhs});")?;
+                            }
+                            _ => writeln!(s, "\t{glsl_ty} {dst} = {lhs} * {rhs};")?,
+                        }
+                    }
                     // Binary
                     crate::op::Bop::And => match ty {
                         VarType::Bool => writeln!(s, "\t{glsl_ty} {dst} = {lhs} && {rhs};")?,

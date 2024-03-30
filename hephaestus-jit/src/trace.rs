@@ -909,7 +909,7 @@ impl VarRef {
     bop!(max);
 
     // Vector
-    bop!(dot);
+    bop!(inner);
 
     // Bitwise
     // TODO: more asserts for binary operations

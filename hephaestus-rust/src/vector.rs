@@ -52,17 +52,17 @@ pub fn vec4<T: jit::AsVarType>(
 
 impl<T: jit::AsVarType> Vector2<T> {
     pub fn dot(&self, other: impl AsRef<Self>) -> Var<T> {
-        self.0.dot(&other.as_ref().0).into()
+        self.0.inner(&other.as_ref().0).into()
     }
 }
 impl<T: jit::AsVarType> Vector3<T> {
     pub fn dot(&self, other: impl AsRef<Self>) -> Var<T> {
-        self.0.dot(&other.as_ref().0).into()
+        self.0.inner(&other.as_ref().0).into()
     }
 }
 impl<T: jit::AsVarType> Vector4<T> {
     pub fn dot(&self, other: impl AsRef<Self>) -> Var<T> {
-        self.0.dot(&other.as_ref().0).into()
+        self.0.inner(&other.as_ref().0).into()
     }
 }
 
