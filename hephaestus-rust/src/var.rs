@@ -6,6 +6,13 @@ use jit;
 #[derive(Clone, Debug)]
 pub struct Var<T>(pub(crate) jit::VarRef, pub(crate) PhantomData<T>);
 
+impl<T: jit::AsVarType> From<jit::VarRef> for Var<T> {
+    fn from(value: jit::VarRef) -> Self {
+        assert_eq!(T::var_ty(), value.ty());
+        Self(value, PhantomData)
+    }
+}
+
 impl<T> jit::Traverse for Var<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
         layout.push(0);
@@ -62,82 +69,6 @@ pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl AsRef<Var<T>>
         .map(|var| var.as_ref().0.clone())
         .collect::<Vec<_>>();
     Var::<T>(jit::arr(&refs), PhantomData)
-}
-pub fn vec2<T: jit::AsVarType>(x: impl AsRef<Var<T>>, y: impl AsRef<Var<T>>) -> Vector2<T> {
-    Var::<mint::Vector2<T>>(
-        jit::vec(&[x.as_ref().0.clone(), y.as_ref().0.clone()]),
-        PhantomData,
-    )
-}
-pub fn vec3<T: jit::AsVarType>(
-    x: impl AsRef<Var<T>>,
-    y: impl AsRef<Var<T>>,
-    z: impl AsRef<Var<T>>,
-) -> Vector3<T> {
-    Var::<mint::Vector3<T>>(
-        jit::vec(&[
-            x.as_ref().0.clone(),
-            y.as_ref().0.clone(),
-            z.as_ref().0.clone(),
-        ]),
-        PhantomData,
-    )
-}
-pub fn vec4<T: jit::AsVarType>(
-    x: impl AsRef<Var<T>>,
-    y: impl AsRef<Var<T>>,
-    z: impl AsRef<Var<T>>,
-    w: impl AsRef<Var<T>>,
-) -> Vector4<T> {
-    Var::<mint::Vector4<T>>(
-        jit::vec(&[
-            x.as_ref().0.clone(),
-            y.as_ref().0.clone(),
-            z.as_ref().0.clone(),
-            w.as_ref().0.clone(),
-        ]),
-        PhantomData,
-    )
-}
-
-pub fn mat2<T: jit::AsVarType>(
-    c0: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-    c1: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-) -> Var<mint::ColumnMatrix2<T>> {
-    Var::<mint::ColumnMatrix2<T>>(
-        jit::mat(&[c0.as_ref().0.clone(), c1.as_ref().0.clone()]),
-        PhantomData,
-    )
-}
-pub fn mat3<T: jit::AsVarType>(
-    c0: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-    c1: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-    c2: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-) -> Var<mint::ColumnMatrix3<T>> {
-    Var::<mint::ColumnMatrix3<T>>(
-        jit::mat(&[
-            c0.as_ref().0.clone(),
-            c1.as_ref().0.clone(),
-            c2.as_ref().0.clone(),
-        ]),
-        PhantomData,
-    )
-}
-pub fn mat4<T: jit::AsVarType>(
-    c0: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-    c1: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-    c2: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-    c3: impl AsRef<Var<mint::ColumnMatrix2<T>>>,
-) -> Var<mint::ColumnMatrix4<T>> {
-    Var::<mint::ColumnMatrix4<T>>(
-        jit::mat(&[
-            c0.as_ref().0.clone(),
-            c1.as_ref().0.clone(),
-            c2.as_ref().0.clone(),
-            c3.as_ref().0.clone(),
-        ]),
-        PhantomData,
-    )
 }
 
 pub fn composite<T: jit::AsVarType>() -> CompositeBuilder<T> {
@@ -400,60 +331,6 @@ pub type UInt8 = Var<u8>;
 pub type UInt16 = Var<u16>;
 pub type UInt32 = Var<u32>;
 pub type UInt64 = Var<u64>;
-
-pub type Vector2<T> = Var<mint::Vector2<T>>;
-pub type Vector3<T> = Var<mint::Vector3<T>>;
-pub type Vector4<T> = Var<mint::Vector4<T>>;
-
-pub type Vector2f = Vector2<f32>;
-pub type Vector3f = Vector3<f32>;
-pub type Vector4f = Vector4<f32>;
-
-pub type Vector2d = Vector2<f64>;
-pub type Vector3d = Vector3<f64>;
-pub type Vector4d = Vector4<f64>;
-
-pub type Vector2i = Vector2<i32>;
-pub type Vector3i = Vector3<i32>;
-pub type Vector4i = Vector4<i32>;
-
-pub type Vector2u = Vector2<u32>;
-pub type Vector3u = Vector3<u32>;
-pub type Vector4u = Vector4<u32>;
-
-impl<T: jit::AsVarType> Vector2<T> {
-    pub fn x(&self) -> Var<T> {
-        self.extract(0)
-    }
-    pub fn y(&self) -> Var<T> {
-        self.extract(1)
-    }
-}
-impl<T: jit::AsVarType> Vector3<T> {
-    pub fn x(&self) -> Var<T> {
-        self.extract(0)
-    }
-    pub fn y(&self) -> Var<T> {
-        self.extract(1)
-    }
-    pub fn z(&self) -> Var<T> {
-        self.extract(1)
-    }
-}
-impl<T: jit::AsVarType> Vector4<T> {
-    pub fn x(&self) -> Var<T> {
-        self.extract(0)
-    }
-    pub fn y(&self) -> Var<T> {
-        self.extract(1)
-    }
-    pub fn z(&self) -> Var<T> {
-        self.extract(1)
-    }
-    pub fn w(&self) -> Var<T> {
-        self.extract(1)
-    }
-}
 
 #[cfg(test)]
 mod test {

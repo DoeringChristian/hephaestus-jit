@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use jit;
 
 use crate::var::*;
+use crate::vector::*;
 use crate::{Instance, Intersection, Ray3f};
 
 #[derive(Debug, Clone)]
@@ -84,14 +85,10 @@ mod test {
         let z = hep::array(&[0f32, 0f32, 0f32], &device);
         let vertices = hep::vec3(x, y, z);
 
-        let triangles = hep::array(
-            &[mint::Vector3 {
-                x: 0u32,
-                y: 1u32,
-                z: 2u32,
-            }],
-            &device,
-        );
+        let x = hep::sized_literal(0u32, 1);
+        let y = hep::literal(1u32);
+        let z = hep::literal(2u32);
+        let triangles = hep::vec3(x, y, z);
 
         let instances = hep::array(
             &[jit::Instance {

@@ -1176,6 +1176,7 @@ impl VarRef {
     }
     pub fn capacity(&self) -> usize {
         match self.extent() {
+            Extent::None => 0,
             Extent::Size(size) => size,
             Extent::DynSize { capacity, .. } => capacity,
             _ => todo!(),
