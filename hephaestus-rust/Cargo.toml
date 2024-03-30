@@ -9,3 +9,4 @@ edition = "2021"
 jit = { workspace = true }
 mint = { workspace = true }
 half = { workspace = true }
+insta = { workspace = true }

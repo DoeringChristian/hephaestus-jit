@@ -1,0 +1,20 @@
+---
+source: hephaestus-rust/src/accel.rs
+expression: intersection.to_vec()
+---
+[
+    Intersection {
+        bx: 0.39999998,
+        by: 0.20000005,
+        instance_id: 0,
+        primitive_idx: 0,
+        valid: 1,
+    },
+    Intersection {
+        bx: 0.0,
+        by: 0.0,
+        instance_id: 0,
+        primitive_idx: 0,
+        valid: 0,
+    },
+]

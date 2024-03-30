@@ -154,6 +154,8 @@ mod test {
 
         let intersection = render(&device, &scene, &ray).unwrap().0;
 
+        insta::assert_debug_snapshot!(intersection.to_vec());
+
         dbg!(intersection.to_vec());
     }
 }
