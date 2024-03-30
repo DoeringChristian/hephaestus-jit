@@ -1339,8 +1339,10 @@ impl VarRef {
             [self],
         )
     }
-    pub fn trace_ray(&self, o: &Self, d: &Self, tmin: &Self, tmax: &Self) -> Self {
-        let extent = resulting_extent([o, d, tmin, tmax].into_iter());
+    pub fn trace_ray(&self, ray: &Self) -> Self {
+        let extent = resulting_extent([ray].into_iter());
+
+        assert_eq!(ray.ty(), vartype::Ray3f::var_ty());
 
         let ty = Intersection::var_ty();
 
@@ -1349,11 +1351,11 @@ impl VarRef {
         new_var(
             Var {
                 op: Op::KernelOp(KernelOp::TraceRay),
-                ty: ty,
+                ty,
                 extent,
                 ..Default::default()
             },
-            [&accel_ref, o, d, tmin, tmax],
+            [&accel_ref, ray],
         )
     }
 }

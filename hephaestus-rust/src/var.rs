@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use half::f16;
 use jit;
 
+#[derive(Clone, Debug)]
 pub struct Var<T>(pub(crate) jit::VarRef, pub(crate) PhantomData<T>);
 
 impl<T> jit::Traverse for Var<T> {
@@ -404,13 +405,21 @@ pub type Vector2<T> = Var<mint::Vector2<T>>;
 pub type Vector3<T> = Var<mint::Vector3<T>>;
 pub type Vector4<T> = Var<mint::Vector4<T>>;
 
-pub type Vector2f = Var<mint::Vector2<f32>>;
-pub type Vector3f = Var<mint::Vector3<f32>>;
-pub type Vector4f = Var<mint::Vector4<f32>>;
+pub type Vector2f = Vector2<f32>;
+pub type Vector3f = Vector3<f32>;
+pub type Vector4f = Vector4<f32>;
 
-pub type Vector2d = Var<mint::Vector2<f64>>;
-pub type Vector3d = Var<mint::Vector3<f64>>;
-pub type Vector4d = Var<mint::Vector4<f64>>;
+pub type Vector2d = Vector2<f64>;
+pub type Vector3d = Vector3<f64>;
+pub type Vector4d = Vector4<f64>;
+
+pub type Vector2i = Vector2<i32>;
+pub type Vector3i = Vector3<i32>;
+pub type Vector4i = Vector4<i32>;
+
+pub type Vector2u = Vector2<u32>;
+pub type Vector3u = Vector3<u32>;
+pub type Vector4u = Vector4<u32>;
 
 #[cfg(test)]
 mod test {

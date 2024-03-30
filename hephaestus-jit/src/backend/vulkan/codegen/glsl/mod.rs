@@ -257,6 +257,14 @@ fn memory_type(ty: &VarType) -> &VarType {
     match ty {
         VarType::Bool => u8::var_ty(),
         VarType::Vec { ty, num } if *num == 3 => vartype::array(ty, 3),
+        VarType::Struct { tys } => {
+            let tys = tys.iter().map(|ty| memory_type(ty)).collect::<Vec<_>>();
+            vartype::composite(&tys)
+        }
+        VarType::Array { ty, num } => {
+            let ty = memory_type(ty);
+            vartype::array(&ty, *num)
+        }
         _ => ty,
     }
 }
@@ -734,14 +742,16 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
             }
             crate::op::KernelOp::TraceRay => {
                 let accel_idx = ir.var(deps[0]).data;
-                let o = Reg(deps[1]);
-                let d = Reg(deps[2]);
-                let tmin = Reg(deps[3]);
-                let tmax = Reg(deps[4]);
+                let ray = Reg(deps[1]);
+                // let o = Reg(deps[1]);
+                // let d = Reg(deps[2]);
+                // let tmin = Reg(deps[3]);
+                // let tmax = Reg(deps[4]);
 
                 let dst = Reg(id);
 
-                writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], gl_RayFlagsOpaqueEXT, 0xff, {o}, {tmin}, {d}, {tmax});")?;
+                writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], gl_RayFlagsOpaqueEXT, 0xff, {ray}.e0, {ray}.e2, {ray}.e1, {ray}.e3);")?;
+                // writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], gl_RayFlagsOpaqueEXT, 0xff, {o}, {tmin}, {d}, {tmax});")?;
                 // writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], gl_RayFlagsOpaqueEXT, 0xff, vec3(0.6, 0.6, 1.0), 0.001, vec3(0, 0, -1), 10000.);")?;
                 // writeln!(s, "\trayQueryInitializeEXT(ray_query, accels[{accel_idx}], 0x01, 0xff, vec3(0.6, 0.6, 0.1), -10, vec3(0, 0, -1), 10000.);")?;
 

@@ -458,11 +458,12 @@ fn accel(#[case] device: Device) {
     ]);
     let tmin = tr::literal(0f32);
     let tmax = tr::literal(10_000f32);
+    let ray = tr::composite(&[o, d, tmin, tmax]);
 
     // d.schedule();
     // o.schedule();
 
-    let intersection = accel.trace_ray(&o, &d, &tmin, &tmax);
+    let intersection = accel.trace_ray(&ray);
     intersection.schedule();
 
     tr::with_trace(|trace| {
