@@ -10,6 +10,10 @@ pub use jit::{
 };
 
 pub use accel::{Accel, AccelDesc, GeometryDesc};
+pub use point::{
+    point2, point3, Point2, Point2d, Point2f, Point2i, Point2u, Point3, Point3d, Point3f, Point3i,
+    Point3u,
+};
 pub use texture::Texture;
 pub use var::{arr, array, composite, dyn_index, index, literal, sized_index, sized_literal, Var};
 pub use var::{
