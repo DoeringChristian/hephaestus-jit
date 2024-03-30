@@ -421,6 +421,40 @@ pub type Vector2u = Vector2<u32>;
 pub type Vector3u = Vector3<u32>;
 pub type Vector4u = Vector4<u32>;
 
+impl<T: jit::AsVarType> Vector2<T> {
+    pub fn x(&self) -> Var<T> {
+        self.extract(0)
+    }
+    pub fn y(&self) -> Var<T> {
+        self.extract(1)
+    }
+}
+impl<T: jit::AsVarType> Vector3<T> {
+    pub fn x(&self) -> Var<T> {
+        self.extract(0)
+    }
+    pub fn y(&self) -> Var<T> {
+        self.extract(1)
+    }
+    pub fn z(&self) -> Var<T> {
+        self.extract(1)
+    }
+}
+impl<T: jit::AsVarType> Vector4<T> {
+    pub fn x(&self) -> Var<T> {
+        self.extract(0)
+    }
+    pub fn y(&self) -> Var<T> {
+        self.extract(1)
+    }
+    pub fn z(&self) -> Var<T> {
+        self.extract(1)
+    }
+    pub fn w(&self) -> Var<T> {
+        self.extract(1)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::*;
