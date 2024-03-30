@@ -13,19 +13,19 @@ impl<T: jit::AsVarType> From<jit::VarRef> for Var<T> {
     }
 }
 
-impl<T> jit::Traverse for Var<T> {
+impl<T: jit::AsVarType> jit::Traverse for Var<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
         layout.push(0);
         vars.push(self.0.clone());
     }
 }
-impl<T> jit::Construct for Var<T> {
+impl<T: jit::AsVarType> jit::Construct for Var<T> {
     fn construct(
         vars: &mut impl Iterator<Item = jit::VarRef>,
         layout: &mut impl Iterator<Item = usize>,
     ) -> Self {
         assert_eq!(layout.next().unwrap(), 0);
-        Self(vars.next().unwrap(), PhantomData)
+        vars.next().unwrap().into()
     }
 }
 
@@ -43,23 +43,23 @@ impl<T> AsRef<jit::VarRef> for Var<T> {
 
 // Constructors
 pub fn array<T: jit::AsVarType>(slice: &[T], device: &jit::Device) -> Var<T> {
-    Var::<T>(jit::array(slice, device), PhantomData)
+    jit::array(slice, device).into()
 }
 pub fn literal<T: jit::AsVarType>(val: T) -> Var<T> {
-    Var::<T>(jit::literal(val), PhantomData)
+    jit::literal(val).into()
 }
 pub fn sized_literal<T: jit::AsVarType>(val: T, size: usize) -> Var<T> {
-    Var::<T>(jit::sized_literal(val, size), PhantomData)
+    jit::sized_literal(val, size).into()
 }
 // Index Constructors
 pub fn index() -> Var<u32> {
-    Var::<u32>(jit::index(), PhantomData)
+    jit::index().into()
 }
 pub fn sized_index(size: usize) -> Var<u32> {
-    Var::<u32>(jit::sized_index(size), PhantomData)
+    jit::sized_index(size).into()
 }
 pub fn dyn_index(capacity: usize, size: impl AsRef<Var<u32>>) -> Var<u32> {
-    Var::<u32>(jit::dynamic_index(capacity, &size.as_ref().0), PhantomData)
+    jit::dynamic_index(capacity, &size.as_ref().0).into()
 }
 // Composite Constructors
 pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl AsRef<Var<T>>; N]) -> Var<T> {
@@ -68,7 +68,7 @@ pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl AsRef<Var<T>>
         .into_iter()
         .map(|var| var.as_ref().0.clone())
         .collect::<Vec<_>>();
-    Var::<T>(jit::arr(&refs), PhantomData)
+    jit::arr(&refs).into()
 }
 
 pub fn composite<T: jit::AsVarType>() -> CompositeBuilder<T> {
@@ -87,17 +87,17 @@ impl<'a, T: jit::AsVarType> CompositeBuilder<T> {
         self
     }
     pub fn construct(self) -> Var<T> {
-        Var::<T>(jit::composite(&self.elems), PhantomData)
+        jit::composite(&self.elems).into()
     }
 }
 
 // Extraction
 impl<'a, T: jit::AsVarType> Var<T> {
     pub fn extract<U: jit::AsVarType>(&self, elem: usize) -> Var<U> {
-        Var::<U>(self.0.extract(elem), PhantomData)
+        self.0.extract(elem).into()
     }
     pub fn extract_dyn<U: jit::AsVarType>(&self, elem: &Var<u32>) -> Var<U> {
-        Var::<U>(self.0.extract_dyn(&elem.0), PhantomData)
+        self.0.extract_dyn(&elem.0).into()
     }
 }
 
@@ -136,7 +136,7 @@ impl<T: jit::AsVarType> Var<T> {
 macro_rules! uop {
     ($op:ident) => {
         pub fn $op(&self) -> Self {
-            Self(self.0.$op(), PhantomData)
+            self.0.$op().into()
         }
     };
 }
@@ -155,19 +155,19 @@ impl<T: jit::AsVarType> Var<T> {
 macro_rules! bop {
     ($op:ident -> $result_type:ident) => {
         pub fn $op(&self, other: impl AsRef<Self>) -> Var<$result_type> {
-            Var::<$result_type>(self.0.$op(&other.as_ref().0), PhantomData)
+            self.0.$op(&other.as_ref().0).into()
         }
     };
     ($op:ident) => {
         pub fn $op(&self, other: impl AsRef<Self>) -> Self {
-            Self(self.0.$op(&other.as_ref().0), PhantomData)
+            self.0.$op(&other.as_ref().0).into()
         }
     };
 }
 
 // Binary Operations
 impl<T: jit::AsVarType> Var<T> {
-    // Binary operations returing the same type
+    // Arithmetic
     bop!(add);
     bop!(sub);
     bop!(mul);
@@ -191,10 +191,10 @@ impl<T: jit::AsVarType> Var<T> {
 
     // Shift
     pub fn shr(&self, offset: impl AsRef<Var<i32>>) -> Self {
-        Self(self.0.shr(&offset.as_ref().0), PhantomData)
+        self.0.shr(&offset.as_ref().0).into()
     }
     pub fn shl(&self, offset: impl AsRef<Var<i32>>) -> Self {
-        Self(self.0.shl(&offset.as_ref().0), PhantomData)
+        self.0.shl(&offset.as_ref().0).into()
     }
 }
 
@@ -204,39 +204,35 @@ impl<T: jit::AsVarType> Var<T> {
         Self(self.0.fma(&b.as_ref().0, &c.as_ref().0), PhantomData)
     }
 }
-impl Var<bool> {
-    pub fn select<T: jit::AsVarType>(
-        &self,
-        true_val: impl AsRef<Var<T>>,
-        false_val: impl AsRef<Var<T>>,
-    ) -> Var<T> {
-        Var::<T>(
-            self.0.select(&true_val.as_ref().0, &false_val.as_ref().0),
-            PhantomData,
-        )
+impl<T: jit::AsVarType> Var<T> {
+    pub fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
+        condition
+            .as_ref()
+            .0
+            .select(&self.0, &false_val.as_ref().0)
+            .into()
     }
 }
 
 // Casting
 impl<T: jit::AsVarType> Var<T> {
     pub fn cast<U: jit::AsVarType>(&self) -> Var<U> {
-        Var::<U>(self.0.cast(U::var_ty()), PhantomData)
+        self.0.cast(U::var_ty()).into()
     }
     pub fn bitcast<U: jit::AsVarType>(&self) -> Var<U> {
-        Var::<U>(self.0.bitcast(U::var_ty()), PhantomData)
+        self.0.bitcast(U::var_ty()).into()
     }
 }
 
 // Gather/Scatter
 impl<T: jit::AsVarType> Var<T> {
     pub fn gather(&self, index: impl AsRef<Var<u32>>) -> Self {
-        Self(self.0.gather(&index.as_ref().0), PhantomData)
+        self.0.gather(&index.as_ref().0).into()
     }
     pub fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self {
-        Self(
-            self.0.gather_if(&index.as_ref().0, &condition.as_ref().0),
-            PhantomData,
-        )
+        self.0
+            .gather_if(&index.as_ref().0, &condition.as_ref().0)
+            .into()
     }
 
     pub fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
@@ -282,11 +278,9 @@ impl<T: jit::AsVarType> Var<T> {
         index: impl AsRef<Var<u32>>,
         op: jit::ReduceOp,
     ) -> Self {
-        Self(
-            self.0
-                .scatter_atomic(&dst.as_ref().0, &index.as_ref().0, op),
-            PhantomData,
-        )
+        self.0
+            .scatter_atomic(&dst.as_ref().0, &index.as_ref().0, op)
+            .into()
     }
     pub fn scatter_atomic_if(
         &self,
@@ -295,15 +289,14 @@ impl<T: jit::AsVarType> Var<T> {
         condition: impl AsRef<Var<bool>>,
         op: jit::ReduceOp,
     ) -> Self {
-        Self(
-            self.0.scatter_atomic_if(
+        self.0
+            .scatter_atomic_if(
                 &dst.as_ref().0,
                 &index.as_ref().0,
                 &condition.as_ref().0,
                 op,
-            ),
-            PhantomData,
-        )
+            )
+            .into()
     }
 
     pub fn atomic_inc(
@@ -311,10 +304,9 @@ impl<T: jit::AsVarType> Var<T> {
         index: impl AsRef<Var<u32>>,
         condition: impl AsRef<Var<bool>>,
     ) -> Self {
-        Self(
-            self.0.atomic_inc(&index.as_ref().0, &condition.as_ref().0),
-            PhantomData,
-        )
+        self.0
+            .atomic_inc(&index.as_ref().0, &condition.as_ref().0)
+            .into()
     }
 }
 

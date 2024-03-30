@@ -284,7 +284,7 @@ pub struct Intersection {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, AsVarType)]
 pub struct Ray3f {
-    pub o: mint::Vector3<f32>,
+    pub o: mint::Point3<f32>,
     pub d: mint::Vector3<f32>,
     pub tmin: f32,
     pub tmax: f32,
@@ -326,6 +326,16 @@ impl<T: AsVarType> AsVarType for mint::Vector3<T> {
 impl<T: AsVarType> AsVarType for mint::Vector4<T> {
     fn var_ty() -> &'static VarType {
         vector(T::var_ty(), 4)
+    }
+}
+impl<T: AsVarType> AsVarType for mint::Point2<T> {
+    fn var_ty() -> &'static VarType {
+        vector(T::var_ty(), 2)
+    }
+}
+impl<T: AsVarType> AsVarType for mint::Point3<T> {
+    fn var_ty() -> &'static VarType {
+        vector(T::var_ty(), 3)
     }
 }
 impl<T: AsVarType> AsVarType for mint::ColumnMatrix2<T> {

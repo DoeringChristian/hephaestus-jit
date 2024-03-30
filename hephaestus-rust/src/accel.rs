@@ -118,7 +118,7 @@ mod test {
         let ray = hep::array(
             &[
                 jit::Ray3f {
-                    o: mint::Vector3 {
+                    o: mint::Point3 {
                         x: 0.6,
                         y: 0.6,
                         z: 0.1,
@@ -132,7 +132,7 @@ mod test {
                     tmax: 10_000.,
                 },
                 jit::Ray3f {
-                    o: mint::Vector3 {
+                    o: mint::Point3 {
                         x: 0.3,
                         y: 0.3,
                         z: 0.1,

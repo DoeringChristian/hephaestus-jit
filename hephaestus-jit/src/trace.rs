@@ -899,7 +899,7 @@ macro_rules! uop {
     };
 }
 impl VarRef {
-    // Binary operations returing the same type
+    // Arithmetic
     bop!(add);
     bop!(sub);
     bop!(mul);
@@ -907,6 +907,9 @@ impl VarRef {
     bop!(modulus);
     bop!(min);
     bop!(max);
+
+    // Vector
+    bop!(dot);
 
     // Bitwise
     // TODO: more asserts for binary operations

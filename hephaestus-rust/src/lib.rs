@@ -1,4 +1,5 @@
 mod accel;
+mod point;
 mod texture;
 mod var;
 mod vector;

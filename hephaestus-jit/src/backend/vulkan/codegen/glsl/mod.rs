@@ -788,6 +788,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let lhs = Reg(deps[0]);
                 let rhs = Reg(deps[1]);
                 match op {
+                    // Arithmetic
                     crate::op::Bop::Add => writeln!(s, "\t{glsl_ty} {dst} = {lhs} + {rhs};")?,
                     crate::op::Bop::Sub => writeln!(s, "\t{glsl_ty} {dst} = {lhs} - {rhs};")?,
                     crate::op::Bop::Mul => writeln!(s, "\t{glsl_ty} {dst} = {lhs} * {rhs};")?,
@@ -795,6 +796,9 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::Bop::Modulus => writeln!(s, "\t{glsl_ty} {dst} = {lhs} % {rhs};")?,
                     crate::op::Bop::Min => writeln!(s, "\t{glsl_ty} {dst} = min({lhs}, {rhs});")?,
                     crate::op::Bop::Max => writeln!(s, "\t{glsl_ty} {dst} = max({lhs}, {rhs});")?,
+                    // Vector
+                    crate::op::Bop::Dot => writeln!(s, "\t{glsl_ty} {dst} = dot({lhs}, {rhs});")?,
+                    // Binary
                     crate::op::Bop::And => match ty {
                         VarType::Bool => writeln!(s, "\t{glsl_ty} {dst} = {lhs} && {rhs};")?,
                         _ => writeln!(s, "\t{glsl_ty} {dst} = {lhs} & {rhs};")?,
@@ -809,6 +813,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     },
                     crate::op::Bop::Shl => writeln!(s, "\t{glsl_ty} {dst} = {lhs} << {rhs};")?,
                     crate::op::Bop::Shr => writeln!(s, "\t{glsl_ty} {dst} = {lhs} >> {rhs};")?,
+                    //Comparison
                     crate::op::Bop::Eq => writeln!(s, "\t{glsl_ty} {dst} = {lhs} == {rhs};")?,
                     crate::op::Bop::Neq => writeln!(s, "\t{glsl_ty} {dst} = {lhs} != {rhs};")?,
                     crate::op::Bop::Lt => writeln!(s, "\t{glsl_ty} {dst} = {lhs} < {rhs};")?,

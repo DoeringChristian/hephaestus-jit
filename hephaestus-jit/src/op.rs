@@ -1,6 +1,6 @@
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Bop {
-    // Normal Binary Operations
+    // Arithmetic Binary Operations
     Add,
     Sub,
     Mul,
@@ -8,6 +8,10 @@ pub enum Bop {
     Modulus,
     Min,
     Max,
+
+    // Vector
+    Dot,
+
     // Bitwise
     And,
     Or,
