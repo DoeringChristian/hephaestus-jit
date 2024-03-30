@@ -791,7 +791,12 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     // Arithmetic
                     crate::op::Bop::Add => writeln!(s, "\t{glsl_ty} {dst} = {lhs} + {rhs};")?,
                     crate::op::Bop::Sub => writeln!(s, "\t{glsl_ty} {dst} = {lhs} - {rhs};")?,
-                    crate::op::Bop::Mul => writeln!(s, "\t{glsl_ty} {dst} = {lhs} * {rhs};")?,
+                    crate::op::Bop::Mul => match ty {
+                        VarType::Mat { .. } => {
+                            writeln!(s, "\t{glsl_ty} {dst} = matrixCompMult({lhs}, {rhs});")?;
+                        }
+                        _ => writeln!(s, "\t{glsl_ty} {dst} = {lhs} * {rhs};")?,
+                    },
                     crate::op::Bop::Div => writeln!(s, "\t{glsl_ty} {dst} = {lhs} / {rhs};")?,
                     crate::op::Bop::Modulus => writeln!(s, "\t{glsl_ty} {dst} = {lhs} % {rhs};")?,
                     crate::op::Bop::Min => writeln!(s, "\t{glsl_ty} {dst} = min({lhs}, {rhs});")?,
