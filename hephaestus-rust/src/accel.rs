@@ -1,7 +1,9 @@
+use std::marker::PhantomData;
+
 use jit;
 
 use crate::var::*;
-use crate::{Instance, Intersection};
+use crate::{Instance, Intersection, Ray3f};
 
 #[derive(Debug, Clone)]
 pub enum GeometryDesc {
@@ -13,7 +15,7 @@ pub enum GeometryDesc {
 
 pub struct AccelDesc<'a> {
     pub geometries: &'a [GeometryDesc],
-    pub instances: Var<Instance>,
+    pub instances: Instance,
 }
 
 pub struct Accel {
@@ -42,5 +44,7 @@ impl Accel {
         });
         Self { accel }
     }
-    // pub fn trace_ray(&self, ray:)
+    pub fn trace_ray(&self, ray: impl AsRef<Ray3f>) -> Intersection {
+        Var(self.accel.trace_ray(&ray.as_ref().0), PhantomData)
+    }
 }

@@ -5,9 +5,9 @@ mod texture;
 mod var;
 
 pub use jit::{
-    compile, record, recorded, vulkan, AsVarType, Construct, Device, Graph, Instance, Intersection,
-    ReduceOp, Traverse,
+    compile, record, recorded, vulkan, AsVarType, Construct, Device, Graph, ReduceOp, Traverse,
 };
+
 pub use texture::Texture;
 pub use var::{
     arr, array, composite, dyn_index, index, literal, mat2, mat3, mat4, sized_index, sized_literal,
@@ -15,3 +15,7 @@ pub use var::{
     UInt8, Var, Vector2, Vector2d, Vector2f, Vector2i, Vector2u, Vector3, Vector3d, Vector3f,
     Vector3i, Vector3u, Vector4, Vector4d, Vector4f, Vector4i, Vector4u,
 };
+
+pub type Instance = Var<jit::Instance>;
+pub type Intersection = Var<jit::Intersection>;
+pub type Ray3f = Var<jit::Ray3f>;
