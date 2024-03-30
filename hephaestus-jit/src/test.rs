@@ -831,7 +831,7 @@ fn uop_cos(#[case] device: Device) {
 }
 #[rstest]
 #[case(vulkan())]
-fn scatter_atomic(#[case] device: Device) {
+fn scatter_atomic_u32(#[case] device: Device) {
     pretty_env_logger::try_init().ok();
 
     let device = backend::Device::vulkan(0).unwrap();

@@ -380,19 +380,17 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 if let Some(cond) = cond {
                     writeln!(s, "\tif ({cond}){{", cond = Reg(*cond))?;
                 }
-                match ty {
-                    VarType::Bool => {
-                        let glsl_data_ty = GlslTypeName(u8::var_ty());
-
-                        writeln!(s,"\tbuffer_{glsl_data_ty}[{buffer_idx}].b[{idx}] = {glsl_data_ty}({src});",)?;
-                    }
-                    VarType::Vec { ty: vec_ty, num } if *num == 3 => {
-                        let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
-                        writeln!(s,"\tbuffer_{memory_type}[{buffer_idx}].b[{idx}] = {memory_type}({src}.x, {src}.y, {src}.z);",)?;
-                    }
-                    _ => {
-                        writeln!(s, "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",)?;
-                    }
+                let memory_type = memory_type(ty);
+                if memory_type == ty {
+                    writeln!(s, "\tbuffer_{glsl_ty}[{buffer_idx}].b[{idx}] = {src};",)?;
+                } else {
+                    write!(
+                        s,
+                        "\tbuffer_{memory_type}[{buffer_idx}].b[{idx}] = ",
+                        memory_type = GlslTypeName(memory_type)
+                    )?;
+                    assemble_cast_inline(s, format!("{src}"), memory_type, ty)?;
+                    writeln!(s, ";")?;
                 }
 
                 if let Some(_) = cond {
@@ -426,20 +424,21 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::ReduceOp::And => "atomicAnd",
                     crate::op::ReduceOp::Xor => "atomicXor",
                 };
-                match ty {
-                    VarType::Bool => {
-                        let memory_type = GlslTypeName(u8::var_ty());
-                        writeln!(s, "\t{atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], {memory_type}({src}));")?;
-                    }
 
-                    VarType::Vec { ty: vec_ty, num } if *num == 3 => {
-                        let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
-                        writeln!(s, "\t{atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], {memory_type}({src}.x, {src}.y, {src}.z));")?;
-                    }
-                    _ => writeln!(
+                let memory_type = memory_type(ty);
+                if memory_type == ty {
+                    writeln!(
                         s,
                         "\t{atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});"
-                    )?,
+                    )?;
+                } else {
+                    write!(
+                        s,
+                        "\t{atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], ",
+                        memory_type = GlslTypeName(memory_type),
+                    )?;
+                    assemble_cast_inline(s, format!("{src}"), memory_type, ty)?;
+                    writeln!(s, ");")?;
                 }
                 if let Some(_) = cond {
                     writeln!(s, "\t}}")?;
@@ -463,6 +462,8 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 writeln!(s, "\t{glsl_ty} {dst};")?;
                 if let Some(cond) = cond {
                     writeln!(s, "\tif({cond}){{", cond = Reg(*cond))?;
+                } else {
+                    writeln!(s, "\t{{")?;
                 }
                 let atomic_fn = match op {
                     crate::op::ReduceOp::Max => "atomicMax",
@@ -473,23 +474,21 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     crate::op::ReduceOp::And => "atomicAnd",
                     crate::op::ReduceOp::Xor => "atomicXor",
                 };
-                match ty {
-                    VarType::Bool => {
-                        let glsl_data_ty = GlslTypeName(u8::var_ty());
-                        writeln!(s, "\t{dst} = {atomic_fn}(buffer_{glsl_data_ty}[{buffer_idx}].b[{idx}], {glsl_data_ty}({src}));")?;
-                    }
-                    VarType::Vec { ty: vec_ty, num } if *num == 3 => {
-                        let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
-                        writeln!(s, "\t{dst} = {atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], {memory_type}({src}.x, {src}.y, {src}.z));")?;
-                    }
-                    _ => writeln!(
+                let memory_type = memory_type(ty);
+                if memory_type == ty {
+                    writeln!(
                         s,
                         "\t{dst} = {atomic_fn}(buffer_{glsl_ty}[{buffer_idx}].b[{idx}], {src});"
-                    )?,
+                    )?;
+                } else {
+                    write!(s, "\t{memory_type} tmp = {atomic_fn}(buffer_{memory_type}[{buffer_idx}].b[{idx}], ", memory_type = GlslTypeName(memory_type))?;
+                    assemble_cast_inline(s, format!("{src}"), memory_type, ty)?;
+                    writeln!(s, ");")?;
+                    write!(s, "\t{dst} = ")?;
+                    assemble_cast_inline(s, "tmp", ty, memory_type)?;
+                    writeln!(s, ");")?;
                 }
-                if let Some(_) = cond {
-                    writeln!(s, "\t}}")?;
-                }
+                writeln!(s, "\t}}")?;
             }
             crate::op::KernelOp::AtomicInc => {
                 let dst = deps[0];
@@ -530,6 +529,8 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let dst = Reg(id);
                 let idx = Reg(idx);
 
+                let memory_type = memory_type(ty);
+
                 if let Some(cond) = cond {
                     let cond = Reg(*cond);
                     if zeroable(ty) {
@@ -537,43 +538,42 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                     } else {
                         writeln!(s, "\t{glsl_ty} {dst};", dst = Reg(id))?;
                     }
-                    match ty {
-                        VarType::Bool => {
-                            let memory_type = GlslTypeName(u8::var_ty());
-
-                            writeln!(s, "\tif ({cond}) {{ {dst} = {glsl_ty}( buffer_{memory_type}[{buffer_idx}].b[{idx}] ); }}")?;
-                        }
-                        VarType::Vec { ty: vec_ty, num } if *num == 3 => {
-                            let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
-                            writeln!(s, "\tif({cond}) {{")?;
-                            writeln!(s, "\t\t{memory_type} tmp = buffer_{memory_type}[{buffer_idx}].b[{idx}];")?;
-                            writeln!(s, "\t\t{dst} = {glsl_ty}(tmp[0], tmp[1], tmp[2]);")?;
-                            writeln!(s, "\t}}")?;
-                        }
-                        _ => {
-                            writeln!(s, "\tif ({cond}) {{ {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}]; }}")?;
-                        }
+                    if memory_type == ty {
+                        writeln!(
+                            s,
+                            "\tif ({cond}) {{ {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}]; }}"
+                        )?;
+                    } else {
+                        writeln!(s, "\tif({cond}) {{")?;
+                        writeln!(
+                            s,
+                            "\t\t{memory_type} tmp = buffer_{memory_type}[{buffer_idx}].b[{idx}];",
+                            memory_type = GlslTypeName(memory_type)
+                        )?;
+                        write!(s, "\t\t{dst} = ")?;
+                        assemble_cast_inline(s, "tmp", ty, memory_type)?;
+                        writeln!(s, ";")?;
+                        writeln!(s, "\t}}")?;
                     }
                 } else {
-                    match ty {
-                        VarType::Bool => {
-                            let memory_type = GlslTypeName(u8::var_ty());
-                            writeln!(s, "\t{glsl_ty} {dst} = {glsl_ty}( buffer_{memory_type}[{buffer_idx}].b[{idx}] );")?;
-                        }
-                        VarType::Vec { ty: vec_ty, num } if *num == 3 => {
-                            let memory_type = GlslTypeName(vartype::array(vec_ty, *num));
-                            writeln!(s, "\t{glsl_ty} {dst};")?;
-                            writeln!(s, "\t{{")?;
-                            writeln!(s, "\t\t{memory_type} tmp = buffer_{memory_type}[{buffer_idx}].b[{idx}];")?;
-                            writeln!(s, "\t\t{dst} = {glsl_ty}(tmp[0], tmp[1], tmp[2]);")?;
-                            writeln!(s, "\t}}")?;
-                        }
-                        _ => {
-                            writeln!(
-                                s,
-                                "\t{glsl_ty} {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}];",
-                            )?;
-                        }
+                    if memory_type == ty {
+                        writeln!(
+                            s,
+                            "\t{glsl_ty} {dst} = buffer_{glsl_ty}[{buffer_idx}].b[{idx}];",
+                        )?;
+                    } else {
+                        writeln!(s, "\t{glsl_ty} {dst};")?;
+                        writeln!(s, "\t{{")?;
+                        writeln!(
+                            s,
+                            "\t\t{memory_type} tmp = buffer_{memory_type}[{buffer_idx}].b[{idx}];",
+                            memory_type = GlslTypeName(memory_type)
+                        )?;
+
+                        write!(s, "\t\t{dst} = ")?;
+                        assemble_cast_inline(s, "tmp", ty, memory_type)?;
+                        writeln!(s, ";")?;
+                        writeln!(s, "\t}}")?;
                     }
                 }
             }
@@ -664,7 +664,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                         write!(s, "\t);\n")?;
                     }
                     VarType::Struct { .. } | VarType::Array { .. } => {
-                        write!(s, "\t{glsl_ty} {dst} = {{")?;
+                        write!(s, "\t{glsl_ty} {dst} = {glsl_ty}(")?;
                         for (i, id) in deps.iter().enumerate() {
                             let src = Reg(*id);
                             if i == deps.len() - 1 {
@@ -673,7 +673,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                                 write!(s, "{src},")?;
                             }
                         }
-                        write!(s, "}};\n")?;
+                        write!(s, ");\n")?;
                     }
                     VarType::Mat { ty, cols, rows } => {
                         writeln!(s, "\t{glsl_ty} {dst};")?;
@@ -822,7 +822,7 @@ fn assemble_vars(s: &mut String, ir: &IR) -> std::fmt::Result {
                 let src = Reg(deps[0]);
                 let src_ty = ir.var(deps[0]).ty;
                 match op {
-                    crate::op::Uop::Cast => assemble_cast(s, id, deps[0], ty, src_ty),
+                    crate::op::Uop::Cast => assemble_cast(s, Reg(id), Reg(deps[0]), ty, src_ty),
                     crate::op::Uop::BitCast => match (ty, src_ty) {
                         (VarType::F16, VarType::I16) => {
                             writeln!(s, "\t{glsl_ty} {dst} = int16BitsToHalf({src});")
@@ -910,7 +910,8 @@ fn assemble_cast_inline(
             write!(s, "{src}")
         }
         (
-            VarType::U8
+            VarType::Bool
+            | VarType::U8
             | VarType::I8
             | VarType::U16
             | VarType::I16
@@ -921,7 +922,8 @@ fn assemble_cast_inline(
             | VarType::F16
             | VarType::F32
             | VarType::F64,
-            VarType::U8
+            VarType::Bool
+            | VarType::U8
             | VarType::I8
             | VarType::U16
             | VarType::I16
@@ -987,23 +989,29 @@ fn assemble_cast_inline(
             write!(s, ")")?;
             Ok(())
         }
+        (VarType::Struct{tys: dst_tys}, VarType::Struct{tys:src_tys})=>{
+            write!(s, "{dst_ty}(", dst_ty = GlslTypeName(dst_ty))?;
+            for (i, (dst_ty, src_ty)) in dst_tys.into_iter().zip(src_tys.into_iter()).enumerate(){
+                assemble_cast_inline(s, format!("{src}.e{i}"), dst_ty, src_ty)?;
+                if i < dst_tys.len()-1{
+                    write!(s, ", ")?;
+                }
+            }
+            write!(s, ")")?;
+            Ok(())
+        }
         _ => todo!("Cast between {src_ty:?} -> {dst_ty:?} has not been implemented for the GLSL codegen backend."),
     }
 }
 fn assemble_cast(
     s: &mut String,
-    dst: VarId,
-    src: VarId,
+    dst: Reg,
+    src: Reg,
     dst_ty: &'static VarType,
     src_ty: &VarType,
 ) -> std::fmt::Result {
-    write!(
-        s,
-        "\t{dst_ty} {dst} = ",
-        dst = Reg(dst),
-        dst_ty = GlslTypeName(dst_ty)
-    )?;
-    assemble_cast_inline(s, Reg(src), dst_ty, src_ty)?;
+    write!(s, "\t{dst_ty} {dst} = ", dst_ty = GlslTypeName(dst_ty))?;
+    assemble_cast_inline(s, src, dst_ty, src_ty)?;
     writeln!(s, ";")?;
     Ok(())
 }

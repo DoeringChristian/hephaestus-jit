@@ -98,7 +98,7 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
 
     quote! {
         impl #impl_generics #crate_name::Traverse for #ident #ty_generics #where_clause{
-            fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>){
+            fn traverse(&self, vars: &mut Vec<#crate_name::VarRef>, layout: &mut Vec<usize>){
                 layout.push(#n_names);
                 #(
                     self.#names.traverse(vars, layout);

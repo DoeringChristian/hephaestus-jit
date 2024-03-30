@@ -17,7 +17,7 @@ impl ResourceDesc {
                 ty: desc.ty,
             }),
             ResourceDesc::TextureDesc(desc) => ResourceDesc::TextureDesc(desc.clone()),
-            ResourceDesc::AccelDesc(desc) => todo!(),
+            ResourceDesc::AccelDesc(desc) => ResourceDesc::AccelDesc(desc.clone()),
         }
     }
 }
