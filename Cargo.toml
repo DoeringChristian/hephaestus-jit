@@ -11,3 +11,4 @@ hephaestus-macros = { path = "./hephaestus-macros" }
 mint = "0.5.9"
 half = { version = "2.3.1", features = ["num-traits", "bytemuck"]}
 insta = "1.33.0"
+paste = "1.0.14"
