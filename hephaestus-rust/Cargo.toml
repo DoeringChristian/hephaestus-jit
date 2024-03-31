@@ -10,3 +10,4 @@ jit = { workspace = true }
 mint = { workspace = true }
 half = { workspace = true }
 insta = { workspace = true }
+paste = { workspace = true }

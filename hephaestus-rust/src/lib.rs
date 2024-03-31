@@ -1,7 +1,7 @@
 mod accel;
 mod point;
 mod texture;
-mod var;
+pub mod var;
 mod vector;
 
 pub use jit;

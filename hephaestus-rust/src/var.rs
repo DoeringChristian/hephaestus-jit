@@ -141,70 +141,136 @@ macro_rules! uop {
     };
 }
 
+macro_rules! uop_trait {
+    ($op:ident for $($types:ident),*) => {
+        uop_trait!($op -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ty),*) => {
+        paste::paste! {
+            pub trait [<$op:camel>] {
+                fn $op(&self) -> $ret_type;
+            }
+            $(
+                impl [<$op:camel>] for Var<$types> {
+                    fn $op(&self) -> $ret_type {
+                        self.0.$op().into()
+                    }
+                }
+            )*
+            impl<T: jit::AsVarType> Var<T>
+            where
+                Var<T>: [<$op:camel>],
+            {
+                pub fn $op(&self) -> $ret_type {
+                    <Self as [<$op:camel>]>::$op(self)
+                }
+            }
+        }
+    };
+}
+
 // Unary Operations
-impl<T: jit::AsVarType> Var<T> {
-    uop!(neg);
-    uop!(sqrt);
-    uop!(abs);
-    uop!(sin);
-    uop!(cos);
-    uop!(exp2);
-    uop!(log2);
-}
+uop_trait!(neg for bool, i8, i16, i32, i64, f16, f32, f64);
+uop_trait!(sqrt for f16, f32, f64);
+uop_trait!(abs for i8, i16, i32, i64, f16, f32, f64);
+uop_trait!(sin for f16, f32, f64);
+uop_trait!(cos for f16, f32, f64);
+uop_trait!(exp2 for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+uop_trait!(log2 for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
-macro_rules! bop {
-    ($op:ident -> $result_type:ident) => {
-        pub fn $op(&self, other: impl AsRef<Self>) -> Var<$result_type> {
-            self.0.$op(&other.as_ref().0).into()
+macro_rules! bop_trait {
+    ($op:ident for $($types:ident),*) => {
+        bop_trait!($op (self, Self) -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ty),*) => {
+        bop_trait!($op (self, Self) -> ($ret_type) for $($types),*);
+    };
+    ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($types:ty),*) => {
+        paste::paste! {
+            pub trait [<$op:camel>] {
+                fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type;
+            }
+            $(
+                impl [<$op:camel>] for Var<$types> {
+                    fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
+                        self.0.$op(&other.as_ref().0).into()
+                    }
+                }
+            )*
+            impl<T: jit::AsVarType> Var<T>
+            where
+                Var<T>: [<$op:camel>],
+            {
+                pub fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
+                    <Self as [<$op:camel>]>::$op(self, other)
+                }
+            }
         }
     };
-    ($op:ident) => {
-        pub fn $op(&self, other: impl AsRef<Self>) -> Self {
-            self.0.$op(&other.as_ref().0).into()
-        }
-    };
 }
 
-// Binary Operations
-impl<T: jit::AsVarType> Var<T> {
-    // Arithmetic
-    bop!(add);
-    bop!(sub);
-    bop!(mul);
-    bop!(div);
-    bop!(modulus);
-    bop!(min);
-    bop!(max);
+// Arithmetic
+bop_trait!(sub for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(add for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(mul for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(div for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(modulus for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(min for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(max for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
-    // Bitwise
-    bop!(and);
-    bop!(or);
-    bop!(xor);
+// Bitwise
+bop_trait!(and for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(or for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(xor for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
-    // Comparisons
-    bop!(eq -> bool);
-    bop!(neq -> bool);
-    bop!(lt -> bool);
-    bop!(le -> bool);
-    bop!(gt -> bool);
-    bop!(ge -> bool);
+// Comparisons
+bop_trait!(eq -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(neq -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(lt -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(le -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(gt -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(ge -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
-    // Shift
-    pub fn shr(&self, offset: impl AsRef<Var<i32>>) -> Self {
-        self.0.shr(&offset.as_ref().0).into()
-    }
-    pub fn shl(&self, offset: impl AsRef<Var<i32>>) -> Self {
-        self.0.shl(&offset.as_ref().0).into()
-    }
+// Shift
+bop_trait!(shr (self, Var<i32>) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(shl (self, Var<i32>) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+
+macro_rules! top_trait {
+    ($op:ident for $($types:ident),*) => {
+        top_trait!($op (self, Self, Self) -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ty),*) => {
+        top_trait!($op (self, Self, Self) -> ($ret_type) for $($types),*);
+    };
+    ($op:ident (self, $b:ty, $c:ty) -> ($ret_type:ty) for $($types:ty),*) => {
+        paste::paste! {
+            pub trait [<$op:camel>] {
+                fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type;
+            }
+            $(
+                impl [<$op:camel>] for Var<$types> {
+                    fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type {
+                        self.0.$op(&b.as_ref().0, &c.as_ref().0).into()
+                    }
+                }
+            )*
+            impl<T: jit::AsVarType> Var<T>
+            where
+                Var<T>: [<$op:camel>],
+            {
+                pub fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type {
+                    <Self as [<$op:camel>]>::$op(self, b, c)
+                }
+            }
+        }
+    };
 }
 
 // Trinary Operations
+top_trait!(fma for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+
 impl<T: jit::AsVarType> Var<T> {
-    pub fn fma(&self, b: impl AsRef<Self>, c: impl AsRef<Self>) -> Self {
-        Self(self.0.fma(&b.as_ref().0, &c.as_ref().0), PhantomData)
-    }
-}
-impl<T: jit::AsVarType> Var<T> {
+    // Select is implemented for all variables
     pub fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
         condition
             .as_ref()

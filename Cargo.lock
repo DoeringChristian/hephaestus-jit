@@ -609,6 +609,7 @@ dependencies = [
  "hephaestus-jit",
  "insta",
  "mint",
+ "paste",
 ]
 
 [[package]]

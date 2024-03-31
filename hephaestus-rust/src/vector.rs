@@ -1,3 +1,4 @@
+use super::var;
 use super::var::Var;
 
 pub type Vector2<T> = Var<mint::Vector2<T>>;
@@ -140,3 +141,47 @@ impl<T: jit::AsVarType> Vector4<T> {
         self.0.extract(3).into()
     }
 }
+
+macro_rules! bop {
+    ($op:ident for $($types:ident),*) => {
+        bop!($op (self, Self) -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ident),*) => {
+        bop!($op (self, Self) -> ($ret_type) for $($types),*);
+    };
+    ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($vectors:ident),*) => {
+        paste::paste!{
+            $(
+                impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
+                    where Var<T>: var::[<$op:camel>]
+                {
+                    fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
+                        self.0.$op(&other.as_ref().0).into()
+                    }
+                }
+            )*
+        }
+    };
+}
+
+// Implement op traits for vectors
+
+// Arithmetic
+bop!(add for Vector2, Vector3, Vector4);
+bop!(sub for Vector2, Vector3, Vector4);
+bop!(mul for Vector2, Vector3, Vector4);
+bop!(div for Vector2, Vector3, Vector4);
+bop!(modulus for Vector2, Vector3, Vector4);
+bop!(min for Vector2, Vector3, Vector4);
+bop!(max for Vector2, Vector3, Vector4);
+
+bop!(and for Vector2, Vector3, Vector4);
+bop!(or for Vector2, Vector3, Vector4);
+bop!(xor for Vector2, Vector3, Vector4);
+
+bop!(eq -> (Var<bool>) for Vector2, Vector3, Vector4);
+bop!(neq -> (Var<bool>) for Vector2, Vector3, Vector4);
+bop!(lt -> (Var<bool>) for Vector2, Vector3, Vector4);
+bop!(le -> (Var<bool>) for Vector2, Vector3, Vector4);
+bop!(gt -> (Var<bool>) for Vector2, Vector3, Vector4);
+bop!(ge -> (Var<bool>) for Vector2, Vector3, Vector4);
