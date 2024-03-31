@@ -142,6 +142,36 @@ impl<T: jit::AsVarType> Vector4<T> {
     }
 }
 
+// Implement op traits for vectors
+
+macro_rules! uop {
+    ($op:ident for $($types:ident),*) => {
+        uop!($op -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($vectors:ident),*) => {
+        paste::paste!{
+            $(
+                impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
+                    where Var<T>: var::[<$op:camel>]
+                {
+                    type Return = $ret_type;
+                    fn $op(&self) -> Self::Return {
+                        self.0.$op().into()
+                    }
+                }
+            )*
+        }
+    };
+}
+
+uop!(neg for Vector2, Vector3, Vector4);
+uop!(sqrt for Vector2, Vector3, Vector4);
+uop!(abs for Vector2, Vector3, Vector4);
+uop!(sin for Vector2, Vector3, Vector4);
+uop!(cos for Vector2, Vector3, Vector4);
+uop!(exp2 for Vector2, Vector3, Vector4);
+uop!(log2 for Vector2, Vector3, Vector4);
+
 macro_rules! bop {
     ($op:ident for $($types:ident),*) => {
         bop!($op (self, Self) -> (Self) for $($types),*);
@@ -155,7 +185,9 @@ macro_rules! bop {
                 impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
                     where Var<T>: var::[<$op:camel>]
                 {
-                    fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
+                    type Return = $ret_type;
+                    type Rhs = $rhs;
+                    fn $op(&self, other: impl AsRef<Self::Rhs>) -> Self::Return {
                         self.0.$op(&other.as_ref().0).into()
                     }
                 }
@@ -163,8 +195,6 @@ macro_rules! bop {
         }
     };
 }
-
-// Implement op traits for vectors
 
 // Arithmetic
 bop!(add for Vector2, Vector3, Vector4);
@@ -185,3 +215,28 @@ bop!(lt -> (Var<bool>) for Vector2, Vector3, Vector4);
 bop!(le -> (Var<bool>) for Vector2, Vector3, Vector4);
 bop!(gt -> (Var<bool>) for Vector2, Vector3, Vector4);
 bop!(ge -> (Var<bool>) for Vector2, Vector3, Vector4);
+
+macro_rules! top {
+    ($op:ident for $($types:ident),*) => {
+        top!($op (self, Self, Self) -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ident),*) => {
+        top!($op (self, Self, Self) -> ($ret_type) for $($types),*);
+    };
+    ($op:ident (self, $b:ty, $c:ty) -> ($ret_type:ty) for $($vectors:ident),*) => {
+        paste::paste!{
+            $(
+                impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
+                    where Var<T>: var::[<$op:camel>]
+                {
+                    type Return = $ret_type;
+                    fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> Self::Return {
+                        self.0.$op(&b.as_ref().0, &c.as_ref().0).into()
+                    }
+                }
+            )*
+        }
+    };
+}
+
+top!(fma for Vector2, Vector3, Vector4);

@@ -148,11 +148,13 @@ macro_rules! uop_trait {
     ($op:ident -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
             pub trait [<$op:camel>] {
-                fn $op(&self) -> $ret_type;
+                type Return;
+                fn $op(&self) -> Self::Return;
             }
             $(
                 impl [<$op:camel>] for Var<$types> {
-                    fn $op(&self) -> $ret_type {
+                    type Return = $ret_type;
+                    fn $op(&self) -> Self::Return{
                         self.0.$op().into()
                     }
                 }
@@ -161,7 +163,7 @@ macro_rules! uop_trait {
             where
                 Var<T>: [<$op:camel>],
             {
-                pub fn $op(&self) -> $ret_type {
+                pub fn $op(&self) -> <Self as [<$op:camel>]>::Return {
                     <Self as [<$op:camel>]>::$op(self)
                 }
             }
@@ -188,10 +190,14 @@ macro_rules! bop_trait {
     ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
             pub trait [<$op:camel>] {
-                fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type;
+                type Return;
+                type Rhs;
+                fn $op(&self, other: impl AsRef<Self::Rhs>) -> Self::Return;
             }
             $(
                 impl [<$op:camel>] for Var<$types> {
+                    type Return = $ret_type;
+                    type Rhs = $rhs;
                     fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
                         self.0.$op(&other.as_ref().0).into()
                     }
@@ -201,7 +207,7 @@ macro_rules! bop_trait {
             where
                 Var<T>: [<$op:camel>],
             {
-                pub fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
+                pub fn $op(&self, other: impl AsRef<<Self as [<$op:camel>]>::Rhs>) -> <Self as [<$op:camel>]>::Return {
                     <Self as [<$op:camel>]>::$op(self, other)
                 }
             }
@@ -245,10 +251,12 @@ macro_rules! top_trait {
     ($op:ident (self, $b:ty, $c:ty) -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
             pub trait [<$op:camel>] {
-                fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type;
+                type Return;
+                fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> Self::Return;
             }
             $(
                 impl [<$op:camel>] for Var<$types> {
+                    type Return = $ret_type;
                     fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type {
                         self.0.$op(&b.as_ref().0, &c.as_ref().0).into()
                     }
@@ -258,7 +266,7 @@ macro_rules! top_trait {
             where
                 Var<T>: [<$op:camel>],
             {
-                pub fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type {
+                pub fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> <Self as [<$op:camel>]>::Return {
                     <Self as [<$op:camel>]>::$op(self, b, c)
                 }
             }
