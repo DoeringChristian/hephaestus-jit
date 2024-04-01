@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::ops::Deref;
 
 use half::f16;
 use jit;
@@ -34,9 +35,15 @@ impl<T> AsRef<Var<T>> for Var<T> {
         &self
     }
 }
-
 impl<T> AsRef<jit::VarRef> for Var<T> {
     fn as_ref(&self) -> &jit::VarRef {
+        &self.0
+    }
+}
+impl<T> Deref for Var<T> {
+    type Target = jit::VarRef;
+
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
@@ -133,14 +140,6 @@ impl<T: jit::AsVarType> Var<T> {
     }
 }
 
-macro_rules! uop {
-    ($op:ident) => {
-        pub fn $op(&self) -> Self {
-            self.0.$op().into()
-        }
-    };
-}
-
 macro_rules! uop_trait {
     ($op:ident for $($types:ident),*) => {
         uop_trait!($op -> (Self) for $($types),*);
@@ -182,10 +181,10 @@ uop_trait!(log2 for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
 macro_rules! bop_trait {
     ($op:ident for $($types:ident),*) => {
-        bop_trait!($op (self, Self) -> (Self) for $($types),*);
+        bop_trait!($op (self, jit::VarRef) -> (Self) for $($types),*);
     };
     ($op:ident -> ($ret_type:ty) for $($types:ty),*) => {
-        bop_trait!($op (self, Self) -> ($ret_type) for $($types),*);
+        bop_trait!($op (self, jit::VarRef) -> ($ret_type) for $($types),*);
     };
     ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
@@ -199,7 +198,7 @@ macro_rules! bop_trait {
                     type Return = $ret_type;
                     type Rhs = $rhs;
                     fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
-                        self.0.$op(&other.as_ref().0).into()
+                        self.0.$op(other.as_ref()).into()
                     }
                 }
             )*
@@ -224,18 +223,40 @@ bop_trait!(modulus for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 bop_trait!(min for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 bop_trait!(max for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
+macro_rules! std_bop {
+    ($op:ident) => {
+        paste::paste! {
+            impl<T: jit::AsVarType, Rhs: AsRef<<Var<T> as [<$op:camel>]>::Rhs>> std::ops::[<$op:camel>]<Rhs> for Var<T>
+            where
+                Var<T>: [<$op:camel>],
+            {
+                type Output = <Var<T> as [<$op:camel>]>::Return;
+
+                fn $op(self, rhs: Rhs) -> Self::Output {
+                    [<$op:camel>]::$op(&self, rhs)
+                }
+            }
+        }
+    };
+}
+
+std_bop!(add);
+std_bop!(sub);
+std_bop!(mul);
+std_bop!(div);
+
 // Bitwise
 bop_trait!(and for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 bop_trait!(or for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 bop_trait!(xor for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
 // Comparisons
-bop_trait!(eq -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
-bop_trait!(neq -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
-bop_trait!(lt -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
-bop_trait!(le -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
-bop_trait!(gt -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
-bop_trait!(ge -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(eq (self, Self) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(neq (self, Self) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(lt (self, Self) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(le (self, Self) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(gt (self, Self) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+bop_trait!(ge (self, Self) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
 // Shift
 bop_trait!(shr (self, Var<i32>) -> (Var<bool>) for bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
@@ -258,7 +279,7 @@ macro_rules! top_trait {
                 impl [<$op:camel>] for Var<$types> {
                     type Return = $ret_type;
                     fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type {
-                        self.0.$op(&b.as_ref().0, &c.as_ref().0).into()
+                        self.0.$op(&b.as_ref(), &c.as_ref()).into()
                     }
                 }
             )*
