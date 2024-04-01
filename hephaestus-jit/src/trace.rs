@@ -189,6 +189,11 @@ impl Debug for VarRef {
         f.debug_struct("VarRef").field("id", &self.id).finish()
     }
 }
+impl AsRef<VarRef> for VarRef{
+    fn as_ref(&self) -> &VarRef {
+        self
+    }
+}
 
 impl VarRef {
     pub fn id(&self) -> VarId {
@@ -496,7 +501,8 @@ pub fn sized_index(size: usize) -> VarRef {
         [],
     )
 }
-pub fn dynamic_index(capacity: usize, size: &VarRef) -> VarRef {
+pub fn dynamic_index(capacity: usize, size: impl AsRef<VarRef>) -> VarRef {
+    let size = size.as_ref();
     // Have to schedule size variable
     // NOTE: the reason we do not need to track rcs for the size variable, is that it has to be
     // scheduled.
@@ -743,13 +749,17 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
 
 #[allow(non_snake_case)]
 pub fn matfma(
-    mat_a: &VarRef,
-    mat_b: &VarRef,
-    mat_c: &VarRef,
+    mat_a: impl AsRef<VarRef>,
+    mat_b: impl AsRef<VarRef>,
+    mat_c: impl AsRef<VarRef>,
     M: usize,
     N: usize,
     K: usize,
 ) -> VarRef {
+    let mat_a = mat_a.as_ref();
+    let mat_b = mat_b.as_ref();
+    let mat_c = mat_c.as_ref();
+    
     assert_eq!(mat_a.ty(), mat_b.ty());
     let c_type = mat_c.ty();
 
@@ -771,14 +781,17 @@ pub fn matfma(
 }
 
 pub fn fused_mlp_inference(
-    input: &VarRef,
-    weights: &VarRef,
+    input: impl AsRef<VarRef>,
+    weights: impl AsRef<VarRef>,
     width: usize,
     in_width: usize,
     out_width: usize,
     hidden_layers: usize,
     batch_size: usize,
 ) -> VarRef {
+    let input = input.as_ref();
+    let weights = weights.as_ref();
+
     assert_eq!(width, in_width);
     assert_eq!(width, out_width);
     assert_eq!(input.ty(), f16::var_ty());
@@ -854,7 +867,8 @@ impl VarRef {
 macro_rules! bop {
     ($op:ident $(-> $result_type:expr)?) => {
         paste::paste! {
-            pub fn $op(&self, other: &VarRef) -> VarRef {
+            pub fn $op(&self, other: impl AsRef<VarRef>) -> VarRef {
+                let other = other.as_ref();
 
                 let extent = resulting_extent([self, other]);
 
@@ -966,7 +980,9 @@ impl VarRef {
         )
     }
 
-    pub fn gather(&self, idx: &Self) -> Self {
+    pub fn gather(&self, idx: impl AsRef<Self>) -> Self {
+        let idx = idx.as_ref();
+        
         self.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -982,7 +998,10 @@ impl VarRef {
             [&src_ref, idx],
         )
     }
-    pub fn gather_if(&self, idx: &Self, active: &Self) -> Self {
+    pub fn gather_if(&self, idx: impl AsRef<Self>, active: impl AsRef<Self>) -> Self {
+        let idx = idx.as_ref();
+        let active = active.as_ref();
+        
         self.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -1000,7 +1019,10 @@ impl VarRef {
     }
     // WARN: keep in mind, that we should also update `scatter_if`, `scatter_reduce` and
     // `scatter_reduce_if`
-    pub fn scatter(&self, dst: &Self, idx: &Self) {
+    pub fn scatter(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>) {
+        let dst = dst.as_ref();
+        let idx = idx.as_ref();
+        
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, idx].into_iter());
@@ -1018,7 +1040,11 @@ impl VarRef {
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_if(&self, dst: &Self, idx: &Self, active: &Self) {
+    pub fn scatter_if(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, active: impl AsRef<Self>) {
+        let dst = dst.as_ref();
+        let idx = idx.as_ref();
+        let active = active.as_ref();
+        
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, idx, active].into_iter());
@@ -1036,7 +1062,10 @@ impl VarRef {
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_reduce(&self, dst: &Self, idx: &Self, op: ReduceOp) {
+    pub fn scatter_reduce(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, op: ReduceOp) {
+        let dst = dst.as_ref();
+        let idx = idx.as_ref();
+        
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, idx].into_iter());
@@ -1054,7 +1083,11 @@ impl VarRef {
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_reduce_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) {
+    pub fn scatter_reduce_if(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, active: impl AsRef<Self>, op: ReduceOp) {
+        let dst = dst.as_ref();
+        let idx = idx.as_ref();
+        let active = active.as_ref();
+        
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, idx, active].into_iter());
@@ -1072,7 +1105,10 @@ impl VarRef {
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_atomic(&self, dst: &Self, idx: &Self, op: ReduceOp) -> Self {
+    pub fn scatter_atomic(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, op: ReduceOp) -> Self {
+        let dst = dst.as_ref();
+        let idx = idx.as_ref();
+
         dst.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -1091,7 +1127,11 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn scatter_atomic_if(&self, dst: &Self, idx: &Self, active: &Self, op: ReduceOp) -> Self {
+    pub fn scatter_atomic_if(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, active: impl AsRef<Self>, op: ReduceOp) -> Self {
+        let dst = dst.as_ref();
+        let idx = idx.as_ref();
+        let active = active.as_ref();
+
         dst.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -1110,7 +1150,10 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn atomic_inc(self: &Self, idx: &Self, active: &Self) -> Self {
+    pub fn atomic_inc(&self, idx: impl AsRef<Self>, active: impl AsRef<Self>) -> Self {
+        let idx = idx.as_ref();
+        let active = active.as_ref();
+        
         // Destination is self
         self.schedule();
         schedule_eval();
@@ -1132,7 +1175,10 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn fma(&self, b: &Self, c: &Self) -> Self {
+    pub fn fma(&self, b: impl AsRef<Self>, c: impl AsRef<Self>) -> Self {
+        let b = b.as_ref();
+        let c = c.as_ref();
+        
         let extent = resulting_extent([self, b, c]);
         let ty = self.ty();
 
@@ -1249,7 +1295,9 @@ impl VarRef {
             [self],
         )
     }
-    pub fn extract_dyn(&self, elem: &VarRef) -> Self {
+    pub fn extract_dyn(&self, elem: impl AsRef<Self>) -> Self {
+        let elem = elem.as_ref();
+        
         let extent = self.extent();
         let ty = self.ty();
         let ty = match ty {
@@ -1272,7 +1320,10 @@ impl VarRef {
         let n_elements = s.ty().num_elements().unwrap();
         (0..n_elements).map(move |i| s.extract(i))
     }
-    pub fn select(&self, true_val: &Self, false_val: &Self) -> Self {
+    pub fn select(&self, true_val: impl AsRef<Self>, false_val: impl AsRef<Self>) -> Self {
+        let true_val = true_val.as_ref();
+        let false_val = false_val.as_ref();
+        
         assert_eq!(self.ty(), bool::var_ty());
         assert_eq!(true_val.ty(), false_val.ty());
 
@@ -1290,7 +1341,9 @@ impl VarRef {
             [self, true_val, false_val],
         )
     }
-    pub fn tex_lookup(&self, pos: &VarRef) -> Self {
+    pub fn tex_lookup(&self, pos: impl AsRef<VarRef>) -> Self {
+        let pos = pos.as_ref();
+        
         let elements = pos.ty().num_elements().unwrap();
         assert!(elements>= 1 && elements<= 3);
 
@@ -1343,7 +1396,9 @@ impl VarRef {
             [self],
         )
     }
-    pub fn trace_ray(&self, ray: &Self) -> Self {
+    pub fn trace_ray(&self, ray: impl AsRef<Self>) -> Self {
+        let ray = ray.as_ref();
+        
         let extent = resulting_extent([ray].into_iter());
 
         assert_eq!(ray.ty(), vartype::Ray3f::var_ty());
