@@ -1,3 +1,4 @@
+use super::var;
 use super::Var;
 
 pub type Point2<T> = Var<mint::Point2<T>>;
@@ -91,3 +92,101 @@ impl<T: jit::AsVarType> Point3<T> {
         point3(self.z(), self.y(), self.x())
     }
 }
+
+// Ops
+macro_rules! uop {
+    ($op:ident for $($types:ident),*) => {
+        uop!($op -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($vectors:ident),*) => {
+        paste::paste!{
+            $(
+                impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
+                    where Var<T>: var::[<$op:camel>]
+                {
+                    type Return = $ret_type;
+                    fn $op(&self) -> Self::Return {
+                        self.0.$op().into()
+                    }
+                }
+            )*
+        }
+    };
+}
+
+uop!(neg for Point2, Point3);
+uop!(sqrt for Point2, Point3);
+uop!(abs for Point2, Point3);
+uop!(sin for Point2, Point3);
+uop!(cos for Point2, Point3);
+uop!(exp2 for Point2, Point3);
+uop!(log2 for Point2, Point3);
+
+macro_rules! bop {
+    ($op:ident for $($types:ident),*) => {
+        bop!($op (self, Self) -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ident),*) => {
+        bop!($op (self, Self) -> ($ret_type) for $($types),*);
+    };
+    ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($vectors:ident),*) => {
+        paste::paste!{
+            $(
+                impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
+                    where Var<T>: var::[<$op:camel>]
+                {
+                    type Return = $ret_type;
+                    type Rhs = $rhs;
+                    fn $op(&self, other: impl AsRef<Self::Rhs>) -> Self::Return {
+                        self.0.$op(&other.as_ref().0).into()
+                    }
+                }
+            )*
+        }
+    };
+}
+
+// Arithmetic
+bop!(add for Point2, Point3);
+bop!(sub for Point2, Point3);
+bop!(mul for Point2, Point3);
+bop!(div for Point2, Point3);
+bop!(modulus for Point2, Point3);
+bop!(min for Point2, Point3);
+bop!(max for Point2, Point3);
+
+bop!(and for Point2, Point3);
+bop!(or for Point2, Point3);
+bop!(xor for Point2, Point3);
+
+bop!(eq -> (Var<bool>) for Point2, Point3);
+bop!(neq -> (Var<bool>) for Point2, Point3);
+bop!(lt -> (Var<bool>) for Point2, Point3);
+bop!(le -> (Var<bool>) for Point2, Point3);
+bop!(gt -> (Var<bool>) for Point2, Point3);
+bop!(ge -> (Var<bool>) for Point2, Point3);
+
+macro_rules! top {
+    ($op:ident for $($types:ident),*) => {
+        top!($op (self, Self, Self) -> (Self) for $($types),*);
+    };
+    ($op:ident -> ($ret_type:ty) for $($types:ident),*) => {
+        top!($op (self, Self, Self) -> ($ret_type) for $($types),*);
+    };
+    ($op:ident (self, $b:ty, $c:ty) -> ($ret_type:ty) for $($vectors:ident),*) => {
+        paste::paste!{
+            $(
+                impl<T: jit::AsVarType> var::[<$op:camel>] for $vectors<T>
+                    where Var<T>: var::[<$op:camel>]
+                {
+                    type Return = $ret_type;
+                    fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> Self::Return {
+                        self.0.$op(&b.as_ref().0, &c.as_ref().0).into()
+                    }
+                }
+            )*
+        }
+    };
+}
+
+top!(fma for Point2, Point3);
