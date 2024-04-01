@@ -4,6 +4,8 @@ use std::ops::Deref;
 use half::f16;
 use jit;
 
+use crate::Scatter;
+
 #[derive(Clone, Debug)]
 pub struct Var<T>(pub(crate) jit::VarRef, pub(crate) PhantomData<T>);
 
@@ -325,6 +327,23 @@ impl<T: jit::AsVarType> Var<T> {
     }
 }
 
+impl<T> Var<T>
+where
+    Var<T>: Scatter,
+{
+    pub fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
+        Scatter::scatter(self, dst, index)
+    }
+    pub fn scatter_if(
+        &self,
+        dst: impl AsRef<Self>,
+        index: impl AsRef<Var<u32>>,
+        condition: impl AsRef<Var<bool>>,
+    ) {
+        Scatter::scatter_if(self, dst, index, condition)
+    }
+}
+
 // Gather/Scatter
 impl<T: jit::AsVarType> Var<T> {
     pub fn gather(&self, index: impl AsRef<Var<u32>>) -> Self {
@@ -334,19 +353,6 @@ impl<T: jit::AsVarType> Var<T> {
         self.0
             .gather_if(&index.as_ref().0, &condition.as_ref().0)
             .into()
-    }
-
-    pub fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
-        self.0.scatter(&dst.as_ref().0, &index.as_ref().0)
-    }
-    pub fn scatter_if(
-        &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
-    ) {
-        self.0
-            .scatter_if(&dst.as_ref().0, &index.as_ref().0, &condition.as_ref().0)
     }
 
     pub fn scatter_reduce(
