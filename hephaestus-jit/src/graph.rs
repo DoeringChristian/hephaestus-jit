@@ -71,7 +71,7 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn try_push_resource(
+    fn try_push_resource(
         &mut self,
         trace: &mut trace::Trace,
         id: trace::VarId,

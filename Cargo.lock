@@ -602,6 +602,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hephaestus-render"
+version = "0.1.0"
+dependencies = [
+ "hephaestus-jit",
+ "hephaestus-rust",
+]
+
+[[package]]
 name = "hephaestus-rust"
 version = "0.1.0"
 dependencies = [

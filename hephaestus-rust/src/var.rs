@@ -13,6 +13,12 @@ impl<T: jit::AsVarType> From<jit::VarRef> for Var<T> {
         Self(value, PhantomData)
     }
 }
+impl<T: jit::AsVarType> From<&jit::VarRef> for Var<T> {
+    fn from(value: &jit::VarRef) -> Self {
+        assert_eq!(T::var_ty(), value.ty());
+        Self(value.clone(), PhantomData)
+    }
+}
 
 impl<T: jit::AsVarType> jit::Traverse for Var<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {

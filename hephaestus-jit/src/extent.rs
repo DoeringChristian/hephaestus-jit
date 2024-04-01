@@ -2,10 +2,10 @@ use crate::backend;
 use crate::tr::VarId;
 
 /// Represents a Variables Extent.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Extent {
-    #[default]
-    None,
+    // #[default]
+    // None,
     Size(usize), // TODO: make this on-zero
     DynSize {
         capacity: usize, // TODO: make this non-zero
@@ -16,6 +16,11 @@ pub enum Extent {
         channels: usize,
     },
     Accel(backend::AccelDesc),
+}
+impl Default for Extent {
+    fn default() -> Self {
+        Self::Size(1)
+    }
 }
 impl PartialOrd for Extent {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -54,14 +59,14 @@ impl Extent {
     pub fn is_dynamic(&self) -> bool {
         matches!(self, Extent::DynSize { .. })
     }
-    pub fn is_unsized(&self) -> bool {
-        match self {
-            Extent::None => true,
-            Extent::Size(size) => *size == 0,
-            Extent::DynSize { capacity, .. } => *capacity == 0,
-            _ => false,
-        }
-    }
+    // pub fn is_unsized(&self) -> bool {
+    //     match self {
+    //         Extent::None => true,
+    //         Extent::Size(size) => *size == 0,
+    //         Extent::DynSize { capacity, .. } => *capacity == 0,
+    //         _ => false,
+    //     }
+    // }
     pub fn get_dynamic(&self) -> Option<VarId> {
         match self {
             Extent::DynSize { size: size_dep, .. } => Some(*size_dep),
@@ -76,7 +81,7 @@ impl Extent {
     }
     pub fn resulting_extent(&self, other: &Self) -> Self {
         match (self, other) {
-            (Extent::None, other) | (other, Extent::None) => other.clone(),
+            // (Extent::None, other) | (other, Extent::None) => other.clone(),
             (Extent::Size(a), Extent::Size(b)) => Extent::Size(*a.max(b)),
             (Extent::Size(a), Extent::DynSize { capacity, size })
             | (Extent::DynSize { capacity, size }, Extent::Size(a)) => Extent::DynSize {

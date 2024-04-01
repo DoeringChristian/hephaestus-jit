@@ -33,10 +33,16 @@ impl Accel {
                 GeometryDesc::Triangles {
                     triangles,
                     vertices,
-                } => jit::GeometryDesc::Triangles {
-                    triangles: triangles.0.clone(),
-                    vertices: vertices.0.clone(),
-                },
+                } => {
+                    let triangles = triangles.ravel();
+                    let vertices = vertices.ravel();
+                    dbg!(triangles.extent());
+                    dbg!(vertices.extent());
+                    jit::GeometryDesc::Triangles {
+                        triangles,
+                        vertices,
+                    }
+                }
             })
             .collect::<Vec<_>>();
 
@@ -61,7 +67,7 @@ mod test {
             let geometries = scene
                 .triangles
                 .iter()
-                .zip(scene.verteices.iter())
+                .zip(scene.vertices.iter())
                 .map(|(triangles, vertices)| hep::GeometryDesc::Triangles {
                     triangles: triangles.clone(),
                     vertices: vertices.clone(),
@@ -105,13 +111,13 @@ mod test {
         #[derive(hep::Traverse, hep::Construct)]
         pub struct TriangleScene {
             triangles: Vec<hep::Vector3u>,
-            verteices: Vec<hep::Vector3f>,
+            vertices: Vec<hep::Vector3f>,
             instances: hep::Instance,
         }
 
         let scene = TriangleScene {
             triangles: vec![triangles],
-            verteices: vec![vertices],
+            vertices: vec![vertices],
             instances,
         };
 

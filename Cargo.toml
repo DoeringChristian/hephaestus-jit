@@ -1,12 +1,13 @@
 [workspace]
 members = [
-    "hephaestus-jit", "hephaestus-macros", "hephaestus-rust",
+    "hephaestus-jit", "hephaestus-macros", "hephaestus-render", "hephaestus-rust",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 jit = { path = "./hephaestus-jit", package = "hephaestus-jit" }
 hephaestus-macros = { path = "./hephaestus-macros" }
+hephaestus = { path = "./hephaestus-rust", package = "hephaestus-rust" }
 
 mint = "0.5.9"
 half = { version = "2.3.1", features = ["num-traits", "bytemuck"]}

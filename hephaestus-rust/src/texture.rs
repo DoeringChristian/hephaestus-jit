@@ -30,20 +30,20 @@ impl<T: jit::AsVarType> Texture<1, T> {
 }
 
 impl<T: jit::AsVarType> Texture<2, T> {
-    pub fn lookup(&self, pos: impl AsRef<Var<mint::Vector2<f32>>>) -> impl Iterator<Item = Var<T>> {
+    pub fn lookup(&self, pos: impl AsRef<crate::Vector2<f32>>) -> impl Iterator<Item = Var<T>> {
         self.tex
             .0
-            .tex_lookup(&pos.as_ref().0)
+            .tex_lookup(&pos.as_ref().ravel())
             .extract_all()
             .map(|r| Var::<T>(r, PhantomData))
     }
 }
 
 impl<T: jit::AsVarType> Texture<3, T> {
-    pub fn lookup(&self, pos: impl AsRef<Var<mint::Vector3<f32>>>) -> impl Iterator<Item = Var<T>> {
+    pub fn lookup(&self, pos: impl AsRef<crate::Vector3<f32>>) -> impl Iterator<Item = Var<T>> {
         self.tex
             .0
-            .tex_lookup(&pos.as_ref().0)
+            .tex_lookup(&pos.as_ref().ravel())
             .extract_all()
             .map(|r| Var::<T>(r, PhantomData))
     }
