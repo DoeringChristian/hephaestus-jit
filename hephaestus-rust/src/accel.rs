@@ -4,7 +4,6 @@ use jit;
 
 use crate::var::*;
 use crate::vector::*;
-use crate::{Instance, Intersection, Ray3f};
 
 #[derive(Debug, Clone)]
 pub enum GeometryDesc {
@@ -17,7 +16,7 @@ pub enum GeometryDesc {
 #[derive(Debug, Clone)]
 pub struct AccelDesc<'a> {
     pub geometries: &'a [GeometryDesc],
-    pub instances: Instance,
+    pub instances: Var<jit::Instance>,
 }
 
 pub struct Accel {
@@ -52,7 +51,7 @@ impl Accel {
         });
         Self { accel }
     }
-    pub fn trace_ray(&self, ray: impl AsRef<Ray3f>) -> Intersection {
+    pub fn trace_ray(&self, ray: impl AsRef<Var<jit::Ray3f>>) -> Var<jit::Intersection> {
         Var(self.accel.trace_ray(&ray.as_ref().0), PhantomData)
     }
 }
@@ -63,7 +62,10 @@ mod test {
     #[test]
     fn trace_ray() {
         #[hep::recorded]
-        fn render(scene: &TriangleScene, ray: &hep::Ray3f) -> hep::Intersection {
+        fn render(
+            scene: &TriangleScene,
+            ray: &hep::Var<jit::Ray3f>,
+        ) -> hep::Var<jit::Intersection> {
             let geometries = scene
                 .triangles
                 .iter()
@@ -112,7 +114,7 @@ mod test {
         pub struct TriangleScene {
             triangles: Vec<hep::Vector3u>,
             vertices: Vec<hep::Vector3f>,
-            instances: hep::Instance,
+            instances: hep::Var<jit::Instance>,
         }
 
         let scene = TriangleScene {

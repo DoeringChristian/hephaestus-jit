@@ -9,7 +9,7 @@ pub struct SceneGeometry {
 #[derive(hep::Traverse)]
 pub struct Scene {
     geometries: Vec<SceneGeometry>,
-    instances: hep::Instance,
+    instances: hep::Var<jit::Instance>,
 }
 
 impl Scene {}
