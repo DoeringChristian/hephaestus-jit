@@ -2,7 +2,7 @@ use crate::Scatter;
 
 use super::var::Var;
 
-#[derive(jit::Construct, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Vector2<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
@@ -19,7 +19,32 @@ impl<T: jit::AsVarType> jit::Traverse for Vector2<T> {
     }
 }
 
-#[derive(jit::Construct, Clone, Debug)]
+impl<T: jit::AsVarType> jit::Construct for Vector2<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = jit::VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        assert_eq!(layout.next().unwrap(), 2usize);
+        Self {
+            x: <Var<T> as jit::Construct>::construct(vars, layout),
+            y: <Var<T> as jit::Construct>::construct(vars, layout),
+        }
+    }
+    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
+        let var = var.as_ref();
+        let ty = var.ty();
+        assert!(
+            matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 2 && &ty == vec_ty )
+        );
+        let mut iter = var.extract_all();
+        Self {
+            x: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Vector3<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
@@ -38,7 +63,34 @@ impl<T: jit::AsVarType> jit::Traverse for Vector3<T> {
     }
 }
 
-#[derive(jit::Construct, Clone, Debug)]
+impl<T: jit::AsVarType> jit::Construct for Vector3<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = jit::VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        assert_eq!(layout.next().unwrap(), 3usize);
+        Self {
+            x: <Var<T> as jit::Construct>::construct(vars, layout),
+            y: <Var<T> as jit::Construct>::construct(vars, layout),
+            z: <Var<T> as jit::Construct>::construct(vars, layout),
+        }
+    }
+    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
+        let var = var.as_ref();
+        let ty = var.ty();
+        assert!(
+            matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 3 && &ty == vec_ty )
+        );
+        let mut iter = var.extract_all();
+        Self {
+            x: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            z: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Vector4<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
@@ -61,6 +113,35 @@ impl<T: jit::AsVarType> jit::Traverse for Vector4<T> {
             self.z.0.clone(),
             self.w.0.clone(),
         ])
+    }
+}
+
+impl<T: jit::AsVarType> jit::Construct for Vector4<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = jit::VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        assert_eq!(layout.next().unwrap(), 4usize);
+        Self {
+            x: <Var<T> as jit::Construct>::construct(vars, layout),
+            y: <Var<T> as jit::Construct>::construct(vars, layout),
+            z: <Var<T> as jit::Construct>::construct(vars, layout),
+            w: <Var<T> as jit::Construct>::construct(vars, layout),
+        }
+    }
+    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
+        let var = var.as_ref();
+        let ty = var.ty();
+        assert!(
+            matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 3 && &ty == vec_ty )
+        );
+        let mut iter = var.extract_all();
+        Self {
+            x: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            z: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            w: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+        }
     }
 }
 
