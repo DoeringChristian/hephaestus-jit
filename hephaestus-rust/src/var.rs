@@ -357,7 +357,7 @@ impl<T> Var<T>
 where
     Var<T>: Select,
 {
-    fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
+    pub fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
         Select::select(self, condition, false_val)
     }
 }
