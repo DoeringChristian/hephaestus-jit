@@ -23,9 +23,9 @@ impl<T: jit::AsVarType> From<&jit::VarRef> for Var<T> {
 }
 
 impl<T: jit::AsVarType> jit::Traverse for Var<T> {
-    fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
-        layout.push(0);
+    fn traverse(&self, vars: &mut Vec<jit::VarRef>) -> &'static jit::Layout {
         vars.push(self.0.clone());
+        jit::Layout::elem()
     }
 
     fn ravel(&self) -> jit::VarRef {
@@ -35,9 +35,9 @@ impl<T: jit::AsVarType> jit::Traverse for Var<T> {
 impl<T: jit::AsVarType> jit::Construct for Var<T> {
     fn construct(
         vars: &mut impl Iterator<Item = jit::VarRef>,
-        layout: &mut impl Iterator<Item = usize>,
+        layout: &'static jit::Layout,
     ) -> Self {
-        assert_eq!(layout.next().unwrap(), 0);
+        assert_eq!(layout, &jit::Layout::Elem);
         vars.next().unwrap().into()
     }
 

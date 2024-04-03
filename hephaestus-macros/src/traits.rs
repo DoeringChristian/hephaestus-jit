@@ -98,11 +98,9 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
 
     quote! {
         impl #impl_generics #jit::Traverse for #ident #ty_generics #where_clause{
-            fn traverse(&self, vars: &mut Vec<#jit::VarRef>, layout: &mut Vec<usize>){
-                layout.push(#n_names);
-                #(
-                    self.#names.traverse(vars, layout);
-                )*
+            fn traverse(&self, vars: &mut Vec<#jit::VarRef>) -> &'static #jit::Layout{
+                let layouts = [#(self.#names.traverse(vars)),*];
+                #jit::Layout::tuple(&layouts)
             }
             fn ravel(&self) -> #jit::VarRef {
                 let refs = [#(self.#names.ravel()),*];
@@ -134,10 +132,10 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                 let n_params = types.len();
                 quote! {
                     impl #impl_generics #jit::Construct for #ident #ty_generics #where_clause{
-                        fn construct(vars: &mut impl Iterator<Item = #jit::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
-                            assert_eq!(layout.next().unwrap(), #n_params);
+                        fn construct(vars: &mut impl Iterator<Item = #jit::VarRef>, layout: &'static #jit::Layout) -> Self{
+                            let mut layouts = layout.tuple_types().unwrap().into_iter();
                             Self{
-                                #(#names: <#types as #jit::Construct>::construct(vars, layout),)*
+                                #(#names: <#types as #jit::Construct>::construct(vars, layouts.next().unwrap()),)*
                             }
                         }
                         fn unravel(var: impl AsRef<#jit::VarRef>) -> Self{
@@ -164,9 +162,9 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                 let n_params = types.len();
                 quote! {
                     impl #impl_generics #jit::Construct for #ident #ty_generics #where_clause{
-                        fn construct(vars: &mut impl Iterator<Item = #jit::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
-                            assert_eq!(layout.next().unwrap(), #n_params);
-                            Self(#(<#types as #jit::Construct>::construct(vars, layout),)*)
+                        fn construct(vars: &mut impl Iterator<Item = #jit::VarRef>, layout: &'static #jit::Layout) -> Self{
+                            let mut layouts = layout.tuple_types().unwrap().into_iter();
+                            Self(#(<#types as #jit::Construct>::construct(vars, layouts.next().unwrap()),)*)
                         }
                         fn unravel(var: impl AsRef<#jit::VarRef>) -> Self{
                             let var = var.as_ref();

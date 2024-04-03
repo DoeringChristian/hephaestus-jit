@@ -19,8 +19,8 @@ impl<T: jit::Traverse> Scatter for T {
         let mut src_vars = vec![];
         let mut dst_vars = vec![];
 
-        self.traverse(&mut src_vars, &mut vec![]);
-        dst.traverse(&mut dst_vars, &mut vec![]);
+        self.traverse(&mut src_vars);
+        dst.traverse(&mut dst_vars);
 
         for (src, dst) in src_vars.into_iter().zip(dst_vars.into_iter()) {
             src.scatter(dst, index.clone());
@@ -40,8 +40,8 @@ impl<T: jit::Traverse> Scatter for T {
         let mut src_vars = vec![];
         let mut dst_vars = vec![];
 
-        self.traverse(&mut src_vars, &mut vec![]);
-        dst.traverse(&mut dst_vars, &mut vec![]);
+        self.traverse(&mut src_vars);
+        dst.traverse(&mut dst_vars);
 
         for (src, dst) in src_vars.into_iter().zip(dst_vars.into_iter()) {
             src.scatter_if(dst, index.clone(), condition.clone());
@@ -61,15 +61,14 @@ impl<T: jit::Traverse + jit::Construct> Gather for T {
         let index = index.as_ref();
 
         let mut vars = vec![];
-        let mut layout = vec![];
 
-        self.traverse(&mut vars, &mut layout);
+        let layout = self.traverse(&mut vars);
 
         for var in vars.iter_mut() {
             *var = var.gather(index.clone())
         }
 
-        Self::construct(&mut vars.into_iter(), &mut layout.into_iter())
+        Self::construct(&mut vars.into_iter(), layout)
     }
 
     fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self {
@@ -77,14 +76,13 @@ impl<T: jit::Traverse + jit::Construct> Gather for T {
         let condition = condition.as_ref();
 
         let mut vars = vec![];
-        let mut layout = vec![];
 
-        self.traverse(&mut vars, &mut layout);
+        let layout = self.traverse(&mut vars);
 
         for var in vars.iter_mut() {
             *var = var.gather_if(index.clone(), condition.clone())
         }
 
-        Self::construct(&mut vars.into_iter(), &mut layout.into_iter())
+        Self::construct(&mut vars.into_iter(), layout)
     }
 }

@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -16,7 +15,7 @@ use crate::VarRef;
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Layout {
     Elem,
-    Vec { ty: &'static Layout, num: usize },
+    // Vec { ty: &'static Layout, num: usize },
     Tuple { tys: Vec<&'static Layout> },
 }
 
@@ -46,6 +45,12 @@ impl Layout {
             .entry(hash)
             .or_insert_with(|| Box::leak(Box::new(Self::Tuple { tys: tys.to_vec() })))
     }
+    pub fn tuple_types(&self) -> Option<&[&'static Layout]> {
+        match self {
+            Layout::Tuple { tys } => Some(tys),
+            _ => None,
+        }
+    }
 }
 
 static LAYOUT_CACHE: Lazy<Mutex<HashMap<u64, &'static Layout>>> =
@@ -58,7 +63,8 @@ pub trait Traverse {
     /// Therefore 0 for VarRef and N for [T; N] where T: Traverse.
     /// This is used by the [`Construct`] trait to allocate vectors.
     ///
-    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>);
+    // fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>);
+    fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout;
 
     ///
     /// Creates a compact composite variable from the variables in this container.
@@ -67,27 +73,23 @@ pub trait Traverse {
     fn ravel(&self) -> VarRef;
 }
 pub trait Construct: Sized {
-    fn construct(
-        vars: &mut impl Iterator<Item = VarRef>,
-        layout: &mut impl Iterator<Item = usize>,
-    ) -> Self;
+    fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &'static Layout) -> Self;
 
     fn unravel(var: impl AsRef<VarRef>) -> Self;
 }
 
 impl Traverse for VarRef {
-    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(0);
-        vars.push(self.clone())
+    fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
+        vars.push(self.clone());
+        Layout::elem()
     }
     fn ravel(&self) -> VarRef {
         self.clone()
     }
 }
 impl<T: Traverse> Traverse for &T {
-    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(0);
-        (**self).traverse(vars, layout);
+    fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
+        (**self).traverse(vars)
     }
 
     fn ravel(&self) -> VarRef {
@@ -96,11 +98,8 @@ impl<T: Traverse> Traverse for &T {
 }
 
 impl Construct for VarRef {
-    fn construct(
-        vars: &mut impl Iterator<Item = VarRef>,
-        layout: &mut impl Iterator<Item = usize>,
-    ) -> Self {
-        assert_eq!(layout.next().unwrap(), 0);
+    fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &'static Layout) -> Self {
+        assert_eq!(layout, &Layout::Elem);
         vars.next().unwrap()
     }
     fn unravel(var: impl AsRef<VarRef>) -> Self {
@@ -109,11 +108,9 @@ impl Construct for VarRef {
 }
 
 impl<T: Traverse> Traverse for Vec<T> {
-    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(self.len());
-        for i in self {
-            i.traverse(vars, layout);
-        }
+    fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
+        let layouts = self.iter().map(|v| v.traverse(vars)).collect::<Vec<_>>();
+        Layout::tuple(&layouts)
     }
 
     fn ravel(&self) -> VarRef {
@@ -123,13 +120,12 @@ impl<T: Traverse> Traverse for Vec<T> {
 }
 
 impl<T: Construct> Construct for Vec<T> {
-    fn construct(
-        vars: &mut impl Iterator<Item = VarRef>,
-        layout: &mut impl Iterator<Item = usize>,
-    ) -> Self {
-        let len = layout.next().unwrap();
-
-        (0..len).map(|_| T::construct(vars, layout)).collect()
+    fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &'static Layout) -> Self {
+        let layouts = layout.tuple_types().unwrap();
+        layouts
+            .into_iter()
+            .map(|layout| T::construct(vars, layout))
+            .collect()
     }
 
     fn unravel(var: impl AsRef<VarRef>) -> Self {
@@ -139,11 +135,9 @@ impl<T: Construct> Construct for Vec<T> {
 }
 
 impl<const N: usize, T: Traverse> Traverse for [T; N] {
-    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(N);
-        for i in self {
-            i.traverse(vars, layout);
-        }
+    fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
+        let layouts = self.iter().map(|v| v.traverse(vars)).collect::<Vec<_>>();
+        Layout::tuple(&layouts)
     }
     fn ravel(&self) -> VarRef {
         let refs = self.iter().map(|t| t.ravel()).collect::<Vec<_>>();
@@ -151,11 +145,9 @@ impl<const N: usize, T: Traverse> Traverse for [T; N] {
     }
 }
 impl<T: Traverse> Traverse for &[T] {
-    fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-        layout.push(self.len());
-        for i in *self {
-            i.traverse(vars, layout);
-        }
+    fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
+        let layouts = self.iter().map(|v| v.traverse(vars)).collect::<Vec<_>>();
+        Layout::tuple(&layouts)
     }
 
     fn ravel(&self) -> VarRef {
@@ -168,17 +160,10 @@ macro_rules! impl_traverse_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Traverse),*> Traverse for ($($param,)*){
-            fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>) {
-                let i = layout.len();
-                layout.push(0);
-
-                let mut len = 0;
+            fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
                 let ($($param,)*) = self;
-                $(
-                    len += 1;
-                    $param.traverse(vars, layout);
-                )*
-                layout[i] = len;
+                let layouts = [$($param.traverse(vars)),*];
+                Layout::tuple(&layouts)
             }
             fn ravel(&self) -> VarRef {
                 let ($($param,)*) = self;
@@ -210,9 +195,10 @@ macro_rules! impl_construct_for_tuple {
     ($($param:ident),*) => {
         #[allow(non_snake_case)]
         impl<$($param: Construct),*> Construct for ($($param,)*){
-            fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
-            layout.next().unwrap();
-                ($($param::construct(vars, layout),)*)
+            fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &'static Layout) -> Self{
+                let mut layouts = layout.tuple_types().unwrap().into_iter();
+
+                ($($param::construct(vars, layouts.next().unwrap()),)*)
             }
             fn unravel(var: impl AsRef<VarRef>) -> Self {
                 let var = var.as_ref();

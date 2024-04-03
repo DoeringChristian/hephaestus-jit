@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
-use crate::{backend, graph, tr};
+use crate::{backend, graph, tr, Layout};
 
 use crate::tr::{schedule_eval, with_trace, VarRef, TS};
 use crate::traverse::{Construct, Traverse};
@@ -110,7 +110,7 @@ where
 
 #[derive(Default)]
 pub struct FCache {
-    graphs: HashMap<u64, (graph::Graph, Vec<usize>)>,
+    graphs: HashMap<u64, (graph::Graph, &'static Layout)>,
 }
 impl FCache {
     pub fn call<Input, Output, F>(
@@ -126,8 +126,7 @@ impl FCache {
     {
         // Traverse Input
         let mut inputs = vec![];
-        let mut layout = vec![];
-        input.traverse(&mut inputs, &mut layout);
+        let layout = input.traverse(&mut inputs);
 
         // We evaluate the inputs to the function, to not collect dependencies of input variables.
         // This might not be the best solution, but it solves some of the problems.
@@ -164,8 +163,7 @@ impl FCache {
                 let output = f(input);
 
                 let mut outputs = vec![];
-                let mut layout = vec![];
-                output.traverse(&mut outputs, &mut layout);
+                let layout = output.traverse(&mut outputs);
 
                 // Compile with params
                 for v in &outputs {
@@ -189,9 +187,7 @@ impl FCache {
         let (report, output) = graph.launch_with(device, &inputs).unwrap();
 
         let mut output = output.into_iter();
-        let mut layout = layout.iter().copied();
-        let output = Output::construct(&mut output, &mut layout);
-        assert_eq!(layout.next(), None);
+        let output = Output::construct(&mut output, layout);
 
         Ok((output, report))
     }
