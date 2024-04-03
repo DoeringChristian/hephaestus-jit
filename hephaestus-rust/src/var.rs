@@ -4,7 +4,7 @@ use std::ops::Deref;
 use half::f16;
 use jit;
 
-use crate::traits::Gather;
+use crate::traits::{Gather, Select};
 use crate::Scatter;
 
 #[derive(Clone, Debug)]
@@ -316,17 +316,6 @@ macro_rules! top_trait {
 // Trinary Operations
 top_trait!(fma for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
-impl<T: jit::AsVarType> Var<T> {
-    // Select is implemented for all variables
-    pub fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
-        condition
-            .as_ref()
-            .0
-            .select(&self.0, &false_val.as_ref().0)
-            .into()
-    }
-}
-
 // Casting
 impl<T: jit::AsVarType> Var<T> {
     pub fn cast<U: jit::AsVarType>(&self) -> Var<U> {
@@ -362,6 +351,14 @@ where
     }
     pub fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self {
         Gather::gather_if(self, index, condition)
+    }
+}
+impl<T> Var<T>
+where
+    Var<T>: Select,
+{
+    fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
+        Select::select(self, condition, false_val)
     }
 }
 
