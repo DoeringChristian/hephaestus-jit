@@ -365,12 +365,9 @@ impl FCache {
 
 #[cfg(test)]
 mod test {
-    use hephaestus_macros::{recorded, Construct, Traverse};
-    use once_cell::sync::Lazy;
-
-    use crate::backend::Device;
     use crate::record::FCache;
     use crate::{literal, VarRef};
+    use hephaestus_macros::{recorded, Construct, Traverse};
 
     use super::WrapInput;
 
