@@ -1,15 +1,91 @@
 use super::Var;
 
-#[derive(jit::Traverse, jit::Construct, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Point2<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
 }
-#[derive(jit::Traverse, jit::Construct, Clone, Debug)]
+
+impl<T: jit::AsVarType> jit::Traverse for Point2<T> {
+    fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
+        layout.push(2usize);
+        self.x.traverse(vars, layout);
+        self.y.traverse(vars, layout);
+    }
+    fn ravel(&self) -> jit::VarRef {
+        jit::vec(&[self.x.0.clone(), self.y.0.clone()])
+    }
+}
+
+impl<T: jit::AsVarType> jit::Construct for Point2<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = jit::VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        assert_eq!(layout.next().unwrap(), 2usize);
+        Self {
+            x: <Var<T> as jit::Construct>::construct(vars, layout),
+            y: <Var<T> as jit::Construct>::construct(vars, layout),
+        }
+    }
+    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
+        let var = var.as_ref();
+        let ty = var.ty();
+        assert!(
+            matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 2 && &ty == vec_ty )
+        );
+        let mut iter = var.extract_all();
+        Self {
+            x: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Point3<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
     z: Var<T>,
+}
+
+impl<T: jit::AsVarType> jit::Traverse for Point3<T> {
+    fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
+        layout.push(3usize);
+        self.x.traverse(vars, layout);
+        self.y.traverse(vars, layout);
+        self.z.traverse(vars, layout);
+    }
+    fn ravel(&self) -> jit::VarRef {
+        jit::vec(&[self.x.0.clone(), self.y.0.clone(), self.z.0.clone()])
+    }
+}
+
+impl<T: jit::AsVarType> jit::Construct for Point3<T> {
+    fn construct(
+        vars: &mut impl Iterator<Item = jit::VarRef>,
+        layout: &mut impl Iterator<Item = usize>,
+    ) -> Self {
+        assert_eq!(layout.next().unwrap(), 3usize);
+        Self {
+            x: <Var<T> as jit::Construct>::construct(vars, layout),
+            y: <Var<T> as jit::Construct>::construct(vars, layout),
+            z: <Var<T> as jit::Construct>::construct(vars, layout),
+        }
+    }
+    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
+        let var = var.as_ref();
+        let ty = var.ty();
+        assert!(
+            matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 3 && &ty == vec_ty )
+        );
+        let mut iter = var.extract_all();
+        Self {
+            x: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            z: <Var<T> as jit::Construct>::unravel(iter.next().unwrap()),
+        }
+    }
 }
 
 pub type Point2f = Point2<f32>;
