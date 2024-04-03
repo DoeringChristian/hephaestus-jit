@@ -1,4 +1,4 @@
-use crate::utils::crate_name;
+use crate::utils::jit_name;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
 use syn::token::Token;
@@ -45,16 +45,16 @@ pub fn derive_as_var_type_impl(input: DeriveInput) -> TokenStream {
         _ => todo!("AsVarType can only be derived for structs!"),
     };
 
-    let crate_name = crate_name();
+    let jit = jit_name();
 
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     quote! {
-        impl #impl_generics #crate_name::vartype::AsVarType for #ident #ty_generics #where_clause{
-            fn var_ty() -> &'static #crate_name::vartype::VarType{
-                #crate_name::vartype::composite(&[
-                    #(<#types as #crate_name::vartype::AsVarType>::var_ty()),*
+        impl #impl_generics #jit::vartype::AsVarType for #ident #ty_generics #where_clause{
+            fn var_ty() -> &'static #jit::vartype::VarType{
+                #jit::vartype::composite(&[
+                    #(<#types as #jit::vartype::AsVarType>::var_ty()),*
                 ])
             }
         }
@@ -89,7 +89,7 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
         _ => todo!("Traverse can only be derived for structs!"),
     };
 
-    let crate_name = crate_name();
+    let jit = jit_name();
 
     let n_names = names.len();
 
@@ -97,19 +97,23 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     quote! {
-        impl #impl_generics #crate_name::Traverse for #ident #ty_generics #where_clause{
-            fn traverse(&self, vars: &mut Vec<#crate_name::VarRef>, layout: &mut Vec<usize>){
+        impl #impl_generics #jit::Traverse for #ident #ty_generics #where_clause{
+            fn traverse(&self, vars: &mut Vec<#jit::VarRef>, layout: &mut Vec<usize>){
                 layout.push(#n_names);
                 #(
                     self.#names.traverse(vars, layout);
                 )*
+            }
+            fn ravel(&self) -> #jit::VarRef {
+                let refs = [#(self.#names.ravel()),*];
+                #jit::composite(&refs)
             }
         }
     }
 }
 
 pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
-    let crate_name = crate_name();
+    let jit = jit_name();
 
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -129,21 +133,21 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                     .collect::<Vec<_>>();
                 let n_params = types.len();
                 quote! {
-                    impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
-                        fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
+                    impl #impl_generics #jit::Construct for #ident #ty_generics #where_clause{
+                        fn construct(vars: &mut impl Iterator<Item = #jit::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
                             assert_eq!(layout.next().unwrap(), #n_params);
                             Self{
-                                #(#names: <#types as #crate_name::Construct>::construct(vars, layout),)*
+                                #(#names: <#types as #jit::Construct>::construct(vars, layout),)*
                             }
                         }
-                        fn unravel(var: impl AsRef<#crate_name::VarRef>) -> Self{
+                        fn unravel(var: impl AsRef<#jit::VarRef>) -> Self{
                             let var = var.as_ref();
                             let ty = var.ty();
-                            assert!(matches!(ty, #crate_name::vartype::VarType::Struct{..}));
+                            assert!(matches!(ty, #jit::vartype::VarType::Struct{..}));
                             let mut iter = var.extract_all();
                             Self{
                                 #(
-                                    #names: <#types as #crate_name::Construct>::unravel(iter.next().unwrap()),
+                                    #names: <#types as #jit::Construct>::unravel(iter.next().unwrap()),
                                 )*
                             }
                         }
@@ -159,17 +163,17 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                     .collect::<Vec<_>>();
                 let n_params = types.len();
                 quote! {
-                    impl #impl_generics #crate_name::Construct for #ident #ty_generics #where_clause{
-                        fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
+                    impl #impl_generics #jit::Construct for #ident #ty_generics #where_clause{
+                        fn construct(vars: &mut impl Iterator<Item = #jit::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
                             assert_eq!(layout.next().unwrap(), #n_params);
-                            Self(#(<#types as #crate_name::Construct>::construct(vars, layout),)*)
+                            Self(#(<#types as #jit::Construct>::construct(vars, layout),)*)
                         }
-                        fn unravel(var: impl AsRef<#crate_name::VarRef>) -> Self{
+                        fn unravel(var: impl AsRef<#jit::VarRef>) -> Self{
                             let var = var.as_ref();
                             let ty = var.ty();
-                            assert!(matches!(ty, #crate_name::vartype::VarType::Struct{..}));
+                            assert!(matches!(ty, #jit::vartype::VarType::Struct{..}));
                             let mut iter = var.extract_all();
-                            Self(#(<#types as #crate_name::Construct>::unravel(iter.next().unwrap()),)*)
+                            Self(#(<#types as #jit::Construct>::unravel(iter.next().unwrap()),)*)
                         }
                     }
                 }

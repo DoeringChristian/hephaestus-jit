@@ -27,6 +27,10 @@ impl<T: jit::AsVarType> jit::Traverse for Var<T> {
         layout.push(0);
         vars.push(self.0.clone());
     }
+
+    fn ravel(&self) -> jit::VarRef {
+        self.0.clone()
+    }
 }
 impl<T: jit::AsVarType> jit::Construct for Var<T> {
     fn construct(

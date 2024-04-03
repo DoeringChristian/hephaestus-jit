@@ -1,11 +1,11 @@
-use crate::utils::crate_name;
+use crate::utils::jit_name;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::{parse_quote, FnArg, Ident, Signature, Token};
 
 pub fn recorded_impl(func: syn::ItemFn) -> TokenStream {
-    let crate_name = crate_name();
+    let jit = jit_name();
 
     let ident = &func.sig.ident;
     let input = &func.sig.inputs;
@@ -37,10 +37,9 @@ pub fn recorded_impl(func: syn::ItemFn) -> TokenStream {
         syn::ReturnType::Default => quote!(()),
         syn::ReturnType::Type(_, ty) => quote!(#ty),
     };
-    let wrapped_output_type =
-        quote!(#crate_name::graph::Result<(#output_type, #crate_name::graph::Report)>);
+    let wrapped_output_type = quote!(#jit::graph::Result<(#output_type, #jit::graph::Report)>);
 
-    let lazy = quote!(#crate_name::once_cell::sync::Lazy);
+    let lazy = quote!(#jit::once_cell::sync::Lazy);
     let input_tuple_type = quote!((#(#input_types,)*));
     let input_tuple_vars = quote!((#(#input_vars,)*));
 
@@ -54,12 +53,12 @@ pub fn recorded_impl(func: syn::ItemFn) -> TokenStream {
     // func.sig.inputs = func_inputs;
 
     quote! {
-        fn #ident(device: &#crate_name::Device, #input) -> #wrapped_output_type{
+        fn #ident(device: &#jit::Device, #input) -> #wrapped_output_type{
             #func
 
             use std::sync::Mutex;
-            use #crate_name::record::FCache;
-            use #crate_name::record::WrapInput;
+            use #jit::record::FCache;
+            use #jit::record::WrapInput;
             static FCACHE: #lazy<Mutex<FCache>> = #lazy::new(||Mutex::new(FCache::default()));
 
             let mut wrapped_input_func = #ident.wrap_input();
