@@ -19,12 +19,24 @@ pub trait Traverse {
     /// This is used by the [`Construct`] trait to allocate vectors.
     ///
     fn traverse(&self, vars: &mut Vec<VarRef>, layout: &mut Vec<usize>);
+
+    ///
+    /// Creates a compact composite variable from the variables in this container.
+    /// This corresponds to transposing the type from a struct of arrays to an array of structs.
+    ///
+    fn ravel(&self) -> VarRef {
+        let mut vars = vec![];
+        self.traverse(&mut vars, &mut vec![]);
+        tr::composite(&vars)
+    }
 }
-pub trait Construct {
+pub trait Construct: Sized {
     fn construct(
         vars: &mut impl Iterator<Item = VarRef>,
         layout: &mut impl Iterator<Item = usize>,
     ) -> Self;
+
+    fn unravel(var: impl AsRef<VarRef>) -> Self;
 }
 
 impl Traverse for VarRef {
@@ -48,6 +60,9 @@ impl Construct for VarRef {
         assert_eq!(layout.next().unwrap(), 0);
         vars.next().unwrap()
     }
+    fn unravel(var: impl AsRef<VarRef>) -> Self {
+        var.as_ref().clone()
+    }
 }
 
 impl<T: Traverse> Traverse for Vec<T> {
@@ -67,6 +82,11 @@ impl<T: Construct> Construct for Vec<T> {
         let len = layout.next().unwrap();
 
         (0..len).map(|_| T::construct(vars, layout)).collect()
+    }
+
+    fn unravel(var: impl AsRef<VarRef>) -> Self {
+        let var = var.as_ref();
+        var.extract_all().map(|r| T::unravel(r)).collect::<Vec<_>>()
     }
 }
 
@@ -132,11 +152,11 @@ macro_rules! impl_construct_for_tuple {
             layout.next().unwrap();
                 ($($param::construct(vars, layout),)*)
             }
-            // fn traverse<'a>(&'a self) -> impl Iterator<Item = &'a VarRef>{
-            //     let ($($param,)*) = self;
-            //     [].into_iter()
-            //     $(.chain($param.traverse()))*
-            // }
+            fn unravel(var: impl AsRef<VarRef>) -> Self {
+                let var = var.as_ref();
+                let mut iter = var.extract_all();
+                ($($param::unravel(iter.next().unwrap()),)*)
+            }
         }
     };
 }

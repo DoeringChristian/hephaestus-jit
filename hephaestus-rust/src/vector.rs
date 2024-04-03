@@ -2,23 +2,66 @@ use crate::Scatter;
 
 use super::var::Var;
 
-#[derive(jit::Traverse, jit::Construct, Clone, Debug)]
+#[derive(jit::Construct, Clone, Debug)]
 pub struct Vector2<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
 }
-#[derive(jit::Traverse, jit::Construct, Clone, Debug)]
+
+impl<T: jit::AsVarType> jit::Traverse for Vector2<T> {
+    fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
+        layout.push(2usize);
+        self.x.traverse(vars, layout);
+        self.y.traverse(vars, layout);
+    }
+    fn ravel(&self) -> jit::VarRef {
+        jit::vec(&[self.x.0.clone(), self.y.0.clone()])
+    }
+}
+
+#[derive(jit::Construct, Clone, Debug)]
 pub struct Vector3<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
     z: Var<T>,
 }
-#[derive(jit::Traverse, jit::Construct, Clone, Debug)]
+
+impl<T: jit::AsVarType> jit::Traverse for Vector3<T> {
+    fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
+        layout.push(3usize);
+        self.x.traverse(vars, layout);
+        self.y.traverse(vars, layout);
+        self.z.traverse(vars, layout);
+    }
+    fn ravel(&self) -> jit::VarRef {
+        jit::vec(&[self.x.0.clone(), self.y.0.clone(), self.z.0.clone()])
+    }
+}
+
+#[derive(jit::Construct, Clone, Debug)]
 pub struct Vector4<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
     z: Var<T>,
     w: Var<T>,
+}
+
+impl<T: jit::AsVarType> jit::Traverse for Vector4<T> {
+    fn traverse(&self, vars: &mut Vec<jit::VarRef>, layout: &mut Vec<usize>) {
+        layout.push(4usize);
+        self.x.traverse(vars, layout);
+        self.y.traverse(vars, layout);
+        self.z.traverse(vars, layout);
+        self.w.traverse(vars, layout);
+    }
+    fn ravel(&self) -> jit::VarRef {
+        jit::vec(&[
+            self.x.0.clone(),
+            self.y.0.clone(),
+            self.z.0.clone(),
+            self.w.0.clone(),
+        ])
+    }
 }
 
 pub type Vector2f = Var<Vector2<f32>>;

@@ -36,6 +36,11 @@ impl<T: jit::AsVarType> jit::Construct for Var<T> {
         assert_eq!(layout.next().unwrap(), 0);
         vars.next().unwrap().into()
     }
+
+    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
+        let var = var.as_ref();
+        var.clone().into()
+    }
 }
 
 impl<T> AsRef<Var<T>> for Var<T> {

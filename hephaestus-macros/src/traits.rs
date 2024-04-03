@@ -136,6 +136,17 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                                 #(#names: <#types as #crate_name::Construct>::construct(vars, layout),)*
                             }
                         }
+                        fn unravel(var: impl AsRef<#crate_name::VarRef>) -> Self{
+                            let var = var.as_ref();
+                            let ty = var.ty();
+                            assert!(matches!(ty, #crate_name::vartype::VarType::Struct{..}));
+                            let mut iter = var.extract_all();
+                            Self{
+                                #(
+                                    #names: <#types as #crate_name::Construct>::unravel(iter.next().unwrap()),
+                                )*
+                            }
+                        }
                     }
                 }
             }
@@ -152,6 +163,13 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                         fn construct(vars: &mut impl Iterator<Item = #crate_name::VarRef>, layout: &mut impl Iterator<Item = usize>) -> Self{
                             assert_eq!(layout.next().unwrap(), #n_params);
                             Self(#(<#types as #crate_name::Construct>::construct(vars, layout),)*)
+                        }
+                        fn unravel(var: impl AsRef<#crate_name::VarRef>) -> Self{
+                            let var = var.as_ref();
+                            let ty = var.ty();
+                            assert!(matches!(ty, #crate_name::vartype::VarType::Struct{..}));
+                            let mut iter = var.extract_all();
+                            Self(#(<#types as #crate_name::Construct>::unravel(iter.next().unwrap()),)*)
                         }
                     }
                 }
