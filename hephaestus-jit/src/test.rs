@@ -401,7 +401,7 @@ fn select(#[case] device: Device) {
     let true_val = tr::literal(10);
     let false_val = tr::literal(5);
 
-    let res = cond.select(&true_val, &false_val);
+    let res = true_val.select(&cond, &false_val);
     res.schedule();
 
     let graph = tr::compile().unwrap();

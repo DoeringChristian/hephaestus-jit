@@ -4,6 +4,7 @@ use std::ops::Deref;
 use half::f16;
 use jit;
 
+use crate::traits::Gather;
 use crate::Scatter;
 
 #[derive(Clone, Debug)]
@@ -352,79 +353,101 @@ where
         Scatter::scatter_if(self, dst, index, condition)
     }
 }
-
-// Gather/Scatter
-impl<T: jit::AsVarType> Var<T> {
+impl<T> Var<T>
+where
+    Var<T>: Gather,
+{
     pub fn gather(&self, index: impl AsRef<Var<u32>>) -> Self {
-        self.0.gather(&index.as_ref().0).into()
+        Gather::gather(self, index)
     }
     pub fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self {
-        self.0
-            .gather_if(&index.as_ref().0, &condition.as_ref().0)
-            .into()
-    }
-
-    pub fn scatter_reduce(
-        &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        op: jit::ReduceOp,
-    ) {
-        self.0
-            .scatter_reduce(&dst.as_ref().0, &index.as_ref().0, op)
-    }
-    pub fn scatter_reduce_if(
-        &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
-        op: jit::ReduceOp,
-    ) {
-        self.0.scatter_reduce_if(
-            &dst.as_ref().0,
-            &index.as_ref().0,
-            &condition.as_ref().0,
-            op,
-        )
-    }
-
-    pub fn scatter_atomic(
-        &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        op: jit::ReduceOp,
-    ) -> Self {
-        self.0
-            .scatter_atomic(&dst.as_ref().0, &index.as_ref().0, op)
-            .into()
-    }
-    pub fn scatter_atomic_if(
-        &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
-        op: jit::ReduceOp,
-    ) -> Self {
-        self.0
-            .scatter_atomic_if(
-                &dst.as_ref().0,
-                &index.as_ref().0,
-                &condition.as_ref().0,
-                op,
-            )
-            .into()
-    }
-
-    pub fn atomic_inc(
-        &self,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
-    ) -> Self {
-        self.0
-            .atomic_inc(&index.as_ref().0, &condition.as_ref().0)
-            .into()
+        Gather::gather_if(self, index, condition)
     }
 }
+
+macro_rules! scatter_reduce {
+    ($T:ident) => {
+        impl Var<$T> {
+            pub fn scatter_reduce(
+                &self,
+                dst: impl AsRef<Self>,
+                index: impl AsRef<Var<u32>>,
+                op: jit::ReduceOp,
+            ) {
+                self.0
+                    .scatter_reduce(&dst.as_ref().0, &index.as_ref().0, op)
+            }
+            pub fn scatter_reduce_if(
+                &self,
+                dst: impl AsRef<Self>,
+                index: impl AsRef<Var<u32>>,
+                condition: impl AsRef<Var<bool>>,
+                op: jit::ReduceOp,
+            ) {
+                self.0.scatter_reduce_if(
+                    &dst.as_ref().0,
+                    &index.as_ref().0,
+                    &condition.as_ref().0,
+                    op,
+                )
+            }
+        }
+
+    };
+    ($($T:ident),*) => {
+        $(scatter_reduce!($T);)*
+    };
+}
+
+scatter_reduce!(bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+
+macro_rules! scatter_atomic {
+    ($T:ident) => {
+
+        impl Var<$T> {
+            pub fn scatter_atomic(
+                &self,
+                dst: impl AsRef<Self>,
+                index: impl AsRef<Var<u32>>,
+                op: jit::ReduceOp,
+            ) -> Self {
+                self.0
+                    .scatter_atomic(&dst.as_ref().0, &index.as_ref().0, op)
+                    .into()
+            }
+            pub fn scatter_atomic_if(
+                &self,
+                dst: impl AsRef<Self>,
+                index: impl AsRef<Var<u32>>,
+                condition: impl AsRef<Var<bool>>,
+                op: jit::ReduceOp,
+            ) -> Self {
+                self.0
+                    .scatter_atomic_if(
+                        &dst.as_ref().0,
+                        &index.as_ref().0,
+                        &condition.as_ref().0,
+                        op,
+                    )
+                    .into()
+            }
+
+            pub fn atomic_inc(
+                &self,
+                index: impl AsRef<Var<u32>>,
+                condition: impl AsRef<Var<bool>>,
+            ) -> Self {
+                self.0
+                    .atomic_inc(&index.as_ref().0, &condition.as_ref().0)
+                    .into()
+            }
+        }
+    };
+    ($($T:ident),*) => {
+        $(scatter_atomic!($T);)*
+    };
+}
+scatter_atomic!(bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 
 pub type Float16 = Var<f16>;
 pub type Float32 = Var<f32>;
@@ -439,6 +462,8 @@ pub type UInt8 = Var<u8>;
 pub type UInt16 = Var<u16>;
 pub type UInt32 = Var<u32>;
 pub type UInt64 = Var<u64>;
+
+pub type Mask = Var<bool>;
 
 #[cfg(test)]
 mod test {

@@ -46,7 +46,6 @@ impl<T: jit::Traverse> Scatter for T {
         for (src, dst) in src_vars.into_iter().zip(dst_vars.into_iter()) {
             src.scatter_if(dst, index.clone(), condition.clone());
         }
-        todo!()
     }
 }
 
@@ -84,5 +83,30 @@ impl<T: jit::Traverse + jit::Construct> Gather for T {
         }
 
         Self::construct(&mut vars.into_iter(), layout)
+    }
+}
+
+pub trait Select {
+    fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self;
+}
+
+impl<T: jit::Traverse + jit::Construct> Select for T {
+    fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
+        let condition = condition.as_ref();
+        let false_val = false_val.as_ref();
+
+        let mut true_vars = vec![];
+        let mut false_vars = vec![];
+
+        let true_layout = self.traverse(&mut true_vars);
+        let false_layout = false_val.traverse(&mut false_vars);
+
+        assert_eq!(true_layout, false_layout);
+
+        for (true_var, false_var) in true_vars.iter_mut().zip(false_vars.iter()) {
+            *true_var = true_var.select(condition, false_var);
+        }
+
+        Self::construct(&mut true_vars.into_iter(), true_layout)
     }
 }

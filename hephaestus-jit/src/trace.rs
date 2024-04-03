@@ -1320,16 +1320,17 @@ impl VarRef {
         let n_elements = s.ty().num_elements().unwrap();
         (0..n_elements).map(move |i| s.extract(i))
     }
-    pub fn select(&self, true_val: impl AsRef<Self>, false_val: impl AsRef<Self>) -> Self {
-        let true_val = true_val.as_ref();
+    pub fn select(&self, condition: impl AsRef<Self>, false_val: impl AsRef<Self>) -> Self {
+        let condition = condition.as_ref();
+        let true_val = self;
         let false_val = false_val.as_ref();
         
-        assert_eq!(self.ty(), bool::var_ty());
+        assert_eq!(condition.ty(), bool::var_ty());
         assert_eq!(true_val.ty(), false_val.ty());
 
         let ty = true_val.ty();
 
-        let extent = resulting_extent([self, true_val, false_val].into_iter());
+        let extent = resulting_extent([condition, true_val, false_val].into_iter());
 
         new_var(
             Var {
@@ -1338,7 +1339,7 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [self, true_val, false_val],
+            [condition, true_val, false_val],
         )
     }
     pub fn tex_lookup(&self, pos: impl AsRef<VarRef>) -> Self {

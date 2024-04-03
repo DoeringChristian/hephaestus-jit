@@ -16,10 +16,10 @@ pub use point::{
     Point3u,
 };
 pub use texture::Texture;
-pub use traits::Scatter;
+pub use traits::{Gather, Scatter};
 pub use var::{arr, array, composite, dyn_index, index, literal, sized_index, sized_literal, Var};
 pub use var::{
-    Float16, Float32, Float64, Int16, Int32, Int64, Int8, UInt16, UInt32, UInt64, UInt8,
+    Float16, Float32, Float64, Int16, Int32, Int64, Int8, Mask, UInt16, UInt32, UInt64, UInt8,
 };
 pub use vector::{
     vec2, vec3, vec4, Vector2, Vector2d, Vector2f, Vector2i, Vector2u, Vector3, Vector3d, Vector3f,
