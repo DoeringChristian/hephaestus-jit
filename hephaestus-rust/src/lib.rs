@@ -1,4 +1,5 @@
 mod accel;
+mod matrix;
 mod point;
 mod texture;
 mod traits;
@@ -11,6 +12,10 @@ pub use jit::{
 };
 
 pub use accel::{Accel, AccelDesc, GeometryDesc};
+pub use matrix::{
+    Matrix3, Matrix3d, Matrix3f, Matrix3i, Matrix3u, Matrix4, Matrix4d, Matrix4f, Matrix4i,
+    Matrix4u,
+};
 pub use point::{
     point2, point3, Point2, Point2d, Point2f, Point2i, Point2u, Point3, Point3d, Point3f, Point3i,
     Point3u,
