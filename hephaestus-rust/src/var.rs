@@ -207,14 +207,14 @@ macro_rules! bop_trait {
     ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
             pub trait [<$op:camel>] {
-                type Return;
-                type Rhs;
-                fn $op(&self, other: impl AsRef<Self::Rhs>) -> Self::Return;
+                // type Return;
+                // type Rhs;
+                fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type;
             }
             $(
                 impl [<$op:camel>] for Var<$types> {
-                    type Return = $ret_type;
-                    type Rhs = $rhs;
+                    // type Return = $ret_type;
+                    // type Rhs = $rhs;
                     fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
                         self.0.$op(other.as_ref()).into()
                     }
@@ -224,7 +224,7 @@ macro_rules! bop_trait {
             where
                 Var<T>: [<$op:camel>],
             {
-                pub fn $op(&self, other: impl AsRef<<Self as [<$op:camel>]>::Rhs>) -> <Self as [<$op:camel>]>::Return {
+                pub fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
                     <Self as [<$op:camel>]>::$op(self, other)
                 }
             }
@@ -244,14 +244,24 @@ bop_trait!(max for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 macro_rules! std_bop {
     ($op:ident) => {
         paste::paste! {
-            impl<T: jit::AsVarType, Rhs: AsRef<<Var<T> as [<$op:camel>]>::Rhs>> std::ops::[<$op:camel>]<Rhs> for Var<T>
+            impl<T: jit::AsVarType, Rhs: AsRef<jit::VarRef>> std::ops::[<$op:camel>]<Rhs> for Var<T>
             where
                 Var<T>: [<$op:camel>],
             {
-                type Output = <Var<T> as [<$op:camel>]>::Return;
+                type Output = Self;
 
                 fn $op(self, rhs: Rhs) -> Self::Output {
                     [<$op:camel>]::$op(&self, rhs)
+                }
+            }
+            impl<T: jit::AsVarType, Rhs: AsRef<jit::VarRef>> std::ops::[<$op:camel>]<Rhs> for &Var<T>
+            where
+                Var<T>: [<$op:camel>],
+            {
+                type Output = Var<T>;
+
+                fn $op(self, rhs: Rhs) -> Self::Output {
+                    Var::<T>::$op(self, rhs)
                 }
             }
         }

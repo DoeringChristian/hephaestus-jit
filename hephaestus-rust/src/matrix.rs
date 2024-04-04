@@ -146,3 +146,14 @@ impl<T: jit::AsVarType> Matrix4<T> {
         }
     }
 }
+
+impl<T: jit::AsVarType> AsRef<Matrix3<T>> for Matrix3<T> {
+    fn as_ref(&self) -> &Matrix3<T> {
+        self
+    }
+}
+impl<T: jit::AsVarType> AsRef<Matrix4<T>> for Matrix4<T> {
+    fn as_ref(&self) -> &Matrix4<T> {
+        self
+    }
+}

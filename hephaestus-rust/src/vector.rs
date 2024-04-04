@@ -1,3 +1,4 @@
+use crate::var::{Add, Mul};
 use crate::Scatter;
 
 use super::var::Var;
@@ -301,5 +302,35 @@ where
         condition: impl AsRef<Var<bool>>,
     ) {
         Scatter::scatter_if(self, dst, index, condition)
+    }
+}
+
+impl<T: jit::AsVarType> Vector2<T>
+where
+    Var<T>: Add + Mul,
+{
+    pub fn dot(&self, rhs: impl AsRef<Self>) -> Var<T> {
+        let rhs = rhs.as_ref();
+        &self.x * &rhs.x + &self.y * &rhs.y
+    }
+}
+
+impl<T: jit::AsVarType> Vector3<T>
+where
+    Var<T>: Add + Mul,
+{
+    pub fn dot(&self, rhs: impl AsRef<Self>) -> Var<T> {
+        let rhs = rhs.as_ref();
+        &self.x * &rhs.x + &self.y * &rhs.y + &self.z * &rhs.z
+    }
+}
+
+impl<T: jit::AsVarType> Vector4<T>
+where
+    Var<T>: Add + Mul,
+{
+    pub fn dot(&self, rhs: impl AsRef<Self>) -> Var<T> {
+        let rhs = rhs.as_ref();
+        &self.x * &rhs.x + &self.y * &rhs.y + &self.z * &rhs.z + &self.w * &rhs.w
     }
 }
