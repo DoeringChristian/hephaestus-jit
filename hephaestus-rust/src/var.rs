@@ -42,20 +42,25 @@ impl<T: jit::AsVarType> jit::Construct for Var<T> {
         vars.next().unwrap().into()
     }
 
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         var.clone().into()
     }
 }
 
-impl<T> AsRef<Var<T>> for Var<T> {
-    fn as_ref(&self) -> &Var<T> {
-        &self
+impl<T: jit::AsVarType> From<&Var<T>> for Var<T> {
+    fn from(value: &Var<T>) -> Self {
+        value.clone()
     }
 }
-impl<T> AsRef<jit::VarRef> for Var<T> {
-    fn as_ref(&self) -> &jit::VarRef {
-        &self.0
+impl<T> Into<jit::VarRef> for Var<T> {
+    fn into(self) -> jit::VarRef {
+        self.0.clone()
+    }
+}
+impl<T> Into<jit::VarRef> for &Var<T> {
+    fn into(self) -> jit::VarRef {
+        self.0.clone()
     }
 }
 impl<T> Deref for Var<T> {
@@ -107,8 +112,8 @@ pub struct CompositeBuilder<T> {
     elems: Vec<jit::VarRef>,
 }
 impl<'a, T: jit::AsVarType> CompositeBuilder<T> {
-    pub fn elem<U: jit::AsVarType>(mut self, elem: impl AsRef<Var<U>>) -> Self {
-        self.elems.push(elem.as_ref().0.clone());
+    pub fn elem<U: jit::AsVarType>(mut self, elem: impl Into<Var<U>>) -> Self {
+        self.elems.push(elem.into().0.clone());
         self
     }
     pub fn construct(self) -> Var<T> {
@@ -206,17 +211,17 @@ macro_rules! bop_trait {
     };
     ($op:ident (self, $rhs:ty) -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
-            pub trait [<$op:camel>] {
+            pub trait [<$op:camel>]: Sized {
                 // type Return;
                 // type Rhs;
-                fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type;
+                fn $op(&self, rhs: impl Into<$rhs>) -> $ret_type;
             }
             $(
                 impl [<$op:camel>] for Var<$types> {
                     // type Return = $ret_type;
                     // type Rhs = $rhs;
-                    fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
-                        self.0.$op(other.as_ref()).into()
+                    fn $op(&self, rhs: impl Into<$rhs>) -> $ret_type {
+                        self.0.$op(rhs.into()).into()
                     }
                 }
             )*
@@ -224,7 +229,7 @@ macro_rules! bop_trait {
             where
                 Var<T>: [<$op:camel>],
             {
-                pub fn $op(&self, other: impl AsRef<$rhs>) -> $ret_type {
+                pub fn $op(&self, other: impl Into<$rhs>) -> $ret_type {
                     <Self as [<$op:camel>]>::$op(self, other)
                 }
             }
@@ -244,7 +249,7 @@ bop_trait!(max for i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
 macro_rules! std_bop {
     ($op:ident) => {
         paste::paste! {
-            impl<T: jit::AsVarType, Rhs: AsRef<jit::VarRef>> std::ops::[<$op:camel>]<Rhs> for Var<T>
+            impl<T: jit::AsVarType, Rhs: Into<jit::VarRef>> std::ops::[<$op:camel>]<Rhs> for Var<T>
             where
                 Var<T>: [<$op:camel>],
             {
@@ -254,7 +259,7 @@ macro_rules! std_bop {
                     [<$op:camel>]::$op(&self, rhs)
                 }
             }
-            impl<T: jit::AsVarType, Rhs: AsRef<jit::VarRef>> std::ops::[<$op:camel>]<Rhs> for &Var<T>
+            impl<T: jit::AsVarType, Rhs: Into<jit::VarRef>> std::ops::[<$op:camel>]<Rhs> for &Var<T>
             where
                 Var<T>: [<$op:camel>],
             {
@@ -299,15 +304,15 @@ macro_rules! top_trait {
     };
     ($op:ident (self, $b:ty, $c:ty) -> ($ret_type:ty) for $($types:ty),*) => {
         paste::paste! {
-            pub trait [<$op:camel>] {
+            pub trait [<$op:camel>]: Sized{
                 type Return;
-                fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> Self::Return;
+                fn $op(&self, b: impl Into<$b>, c: impl Into<$c>) -> Self::Return;
             }
             $(
                 impl [<$op:camel>] for Var<$types> {
                     type Return = $ret_type;
-                    fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> $ret_type {
-                        self.0.$op(&b.as_ref(), &c.as_ref()).into()
+                    fn $op(&self, b: impl Into<$b>, c: impl Into<$c>) -> $ret_type {
+                        self.0.$op(&b.into(), &c.into()).into()
                     }
                 }
             )*
@@ -315,7 +320,7 @@ macro_rules! top_trait {
             where
                 Var<T>: [<$op:camel>],
             {
-                pub fn $op(&self, b: impl AsRef<$b>, c: impl AsRef<$c>) -> <Self as [<$op:camel>]>::Return {
+                pub fn $op(&self, b: impl Into<$b>, c: impl Into<$c>) -> <Self as [<$op:camel>]>::Return {
                     <Self as [<$op:camel>]>::$op(self, b, c)
                 }
             }

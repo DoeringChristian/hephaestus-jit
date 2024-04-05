@@ -9,8 +9,8 @@ pub struct Texture<const D: usize, T> {
 }
 
 impl<const D: usize, T: jit::AsVarType> Texture<D, T> {
-    pub fn from_data(data: impl AsRef<Var<T>>, shape: [usize; D], channels: usize) -> Self {
-        let tex = Var(data.as_ref().0.texture(&shape, channels), PhantomData);
+    pub fn from_data(data: impl Into<Var<T>>, shape: [usize; D], channels: usize) -> Self {
+        let tex = Var(data.into().texture(&shape, channels), PhantomData);
 
         Self {
             tex,

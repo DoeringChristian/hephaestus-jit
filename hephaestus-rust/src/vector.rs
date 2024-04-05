@@ -30,8 +30,8 @@ impl<T: jit::AsVarType> jit::Construct for Vector2<T> {
             y: <Var<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 2 && &ty == vec_ty )
@@ -77,8 +77,8 @@ impl<T: jit::AsVarType> jit::Construct for Vector3<T> {
             z: <Var<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 3 && &ty == vec_ty )
@@ -133,8 +133,8 @@ impl<T: jit::AsVarType> jit::Construct for Vector4<T> {
             w: <Var<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 3 && &ty == vec_ty )
@@ -165,37 +165,34 @@ pub type Vector2u = Vector2<u32>;
 pub type Vector3u = Vector3<u32>;
 pub type Vector4u = Vector4<u32>;
 
-pub fn vec2<T: jit::AsVarType>(
-    x: impl AsRef<jit::VarRef>,
-    y: impl AsRef<jit::VarRef>,
-) -> Vector2<T> {
+pub fn vec2<T: jit::AsVarType>(x: impl Into<jit::VarRef>, y: impl Into<jit::VarRef>) -> Vector2<T> {
     Vector2::<T> {
-        x: x.as_ref().into(),
-        y: y.as_ref().into(),
+        x: x.into().into(),
+        y: y.into().into(),
     }
 }
 pub fn vec3<T: jit::AsVarType>(
-    x: impl AsRef<jit::VarRef>,
-    y: impl AsRef<jit::VarRef>,
-    z: impl AsRef<jit::VarRef>,
+    x: impl Into<jit::VarRef>,
+    y: impl Into<jit::VarRef>,
+    z: impl Into<jit::VarRef>,
 ) -> Vector3<T> {
     Vector3::<T> {
-        x: x.as_ref().into(),
-        y: y.as_ref().into(),
-        z: z.as_ref().into(),
+        x: x.into().into(),
+        y: y.into().into(),
+        z: z.into().into(),
     }
 }
 pub fn vec4<T: jit::AsVarType>(
-    x: impl AsRef<jit::VarRef>,
-    y: impl AsRef<jit::VarRef>,
-    z: impl AsRef<jit::VarRef>,
-    w: impl AsRef<jit::VarRef>,
+    x: impl Into<jit::VarRef>,
+    y: impl Into<jit::VarRef>,
+    z: impl Into<jit::VarRef>,
+    w: impl Into<jit::VarRef>,
 ) -> Vector4<T> {
     Vector4::<T> {
-        x: x.as_ref().into(),
-        y: y.as_ref().into(),
-        z: z.as_ref().into(),
-        w: w.as_ref().into(),
+        x: x.into().into(),
+        y: y.into().into(),
+        z: z.into().into(),
+        w: w.into().into(),
     }
 }
 
@@ -245,28 +242,21 @@ impl<T: jit::AsVarType> From<jit::VarRef> for Vector4<T> {
 
 impl<T: jit::AsVarType> Vector2<T> {
     pub fn ravel(&self) -> jit::VarRef {
-        jit::vec(&[
-            AsRef::<jit::VarRef>::as_ref(&self.x).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.y).clone(),
-        ])
+        jit::vec(&[(&self.x).into(), (&self.y).into()])
     }
 }
 impl<T: jit::AsVarType> Vector3<T> {
     pub fn ravel(&self) -> jit::VarRef {
-        jit::vec(&[
-            AsRef::<jit::VarRef>::as_ref(&self.x).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.y).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.z).clone(),
-        ])
+        jit::vec(&[(&self.x).into(), (&self.y).into(), (&self.z).into()])
     }
 }
 impl<T: jit::AsVarType> Vector4<T> {
     pub fn ravel(&self) -> jit::VarRef {
         jit::vec(&[
-            AsRef::<jit::VarRef>::as_ref(&self.x).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.y).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.z).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.w).clone(),
+            (&self.x).into(),
+            (&self.y).into(),
+            (&self.z).into(),
+            (&self.w).into(),
         ])
     }
 }

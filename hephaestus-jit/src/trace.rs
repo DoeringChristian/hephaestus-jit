@@ -189,9 +189,14 @@ impl Debug for VarRef {
         f.debug_struct("VarRef").field("id", &self.id).finish()
     }
 }
-impl AsRef<VarRef> for VarRef{
-    fn as_ref(&self) -> &VarRef {
-        self
+// impl AsRef<VarRef> for VarRef{
+//     fn as_ref(&self) -> &VarRef {
+//         self
+//     }
+// }
+impl From<&VarRef> for VarRef{
+    fn from(value: &VarRef) -> Self {
+        value.clone()
     }
 }
 
@@ -501,8 +506,8 @@ pub fn sized_index(size: usize) -> VarRef {
         [],
     )
 }
-pub fn dynamic_index(capacity: usize, size: impl AsRef<VarRef>) -> VarRef {
-    let size = size.as_ref();
+pub fn dynamic_index(capacity: usize, size: impl Into<VarRef>) -> VarRef {
+    let size = size.into();
     // Have to schedule size variable
     // NOTE: the reason we do not need to track rcs for the size variable, is that it has to be
     // scheduled.
@@ -539,6 +544,11 @@ pub fn literal<T: AsVarType>(val: T) -> VarRef {
         },
         [],
     )
+}
+impl<T: AsVarType> From<T> for VarRef{
+    fn from(value: T) -> Self {
+        literal(value)
+    }
 }
 ///
 /// Returns a variable representing a literal within a kernel.
@@ -749,16 +759,16 @@ pub fn accel(desc: &AccelDesc) -> VarRef {
 
 #[allow(non_snake_case)]
 pub fn matfma(
-    mat_a: impl AsRef<VarRef>,
-    mat_b: impl AsRef<VarRef>,
-    mat_c: impl AsRef<VarRef>,
+    mat_a: impl Into<VarRef>,
+    mat_b: impl Into<VarRef>,
+    mat_c: impl Into<VarRef>,
     M: usize,
     N: usize,
     K: usize,
 ) -> VarRef {
-    let mat_a = mat_a.as_ref();
-    let mat_b = mat_b.as_ref();
-    let mat_c = mat_c.as_ref();
+    let mat_a = mat_a.into();
+    let mat_b = mat_b.into();
+    let mat_c = mat_c.into();
     
     assert_eq!(mat_a.ty(), mat_b.ty());
     let c_type = mat_c.ty();
@@ -774,23 +784,23 @@ pub fn matfma(
             extent: Extent::Size(N * M),
             ..Default::default()
         },
-        [mat_a, mat_b, mat_c],
+        [&mat_a, &mat_b, &mat_c],
     );
 
     mat_c
 }
 
 pub fn fused_mlp_inference(
-    input: impl AsRef<VarRef>,
-    weights: impl AsRef<VarRef>,
+    input: impl Into<VarRef>,
+    weights: impl Into<VarRef>,
     width: usize,
     in_width: usize,
     out_width: usize,
     hidden_layers: usize,
     batch_size: usize,
 ) -> VarRef {
-    let input = input.as_ref();
-    let weights = weights.as_ref();
+    let input = input.into();
+    let weights = weights.into();
 
     assert_eq!(width, in_width);
     assert_eq!(width, out_width);
@@ -813,7 +823,7 @@ pub fn fused_mlp_inference(
             extent: Extent::Size(size),
             ..Default::default()
         },
-        [input, weights],
+        [&input, &weights],
     )
 }
 
@@ -867,13 +877,13 @@ impl VarRef {
 macro_rules! bop {
     ($op:ident $(-> $result_type:expr)?) => {
         paste::paste! {
-            pub fn $op(&self, other: impl AsRef<VarRef>) -> VarRef {
-                let other = other.as_ref();
+            pub fn $op(&self, rhs: impl Into<VarRef>) -> VarRef {
+                let rhs = rhs.into();
 
-                let extent = resulting_extent([self, other]);
+                let extent = resulting_extent([self, &rhs]);
 
                 let ty = self.ty();
-                assert_eq!(other.ty(), ty);
+                assert_eq!(rhs.ty(), ty);
 
                 $(let ty = $result_type;)?
                 new_var(
@@ -883,7 +893,7 @@ macro_rules! bop {
                         ty,
                         ..Default::default()
                     },
-                    [self, other],
+                    [self, &rhs],
                 )
             }
         }
@@ -980,8 +990,8 @@ impl VarRef {
         )
     }
 
-    pub fn gather(&self, idx: impl AsRef<Self>) -> Self {
-        let idx = idx.as_ref();
+    pub fn gather(&self, idx: impl Into<Self>) -> Self {
+        let idx = idx.into();
         
         self.schedule();
         schedule_eval();
@@ -995,12 +1005,12 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&src_ref, idx],
+            [&src_ref, &idx],
         )
     }
-    pub fn gather_if(&self, idx: impl AsRef<Self>, active: impl AsRef<Self>) -> Self {
-        let idx = idx.as_ref();
-        let active = active.as_ref();
+    pub fn gather_if(&self, idx: impl Into<Self>, active: impl Into<Self>) -> Self {
+        let idx = idx.into();
+        let active = active.into();
         
         self.schedule();
         schedule_eval();
@@ -1014,18 +1024,18 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&src_ref, idx, active],
+            [&src_ref, &idx, &active],
         )
     }
     // WARN: keep in mind, that we should also update `scatter_if`, `scatter_reduce` and
     // `scatter_reduce_if`
-    pub fn scatter(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>) {
-        let dst = dst.as_ref();
-        let idx = idx.as_ref();
+    pub fn scatter(&self, dst: impl Into<Self>, idx: impl Into<Self>) {
+        let dst = dst.into();
+        let idx = idx.into();
         
         dst.schedule();
         schedule_eval();
-        let extent = resulting_extent([self, idx].into_iter());
+        let extent = resulting_extent([self, &idx].into_iter());
         let dst_ref = dst.get_mut();
         let res = new_var(
             Var {
@@ -1034,20 +1044,20 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, self, idx],
+            [&dst_ref, self, &idx],
         );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_if(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, active: impl AsRef<Self>) {
-        let dst = dst.as_ref();
-        let idx = idx.as_ref();
-        let active = active.as_ref();
+    pub fn scatter_if(&self, dst: impl Into<Self>, idx: impl Into<Self>, active: impl Into<Self>) {
+        let dst = dst.into();
+        let idx = idx.into();
+        let active = active.into();
         
         dst.schedule();
         schedule_eval();
-        let extent = resulting_extent([self, idx, active].into_iter());
+        let extent = resulting_extent([self, &idx, &active].into_iter());
         let dst_ref = dst.get_mut();
         let res = new_var(
             Var {
@@ -1056,19 +1066,19 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, self, idx, active],
+            [&dst_ref, self, &idx, &active],
         );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_reduce(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, op: ReduceOp) {
-        let dst = dst.as_ref();
-        let idx = idx.as_ref();
+    pub fn scatter_reduce(&self, dst: impl Into<Self>, idx: impl Into<Self>, op: ReduceOp) {
+        let dst = dst.into();
+        let idx = idx.into();
         
         dst.schedule();
         schedule_eval();
-        let extent = resulting_extent([self, idx].into_iter());
+        let extent = resulting_extent([self, &idx].into_iter());
         let dst_ref = dst.get_mut();
         let res = new_var(
             Var {
@@ -1077,20 +1087,20 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, self, idx],
+            [&dst_ref, self, &idx],
         );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_reduce_if(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, active: impl AsRef<Self>, op: ReduceOp) {
-        let dst = dst.as_ref();
-        let idx = idx.as_ref();
-        let active = active.as_ref();
+    pub fn scatter_reduce_if(&self, dst: impl Into<Self>, idx: impl Into<Self>, active: impl Into<Self>, op: ReduceOp) {
+        let dst = dst.into();
+        let idx = idx.into();
+        let active = active.into();
         
         dst.schedule();
         schedule_eval();
-        let extent = resulting_extent([self, idx, active].into_iter());
+        let extent = resulting_extent([self, &idx, &active].into_iter());
         let dst_ref = dst.get_mut();
         let res = new_var(
             Var {
@@ -1099,20 +1109,20 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, self, idx, active],
+            [&dst_ref, self, &idx, &active],
         );
         dst.mark_dirty();
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_atomic(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, op: ReduceOp) -> Self {
-        let dst = dst.as_ref();
-        let idx = idx.as_ref();
+    pub fn scatter_atomic(&self, dst: impl Into<Self>, idx: impl Into<Self>, op: ReduceOp) -> Self {
+        let dst = dst.into();
+        let idx = idx.into();
 
         dst.schedule();
         schedule_eval();
         let ty = self.ty();
-        let extent = resulting_extent([self, idx].into_iter());
+        let extent = resulting_extent([self, &idx].into_iter());
         let dst_ref = dst.get_mut();
         let res = new_var(
             Var {
@@ -1121,21 +1131,21 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, self, idx],
+            [&dst_ref, self, &idx],
         );
         dst.mark_dirty();
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn scatter_atomic_if(&self, dst: impl AsRef<Self>, idx: impl AsRef<Self>, active: impl AsRef<Self>, op: ReduceOp) -> Self {
-        let dst = dst.as_ref();
-        let idx = idx.as_ref();
-        let active = active.as_ref();
+    pub fn scatter_atomic_if(&self, dst: impl Into<Self>, idx: impl Into<Self>, active: impl Into<Self>, op: ReduceOp) -> Self {
+        let dst = dst.into();
+        let idx = idx.into();
+        let active = active.into();
 
         dst.schedule();
         schedule_eval();
         let ty = self.ty();
-        let extent = resulting_extent([self, idx, active].into_iter());
+        let extent = resulting_extent([self, &idx, &active].into_iter());
         let dst_ref = dst.get_mut();
         let res = new_var(
             Var {
@@ -1144,21 +1154,21 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, self, idx, active],
+            [&dst_ref, self, &idx, &active],
         );
         dst.mark_dirty();
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn atomic_inc(&self, idx: impl AsRef<Self>, active: impl AsRef<Self>) -> Self {
-        let idx = idx.as_ref();
-        let active = active.as_ref();
+    pub fn atomic_inc(&self, idx: impl Into<Self>, active: impl Into<Self>) -> Self {
+        let idx = idx.into();
+        let active = active.into();
         
         // Destination is self
         self.schedule();
         schedule_eval();
         let ty = self.ty();
-        let extent = resulting_extent([active].into_iter());
+        let extent = resulting_extent([&active].into_iter());
         assert!(matches!(idx.extent(), Extent::Size(size) if size <= 1));
 
         let dst_ref = self.get_mut();
@@ -1169,17 +1179,17 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&dst_ref, idx, active],
+            [&dst_ref, &idx, &active],
         );
         self.mark_dirty();
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn fma(&self, b: impl AsRef<Self>, c: impl AsRef<Self>) -> Self {
-        let b = b.as_ref();
-        let c = c.as_ref();
+    pub fn fma(&self, b: impl Into<Self>, c: impl Into<Self>) -> Self {
+        let b = b.into();
+        let c = c.into();
         
-        let extent = resulting_extent([self, b, c]);
+        let extent = resulting_extent([self, &b, &c]);
         let ty = self.ty();
 
         new_var(
@@ -1189,7 +1199,7 @@ impl VarRef {
                 ty,
                 ..Default::default()
             },
-            [self, b, c],
+            [self, &b, &c],
         )
     }
 }
@@ -1295,8 +1305,8 @@ impl VarRef {
             [self],
         )
     }
-    pub fn extract_dyn(&self, elem: impl AsRef<Self>) -> Self {
-        let elem = elem.as_ref();
+    pub fn extract_dyn(&self, elem: impl Into<Self>) -> Self {
+        let elem = elem.into();
         
         let extent = self.extent();
         let ty = self.ty();
@@ -1312,7 +1322,7 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [self, elem],
+            [self, &elem],
         )
     }
     pub fn extract_all(&self) -> impl Iterator<Item = Self> {
@@ -1320,17 +1330,17 @@ impl VarRef {
         let n_elements = s.ty().num_elements().unwrap();
         (0..n_elements).map(move |i| s.extract(i))
     }
-    pub fn select(&self, condition: impl AsRef<Self>, false_val: impl AsRef<Self>) -> Self {
-        let condition = condition.as_ref();
+    pub fn select(&self, condition: impl Into<Self>, false_val: impl Into<Self>) -> Self {
+        let condition = condition.into();
         let true_val = self;
-        let false_val = false_val.as_ref();
+        let false_val = false_val.into();
         
         assert_eq!(condition.ty(), bool::var_ty());
         assert_eq!(true_val.ty(), false_val.ty());
 
         let ty = true_val.ty();
 
-        let extent = resulting_extent([condition, true_val, false_val].into_iter());
+        let extent = resulting_extent([&condition, true_val, &false_val].into_iter());
 
         new_var(
             Var {
@@ -1339,11 +1349,11 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [condition, true_val, false_val],
+            [&condition, true_val, &false_val],
         )
     }
-    pub fn tex_lookup(&self, pos: impl AsRef<VarRef>) -> Self {
-        let pos = pos.as_ref();
+    pub fn tex_lookup(&self, pos: impl Into<VarRef>) -> Self {
+        let pos = pos.into();
         
         let elements = pos.ty().num_elements().unwrap();
         assert!(elements>= 1 && elements<= 3);
@@ -1397,10 +1407,10 @@ impl VarRef {
             [self],
         )
     }
-    pub fn trace_ray(&self, ray: impl AsRef<Self>) -> Self {
-        let ray = ray.as_ref();
+    pub fn trace_ray(&self, ray: impl Into<Self>) -> Self {
+        let ray = ray.into();
         
-        let extent = resulting_extent([ray].into_iter());
+        let extent = resulting_extent([&ray]);
 
         assert_eq!(ray.ty(), vartype::Ray3f::var_ty());
 
@@ -1415,7 +1425,7 @@ impl VarRef {
                 extent,
                 ..Default::default()
             },
-            [&accel_ref, ray],
+            [&accel_ref, &ray],
         )
     }
 }

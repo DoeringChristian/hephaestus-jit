@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 use crate::tr;
+use crate::AsVarType;
 use crate::VarRef;
 
 ///
@@ -75,7 +76,7 @@ pub trait Traverse {
 pub trait Construct: Sized {
     fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &'static Layout) -> Self;
 
-    fn unravel(var: impl AsRef<VarRef>) -> Self;
+    fn unravel(var: impl Into<VarRef>) -> Self;
 }
 
 impl Traverse for VarRef {
@@ -102,8 +103,8 @@ impl Construct for VarRef {
         assert_eq!(layout, &Layout::Elem);
         vars.next().unwrap()
     }
-    fn unravel(var: impl AsRef<VarRef>) -> Self {
-        var.as_ref().clone()
+    fn unravel(var: impl Into<VarRef>) -> Self {
+        var.into()
     }
 }
 
@@ -128,8 +129,8 @@ impl<T: Construct> Construct for Vec<T> {
             .collect()
     }
 
-    fn unravel(var: impl AsRef<VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<VarRef>) -> Self {
+        let var = var.into();
         var.extract_all().map(|r| T::unravel(r)).collect::<Vec<_>>()
     }
 }
@@ -200,8 +201,8 @@ macro_rules! impl_construct_for_tuple {
 
                 ($($param::construct(vars, layouts.next().unwrap()),)*)
             }
-            fn unravel(var: impl AsRef<VarRef>) -> Self {
-                let var = var.as_ref();
+            fn unravel(var: impl Into<VarRef>) -> Self {
+                let var = var.into();
                 let mut iter = var.extract_all();
                 ($($param::unravel(iter.next().unwrap()),)*)
             }

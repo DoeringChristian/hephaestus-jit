@@ -51,8 +51,8 @@ impl Accel {
         });
         Self { accel }
     }
-    pub fn trace_ray(&self, ray: impl AsRef<Var<jit::Ray3f>>) -> Var<jit::Intersection> {
-        Var(self.accel.trace_ray(&ray.as_ref().0), PhantomData)
+    pub fn trace_ray(&self, ray: impl Into<Var<jit::Ray3f>>) -> Var<jit::Intersection> {
+        Var(self.accel.trace_ray(&ray.into()), PhantomData)
     }
 }
 

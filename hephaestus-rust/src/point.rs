@@ -27,8 +27,8 @@ impl<T: jit::AsVarType> jit::Construct for Point2<T> {
             y: <Var<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 2 && &ty == vec_ty )
@@ -74,8 +74,8 @@ impl<T: jit::AsVarType> jit::Construct for Point3<T> {
             z: <Var<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Vec { num, ty: vec_ty } if *num == 3 && &ty == vec_ty )
@@ -153,18 +153,11 @@ impl<T: jit::AsVarType> From<jit::VarRef> for Point3<T> {
 
 impl<T: jit::AsVarType> Point2<T> {
     pub fn ravel(&self) -> jit::VarRef {
-        jit::vec(&[
-            AsRef::<jit::VarRef>::as_ref(&self.x).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.y).clone(),
-        ])
+        jit::vec(&[(&self.x).into(), (&self.y).into()])
     }
 }
 impl<T: jit::AsVarType> Point3<T> {
     pub fn ravel(&self) -> jit::VarRef {
-        jit::vec(&[
-            AsRef::<jit::VarRef>::as_ref(&self.x).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.y).clone(),
-            AsRef::<jit::VarRef>::as_ref(&self.z).clone(),
-        ])
+        jit::vec(&[(&self.x).into(), (&self.y).into(), (&self.z).into()])
     }
 }

@@ -37,8 +37,8 @@ impl<T: jit::AsVarType> jit::Construct for Matrix3<T> {
             z_axis: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Mat { cols, rows, ty: mat_ty } if *rows == 3 && *cols == 3 && &ty == mat_ty )
@@ -93,8 +93,8 @@ impl<T: jit::AsVarType> jit::Construct for Matrix4<T> {
             w_axis: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
-    fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
-        let var = var.as_ref();
+    fn unravel(var: impl Into<jit::VarRef>) -> Self {
+        let var = var.into();
         let ty = var.ty();
         assert!(
             matches!(ty, jit::vartype::VarType::Mat { cols, rows, ty: mat_ty } if *rows == 4 && *cols == 4 && &ty == mat_ty )

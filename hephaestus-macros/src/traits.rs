@@ -138,8 +138,8 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                                 #(#names: <#types as #jit::Construct>::construct(vars, layouts.next().unwrap()),)*
                             }
                         }
-                        fn unravel(var: impl AsRef<#jit::VarRef>) -> Self{
-                            let var = var.as_ref();
+                        fn unravel(var: impl Into<#jit::VarRef>) -> Self{
+                            let var = var.into();
                             let ty = var.ty();
                             assert!(matches!(ty, #jit::vartype::VarType::Struct{..}));
                             let mut iter = var.extract_all();
@@ -166,8 +166,8 @@ pub fn derive_construct_impl(input: DeriveInput) -> TokenStream {
                             let mut layouts = layout.tuple_types().unwrap().into_iter();
                             Self(#(<#types as #jit::Construct>::construct(vars, layouts.next().unwrap()),)*)
                         }
-                        fn unravel(var: impl AsRef<#jit::VarRef>) -> Self{
-                            let var = var.as_ref();
+                        fn unravel(var: impl Into<#jit::VarRef>) -> Self{
+                            let var = var.into();
                             let ty = var.ty();
                             assert!(matches!(ty, #jit::vartype::VarType::Struct{..}));
                             let mut iter = var.extract_all();
