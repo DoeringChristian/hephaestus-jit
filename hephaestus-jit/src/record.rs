@@ -129,7 +129,7 @@ impl FCache {
         let layout = input.traverse(&mut inputs);
 
         // Filter resources from inputs
-        let filterd_inputs = inputs
+        let resource_inputs = inputs
             .iter()
             .filter(|i| !i.is_unsized())
             .cloned()
@@ -181,7 +181,7 @@ impl FCache {
                 let graph = TS.with(|s| {
                     let mut s = s.borrow_mut();
                     let ts = std::mem::take(&mut (*s));
-                    graph::compile(&ts, &filterd_inputs, &outputs)
+                    graph::compile(&ts, &resource_inputs, &outputs)
                 })?;
 
                 entry.insert((graph, layout));
@@ -191,7 +191,7 @@ impl FCache {
 
         // Get the correct graph, launch it and construct the output struct.
         let (graph, layout) = &self.graphs[&hash];
-        let (report, output) = graph.launch_with(device, &filterd_inputs).unwrap();
+        let (report, output) = graph.launch_with(device, &resource_inputs).unwrap();
 
         let mut output = output.into_iter();
         let output = Output::construct(&mut output, layout);
