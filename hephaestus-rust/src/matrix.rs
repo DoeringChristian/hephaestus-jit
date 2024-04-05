@@ -123,47 +123,47 @@ pub type Matrix4u = Matrix4<u32>;
 
 impl<T: jit::AsVarType> Matrix3<T> {
     pub fn from_cols(
-        col0: impl AsRef<Vector3<T>>,
-        col1: impl AsRef<Vector3<T>>,
-        col2: impl AsRef<Vector3<T>>,
+        col0: impl Into<Vector3<T>>,
+        col1: impl Into<Vector3<T>>,
+        col2: impl Into<Vector3<T>>,
     ) -> Self {
         Self {
-            x_axis: col0.as_ref().clone(),
-            y_axis: col1.as_ref().clone(),
-            z_axis: col2.as_ref().clone(),
+            x_axis: col0.into(),
+            y_axis: col1.into(),
+            z_axis: col2.into(),
         }
     }
 }
 
 impl<T: jit::AsVarType> Matrix4<T> {
     pub fn from_cols(
-        col0: impl AsRef<Vector4<T>>,
-        col1: impl AsRef<Vector4<T>>,
-        col2: impl AsRef<Vector4<T>>,
-        col3: impl AsRef<Vector4<T>>,
+        col0: impl Into<Vector4<T>>,
+        col1: impl Into<Vector4<T>>,
+        col2: impl Into<Vector4<T>>,
+        col3: impl Into<Vector4<T>>,
     ) -> Self {
         Self {
-            x_axis: col0.as_ref().clone(),
-            y_axis: col1.as_ref().clone(),
-            z_axis: col2.as_ref().clone(),
-            w_axis: col3.as_ref().clone(),
+            x_axis: col0.into(),
+            y_axis: col1.into(),
+            z_axis: col2.into(),
+            w_axis: col3.into(),
         }
     }
 }
 
-impl<T: jit::AsVarType> AsRef<Matrix3<T>> for Matrix3<T> {
-    fn as_ref(&self) -> &Matrix3<T> {
-        self
+impl<T: jit::AsVarType> From<&Matrix3<T>> for Matrix3<T> {
+    fn from(value: &Matrix3<T>) -> Self {
+        value.clone()
     }
 }
-impl<T: jit::AsVarType> AsRef<Matrix4<T>> for Matrix4<T> {
-    fn as_ref(&self) -> &Matrix4<T> {
-        self
+impl<T: jit::AsVarType> From<&Matrix4<T>> for Matrix4<T> {
+    fn from(value: &Matrix4<T>) -> Self {
+        value.clone()
     }
 }
 
 impl<T: jit::AsVarType> Matrix4<T> {
-    pub fn mul_vec4(&self, rhs: impl AsRef<Vector4<T>>) -> Vector4<T> {
+    pub fn mul_vec4(&self, rhs: impl Into<Vector4<T>>) -> Vector4<T> {
         todo!()
     }
 }
