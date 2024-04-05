@@ -2,22 +2,26 @@ use crate::{Vector3, Vector4};
 
 #[derive(Clone, Debug)]
 pub struct Matrix3<T: jit::AsVarType> {
-    col0: Vector3<T>,
-    col1: Vector3<T>,
-    col2: Vector3<T>,
+    x_axis: Vector3<T>,
+    y_axis: Vector3<T>,
+    z_axis: Vector3<T>,
 }
 
 impl<T: jit::AsVarType> jit::Traverse for Matrix3<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>) -> &'static jit::Layout {
         let layouts = [
-            self.col0.traverse(vars),
-            self.col1.traverse(vars),
-            self.col2.traverse(vars),
+            self.x_axis.traverse(vars),
+            self.y_axis.traverse(vars),
+            self.z_axis.traverse(vars),
         ];
         jit::Layout::tuple(&layouts)
     }
     fn ravel(&self) -> jit::VarRef {
-        jit::mat(&[self.col0.ravel(), self.col1.ravel(), self.col2.ravel()])
+        jit::mat(&[
+            self.x_axis.ravel(),
+            self.y_axis.ravel(),
+            self.z_axis.ravel(),
+        ])
     }
 }
 
@@ -28,9 +32,9 @@ impl<T: jit::AsVarType> jit::Construct for Matrix3<T> {
     ) -> Self {
         let mut layouts = layout.tuple_types().unwrap().into_iter();
         Self {
-            col0: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
-            col1: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
-            col2: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            x_axis: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            y_axis: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            z_axis: <Vector3<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
     fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
@@ -41,37 +45,37 @@ impl<T: jit::AsVarType> jit::Construct for Matrix3<T> {
         );
         let mut iter = var.extract_all();
         Self {
-            col0: <Vector3<T> as jit::Construct>::unravel(iter.next().unwrap()),
-            col1: <Vector3<T> as jit::Construct>::unravel(iter.next().unwrap()),
-            col2: <Vector3<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            x_axis: <Vector3<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y_axis: <Vector3<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            z_axis: <Vector3<T> as jit::Construct>::unravel(iter.next().unwrap()),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Matrix4<T: jit::AsVarType> {
-    col0: Vector4<T>,
-    col1: Vector4<T>,
-    col2: Vector4<T>,
-    col3: Vector4<T>,
+    x_axis: Vector4<T>,
+    y_axis: Vector4<T>,
+    z_axis: Vector4<T>,
+    w_axis: Vector4<T>,
 }
 
 impl<T: jit::AsVarType> jit::Traverse for Matrix4<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>) -> &'static jit::Layout {
         let layouts = [
-            self.col0.traverse(vars),
-            self.col1.traverse(vars),
-            self.col2.traverse(vars),
-            self.col3.traverse(vars),
+            self.x_axis.traverse(vars),
+            self.y_axis.traverse(vars),
+            self.z_axis.traverse(vars),
+            self.w_axis.traverse(vars),
         ];
         jit::Layout::tuple(&layouts)
     }
     fn ravel(&self) -> jit::VarRef {
         jit::mat(&[
-            self.col0.ravel(),
-            self.col1.ravel(),
-            self.col2.ravel(),
-            self.col3.ravel(),
+            self.x_axis.ravel(),
+            self.y_axis.ravel(),
+            self.z_axis.ravel(),
+            self.w_axis.ravel(),
         ])
     }
 }
@@ -83,10 +87,10 @@ impl<T: jit::AsVarType> jit::Construct for Matrix4<T> {
     ) -> Self {
         let mut layouts = layout.tuple_types().unwrap().into_iter();
         Self {
-            col0: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
-            col1: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
-            col2: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
-            col3: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            x_axis: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            y_axis: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            z_axis: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
+            w_axis: <Vector4<T> as jit::Construct>::construct(vars, layouts.next().unwrap()),
         }
     }
     fn unravel(var: impl AsRef<jit::VarRef>) -> Self {
@@ -97,10 +101,10 @@ impl<T: jit::AsVarType> jit::Construct for Matrix4<T> {
         );
         let mut iter = var.extract_all();
         Self {
-            col0: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
-            col1: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
-            col2: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
-            col3: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            x_axis: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            y_axis: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            z_axis: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
+            w_axis: <Vector4<T> as jit::Construct>::unravel(iter.next().unwrap()),
         }
     }
 }
@@ -124,9 +128,9 @@ impl<T: jit::AsVarType> Matrix3<T> {
         col2: impl AsRef<Vector3<T>>,
     ) -> Self {
         Self {
-            col0: col0.as_ref().clone(),
-            col1: col1.as_ref().clone(),
-            col2: col2.as_ref().clone(),
+            x_axis: col0.as_ref().clone(),
+            y_axis: col1.as_ref().clone(),
+            z_axis: col2.as_ref().clone(),
         }
     }
 }
@@ -139,10 +143,10 @@ impl<T: jit::AsVarType> Matrix4<T> {
         col3: impl AsRef<Vector4<T>>,
     ) -> Self {
         Self {
-            col0: col0.as_ref().clone(),
-            col1: col1.as_ref().clone(),
-            col2: col2.as_ref().clone(),
-            col3: col3.as_ref().clone(),
+            x_axis: col0.as_ref().clone(),
+            y_axis: col1.as_ref().clone(),
+            z_axis: col2.as_ref().clone(),
+            w_axis: col3.as_ref().clone(),
         }
     }
 }
@@ -155,5 +159,11 @@ impl<T: jit::AsVarType> AsRef<Matrix3<T>> for Matrix3<T> {
 impl<T: jit::AsVarType> AsRef<Matrix4<T>> for Matrix4<T> {
     fn as_ref(&self) -> &Matrix4<T> {
         self
+    }
+}
+
+impl<T: jit::AsVarType> Matrix4<T> {
+    pub fn mul_vec4(&self, rhs: impl AsRef<Vector4<T>>) -> Vector4<T> {
+        todo!()
     }
 }

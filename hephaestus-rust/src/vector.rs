@@ -315,6 +315,14 @@ where
     }
 }
 
+impl<T: jit::AsVarType> std::ops::Mul<Var<T>> for Vector2<T> {
+    type Output = Vector2<T>;
+
+    fn mul(self, rhs: Var<T>) -> Self::Output {
+        todo!()
+    }
+}
+
 impl<T: jit::AsVarType> Vector3<T>
 where
     Var<T>: Add + Mul,

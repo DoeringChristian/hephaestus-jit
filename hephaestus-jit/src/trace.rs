@@ -840,7 +840,7 @@ impl VarRef {
     pub fn schedule(&self) {
         // We should not be able to schedule already evaluated variables as well as ones who's
         // extent is unsized
-        if self.is_evaluated() {
+        if self.is_evaluated() || self.is_unsized() {
             return;
         }
         TS.with(|s| {
@@ -857,9 +857,9 @@ impl VarRef {
     pub fn is_evaluated(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).op.evaluated())
     }
-    // pub fn is_unsized(&self) -> bool {
-    //     with_trace(|trace| trace.var(self.id()).extent.is_unsized())
-    // }
+    pub fn is_unsized(&self) -> bool {
+        with_trace(|trace| trace.var(self.id()).extent.is_unsized())
+    }
     pub fn rc(&self) -> usize {
         with_trace(|trace| trace.vars[self.id().0].rc)
     }
@@ -1159,7 +1159,7 @@ impl VarRef {
         schedule_eval();
         let ty = self.ty();
         let extent = resulting_extent([active].into_iter());
-        assert!(matches!(idx.extent(), Extent::Size(1)));
+        assert!(matches!(idx.extent(), Extent::Size(size) if size <= 1));
 
         let dst_ref = self.get_mut();
         let res = new_var(
