@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
@@ -189,11 +190,23 @@ impl Debug for VarRef {
         f.debug_struct("VarRef").field("id", &self.id).finish()
     }
 }
-// impl AsRef<VarRef> for VarRef{
-//     fn as_ref(&self) -> &VarRef {
-//         self
-//     }
-// }
+// WARN: Recording relies on this hash function
+impl Hash for VarRef{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        with_trace(|trace|{
+            let var = trace.var(self.id);
+            var.op.hash(state);
+            var.ty.hash(state);
+            var.extent.hash(state);
+            if matches!(var.op, Op::KernelOp(KernelOp::Literal)){
+                if let Resource::Literal(lit) = var.data{
+                    lit.hash(state);
+                }
+            }
+            // TODO: maybe add other values to hash
+        });
+    }
+}
 impl From<&VarRef> for VarRef{
     fn from(value: &VarRef) -> Self {
         value.clone()

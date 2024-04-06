@@ -2,7 +2,7 @@ use crate::backend;
 use crate::tr::VarId;
 
 /// Represents a Variables Extent.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Extent {
     // #[default]
     // None,

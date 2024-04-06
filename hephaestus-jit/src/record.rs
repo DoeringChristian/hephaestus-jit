@@ -126,7 +126,7 @@ impl FCache {
     {
         // Traverse Input
         let mut inputs = vec![];
-        let layout = input.traverse(&mut inputs);
+        input.traverse(&mut inputs);
 
         // Filter resources from inputs
         let resource_inputs = inputs
@@ -147,9 +147,6 @@ impl FCache {
         // Calculate hash of function + input
         let mut hasher = DefaultHasher::new();
 
-        // Hash the input layout
-        layout.hash(&mut hasher);
-
         // Calculate hash of function type
         std::any::TypeId::of::<F>().hash(&mut hasher);
 
@@ -157,11 +154,9 @@ impl FCache {
         // To this end we keep a chache of graphs.
         // We calculate the hash of the inputs by using their resource descriptors, as they
         // uniquely identify the type and extent of the variable.
-        with_trace(|trace| {
-            for var in &inputs {
-                trace.var(var.id()).resource_desc().hash(&mut hasher);
-            }
-        });
+        // This also caputres the input layout.
+        input.hash(&mut hasher);
+
         let hash = hasher.finish();
 
         // If the correct graph could not be found, compile and insert it into the cache.

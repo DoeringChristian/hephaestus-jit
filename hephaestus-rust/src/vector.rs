@@ -17,6 +17,11 @@ impl<T: jit::AsVarType> jit::Traverse for Vector2<T> {
     fn ravel(&self) -> jit::VarRef {
         jit::vec(&[self.x.0.clone(), self.y.0.clone()])
     }
+
+    fn hash(&self, state: &mut dyn std::hash::Hasher) {
+        self.x.hash(state);
+        self.y.hash(state);
+    }
 }
 
 impl<T: jit::AsVarType> jit::Construct for Vector2<T> {
@@ -62,6 +67,12 @@ impl<T: jit::AsVarType> jit::Traverse for Vector3<T> {
     }
     fn ravel(&self) -> jit::VarRef {
         jit::vec(&[self.x.0.clone(), self.y.0.clone(), self.z.0.clone()])
+    }
+
+    fn hash(&self, state: &mut dyn std::hash::Hasher) {
+        self.x.hash(state);
+        self.y.hash(state);
+        self.z.hash(state);
     }
 }
 
@@ -117,6 +128,13 @@ impl<T: jit::AsVarType> jit::Traverse for Vector4<T> {
             self.z.0.clone(),
             self.w.0.clone(),
         ])
+    }
+
+    fn hash(&self, state: &mut dyn std::hash::Hasher) {
+        self.x.hash(state);
+        self.y.hash(state);
+        self.z.hash(state);
+        self.w.hash(state);
     }
 }
 

@@ -23,6 +23,12 @@ impl<T: jit::AsVarType> jit::Traverse for Matrix3<T> {
             self.z_axis.ravel(),
         ])
     }
+
+    fn hash(&self, state: &mut dyn std::hash::Hasher) {
+        self.x_axis.hash(state);
+        self.y_axis.hash(state);
+        self.z_axis.hash(state);
+    }
 }
 
 impl<T: jit::AsVarType> jit::Construct for Matrix3<T> {
@@ -77,6 +83,12 @@ impl<T: jit::AsVarType> jit::Traverse for Matrix4<T> {
             self.z_axis.ravel(),
             self.w_axis.ravel(),
         ])
+    }
+    fn hash(&self, state: &mut dyn std::hash::Hasher) {
+        self.x_axis.hash(state);
+        self.y_axis.hash(state);
+        self.z_axis.hash(state);
+        self.w_axis.hash(state);
     }
 }
 
