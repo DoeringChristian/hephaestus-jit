@@ -191,15 +191,15 @@ impl Debug for VarRef {
     }
 }
 // WARN: Recording relies on this hash function
-impl Hash for VarRef{
+impl Hash for VarRef {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        with_trace(|trace|{
+        with_trace(|trace| {
             let var = trace.var(self.id);
             var.op.hash(state);
             var.ty.hash(state);
             var.extent.hash(state);
-            if matches!(var.op, Op::KernelOp(KernelOp::Literal)){
-                if let Resource::Literal(lit) = var.data{
+            if matches!(var.op, Op::KernelOp(KernelOp::Literal)) {
+                if let Resource::Literal(lit) = var.data {
                     lit.hash(state);
                 }
             }
@@ -207,7 +207,7 @@ impl Hash for VarRef{
         });
     }
 }
-impl From<&VarRef> for VarRef{
+impl From<&VarRef> for VarRef {
     fn from(value: &VarRef) -> Self {
         value.clone()
     }
@@ -558,7 +558,7 @@ pub fn literal<T: AsVarType>(val: T) -> VarRef {
         [],
     )
 }
-impl<T: AsVarType> From<T> for VarRef{
+impl<T: AsVarType> From<T> for VarRef {
     fn from(value: T) -> Self {
         literal(value)
     }
@@ -782,7 +782,7 @@ pub fn matfma(
     let mat_a = mat_a.into();
     let mat_b = mat_b.into();
     let mat_c = mat_c.into();
-    
+
     assert_eq!(mat_a.ty(), mat_b.ty());
     let c_type = mat_c.ty();
 
@@ -1005,7 +1005,7 @@ impl VarRef {
 
     pub fn gather(&self, idx: impl Into<Self>) -> Self {
         let idx = idx.into();
-        
+
         self.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -1024,7 +1024,7 @@ impl VarRef {
     pub fn gather_if(&self, idx: impl Into<Self>, active: impl Into<Self>) -> Self {
         let idx = idx.into();
         let active = active.into();
-        
+
         self.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -1045,7 +1045,7 @@ impl VarRef {
     pub fn scatter(&self, dst: impl Into<Self>, idx: impl Into<Self>) {
         let dst = dst.into();
         let idx = idx.into();
-        
+
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, &idx].into_iter());
@@ -1067,7 +1067,7 @@ impl VarRef {
         let dst = dst.into();
         let idx = idx.into();
         let active = active.into();
-        
+
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, &idx, &active].into_iter());
@@ -1088,7 +1088,7 @@ impl VarRef {
     pub fn scatter_reduce(&self, dst: impl Into<Self>, idx: impl Into<Self>, op: ReduceOp) {
         let dst = dst.into();
         let idx = idx.into();
-        
+
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, &idx].into_iter());
@@ -1106,11 +1106,17 @@ impl VarRef {
         res.schedule(); // Auto schedule
                         // res
     }
-    pub fn scatter_reduce_if(&self, dst: impl Into<Self>, idx: impl Into<Self>, active: impl Into<Self>, op: ReduceOp) {
+    pub fn scatter_reduce_if(
+        &self,
+        dst: impl Into<Self>,
+        idx: impl Into<Self>,
+        active: impl Into<Self>,
+        op: ReduceOp,
+    ) {
         let dst = dst.into();
         let idx = idx.into();
         let active = active.into();
-        
+
         dst.schedule();
         schedule_eval();
         let extent = resulting_extent([self, &idx, &active].into_iter());
@@ -1150,7 +1156,13 @@ impl VarRef {
         // NOTE: do not schedule result of scatter_atomic
         res
     }
-    pub fn scatter_atomic_if(&self, dst: impl Into<Self>, idx: impl Into<Self>, active: impl Into<Self>, op: ReduceOp) -> Self {
+    pub fn scatter_atomic_if(
+        &self,
+        dst: impl Into<Self>,
+        idx: impl Into<Self>,
+        active: impl Into<Self>,
+        op: ReduceOp,
+    ) -> Self {
         let dst = dst.into();
         let idx = idx.into();
         let active = active.into();
@@ -1176,7 +1188,7 @@ impl VarRef {
     pub fn atomic_inc(&self, idx: impl Into<Self>, active: impl Into<Self>) -> Self {
         let idx = idx.into();
         let active = active.into();
-        
+
         // Destination is self
         self.schedule();
         schedule_eval();
@@ -1201,7 +1213,7 @@ impl VarRef {
     pub fn fma(&self, b: impl Into<Self>, c: impl Into<Self>) -> Self {
         let b = b.into();
         let c = c.into();
-        
+
         let extent = resulting_extent([self, &b, &c]);
         let ty = self.ty();
 
@@ -1320,7 +1332,7 @@ impl VarRef {
     }
     pub fn extract_dyn(&self, elem: impl Into<Self>) -> Self {
         let elem = elem.into();
-        
+
         let extent = self.extent();
         let ty = self.ty();
         let ty = match ty {
@@ -1347,7 +1359,7 @@ impl VarRef {
         let condition = condition.into();
         let true_val = self;
         let false_val = false_val.into();
-        
+
         assert_eq!(condition.ty(), bool::var_ty());
         assert_eq!(true_val.ty(), false_val.ty());
 
@@ -1367,9 +1379,9 @@ impl VarRef {
     }
     pub fn tex_lookup(&self, pos: impl Into<VarRef>) -> Self {
         let pos = pos.into();
-        
+
         let elements = pos.ty().num_elements().unwrap();
-        assert!(elements>= 1 && elements<= 3);
+        assert!(elements >= 1 && elements <= 3);
 
         let extent = pos.extent();
 
@@ -1422,7 +1434,7 @@ impl VarRef {
     }
     pub fn trace_ray(&self, ray: impl Into<Self>) -> Self {
         let ray = ray.into();
-        
+
         let extent = resulting_extent([&ray]);
 
         assert_eq!(ray.ty(), vartype::Ray3f::var_ty());
