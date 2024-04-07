@@ -19,6 +19,7 @@ impl hep::Traverse for Box<dyn BSDF> {
     fn hash(&self, state: &mut dyn std::hash::Hasher) {
         let mut hasher = DefaultHasher::new();
         self.type_id().hash(&mut hasher);
+        self.as_ref().hash(state);
         state.write_u64(hasher.finish());
     }
 }
