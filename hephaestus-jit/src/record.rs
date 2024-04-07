@@ -108,9 +108,14 @@ where
     }
 }
 
+pub struct Func {
+    graph: graph::Graph,
+    output_layout: &'static Layout,
+}
+
 #[derive(Default)]
 pub struct FCache {
-    graphs: HashMap<u64, (graph::Graph, &'static Layout)>,
+    graphs: HashMap<u64, Func>,
 }
 impl FCache {
     pub fn call<Input, Output, F>(
@@ -165,7 +170,7 @@ impl FCache {
                 let output = f(input);
 
                 let mut outputs = vec![];
-                let layout = output.traverse(&mut outputs);
+                let output_layout = output.traverse(&mut outputs);
 
                 // Compile with params
                 for v in &outputs {
@@ -179,17 +184,20 @@ impl FCache {
                     graph::compile(&ts, &resource_inputs, &outputs)
                 })?;
 
-                entry.insert((graph, layout));
+                entry.insert(Func {
+                    graph,
+                    output_layout,
+                });
             }
             _ => {}
         }
 
         // Get the correct graph, launch it and construct the output struct.
-        let (graph, layout) = &self.graphs[&hash];
-        let (report, output) = graph.launch_with(device, &resource_inputs).unwrap();
+        let func = &self.graphs[&hash];
+        let (report, output) = func.graph.launch_with(device, &resource_inputs).unwrap();
 
         let mut output = output.into_iter();
-        let output = Output::construct(&mut output, layout);
+        let output = Output::construct(&mut output, func.output_layout);
 
         Ok((output, report))
     }
