@@ -1671,3 +1671,22 @@ fn aliasing1(#[case] device: Device) {
     approx::assert_abs_diff_eq!(report.aliasing_rate, 0.66666666, epsilon = 0.0001);
     // profiling::finish_frame!();
 }
+#[rstest]
+#[case(vulkan())]
+fn recorded_change(#[case] device: Device) {
+    #[recorded]
+    fn kernel(x: &VarRef) -> VarRef {
+        x.add(tr::literal(1).cast(x.ty()))
+    }
+
+    let y1 = kernel(&device, &tr::array(&[1i32, 2, 3], &device))
+        .unwrap()
+        .0;
+
+    let y2 = kernel(&device, &tr::array(&[1u64, 2, 3], &device))
+        .unwrap()
+        .0;
+
+    assert_eq!(y1.to_vec::<i32>(..), vec![2i32, 3, 4]);
+    assert_eq!(y2.to_vec::<u64>(..), vec![2u64, 3, 4]);
+}
