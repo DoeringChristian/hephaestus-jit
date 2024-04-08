@@ -110,7 +110,7 @@ mod test {
             &device,
         );
 
-        #[derive(hep::Traverse, hep::Construct)]
+        #[derive(hep::Traverse, hep::Construct, Hash)]
         pub struct TriangleScene {
             triangles: Vec<hep::Vector3u>,
             vertices: Vec<hep::Vector3f>,

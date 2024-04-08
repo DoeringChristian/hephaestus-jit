@@ -72,10 +72,10 @@ pub trait Traverse {
     /// This corresponds to transposing the type from a struct of arrays to an array of structs.
     ///
     fn ravel(&self) -> VarRef;
-
-    // Calculates a unique hash value for traversable function inputs.
-    // This determines if a function has to be retraced.
-    fn hash(&self, state: &mut dyn Hasher);
+    //
+    // // Calculates a unique hash value for traversable function inputs.
+    // // This determines if a function has to be retraced.
+    // fn hash(&self, state: &mut dyn Hasher);
 }
 pub trait Construct: Sized {
     fn construct(vars: &mut impl Iterator<Item = VarRef>, layout: &'static Layout) -> Self;
@@ -92,12 +92,12 @@ impl Traverse for VarRef {
         self.clone()
     }
 
-    fn hash(&self, state: &mut dyn Hasher) {
-        // NOTE: workarround to dynamic object save hashing
-        let mut hasher = DefaultHasher::new();
-        Hash::hash(&self, &mut hasher);
-        state.write_u64(hasher.finish());
-    }
+    // fn hash(&self, state: &mut dyn Hasher) {
+    //     // NOTE: workarround to dynamic object save hashing
+    //     let mut hasher = DefaultHasher::new();
+    //     Hash::hash(&self, &mut hasher);
+    //     state.write_u64(hasher.finish());
+    // }
 }
 impl<T: Traverse> Traverse for &T {
     fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
@@ -108,9 +108,9 @@ impl<T: Traverse> Traverse for &T {
         (*self).ravel()
     }
 
-    fn hash(&self, state: &mut dyn Hasher) {
-        (*self).hash(state)
-    }
+    // fn hash(&self, state: &mut dyn Hasher) {
+    //     (*self).hash(state)
+    // }
 }
 impl<T: Traverse> Traverse for Box<T> {
     fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
@@ -121,9 +121,9 @@ impl<T: Traverse> Traverse for Box<T> {
         self.as_ref().ravel()
     }
 
-    fn hash(&self, state: &mut dyn Hasher) {
-        self.as_ref().hash(state)
-    }
+    // fn hash(&self, state: &mut dyn Hasher) {
+    //     self.as_ref().hash(state)
+    // }
 }
 
 impl Construct for VarRef {
@@ -147,12 +147,12 @@ impl<T: Traverse> Traverse for Vec<T> {
         tr::arr(&refs)
     }
 
-    fn hash(&self, state: &mut dyn Hasher) {
-        state.write_usize(self.len());
-        for t in self {
-            t.hash(state);
-        }
-    }
+    // fn hash(&self, state: &mut dyn Hasher) {
+    //     state.write_usize(self.len());
+    //     for t in self {
+    //         t.hash(state);
+    //     }
+    // }
 }
 
 impl<T: Construct> Construct for Vec<T> {
@@ -179,11 +179,11 @@ impl<const N: usize, T: Traverse> Traverse for [T; N] {
         let refs = self.iter().map(|t| t.ravel()).collect::<Vec<_>>();
         tr::arr(&refs)
     }
-    fn hash(&self, state: &mut dyn Hasher) {
-        for t in self {
-            t.hash(state)
-        }
-    }
+    // fn hash(&self, state: &mut dyn Hasher) {
+    //     for t in self {
+    //         t.hash(state)
+    //     }
+    // }
 }
 impl<T: Traverse> Traverse for &[T] {
     fn traverse(&self, vars: &mut Vec<VarRef>) -> &'static Layout {
@@ -195,12 +195,12 @@ impl<T: Traverse> Traverse for &[T] {
         let refs = self.iter().map(|t| t.ravel()).collect::<Vec<_>>();
         tr::arr(&refs)
     }
-
-    fn hash(&self, state: &mut dyn Hasher) {
-        for t in self.iter() {
-            t.hash(state);
-        }
-    }
+    //
+    // fn hash(&self, state: &mut dyn Hasher) {
+    //     for t in self.iter() {
+    //         t.hash(state);
+    //     }
+    // }
 }
 
 macro_rules! impl_traverse_for_tuple {
@@ -217,10 +217,10 @@ macro_rules! impl_traverse_for_tuple {
                 let refs = [$($param.ravel()),*];
                 tr::composite(&refs)
             }
-            fn hash(&self, state: &mut dyn Hasher) {
-                let ($($param,)*) = self;
-                $($param.hash(state);)*
-            }
+            // fn hash(&self, state: &mut dyn Hasher) {
+            //     let ($($param,)*) = self;
+            //     $($param.hash(state);)*
+            // }
         }
     };
 }
@@ -276,3 +276,12 @@ impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 impl_construct_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+
+pub trait DynHash {
+    fn dyn_hash(&self, state: &mut dyn Hasher);
+}
+impl<H: Hash + ?Sized> DynHash for H {
+    fn dyn_hash(&self, mut state: &mut dyn Hasher) {
+        self.hash(&mut state);
+    }
+}

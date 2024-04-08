@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use crate::{Vector3, Vector4};
 
 #[derive(Clone, Debug)]
@@ -5,6 +7,14 @@ pub struct Matrix3<T: jit::AsVarType> {
     x_axis: Vector3<T>,
     y_axis: Vector3<T>,
     z_axis: Vector3<T>,
+}
+
+impl<T: jit::AsVarType> Hash for Matrix3<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.x_axis.hash(state);
+        self.y_axis.hash(state);
+        self.z_axis.hash(state);
+    }
 }
 
 impl<T: jit::AsVarType> jit::Traverse for Matrix3<T> {
@@ -22,12 +32,6 @@ impl<T: jit::AsVarType> jit::Traverse for Matrix3<T> {
             self.y_axis.ravel(),
             self.z_axis.ravel(),
         ])
-    }
-
-    fn hash(&self, state: &mut dyn std::hash::Hasher) {
-        self.x_axis.hash(state);
-        self.y_axis.hash(state);
-        self.z_axis.hash(state);
     }
 }
 
@@ -66,6 +70,15 @@ pub struct Matrix4<T: jit::AsVarType> {
     w_axis: Vector4<T>,
 }
 
+impl<T: jit::AsVarType> Hash for Matrix4<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.x_axis.hash(state);
+        self.y_axis.hash(state);
+        self.z_axis.hash(state);
+        self.w_axis.hash(state);
+    }
+}
+
 impl<T: jit::AsVarType> jit::Traverse for Matrix4<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>) -> &'static jit::Layout {
         let layouts = [
@@ -83,12 +96,6 @@ impl<T: jit::AsVarType> jit::Traverse for Matrix4<T> {
             self.z_axis.ravel(),
             self.w_axis.ravel(),
         ])
-    }
-    fn hash(&self, state: &mut dyn std::hash::Hasher) {
-        self.x_axis.hash(state);
-        self.y_axis.hash(state);
-        self.z_axis.hash(state);
-        self.w_axis.hash(state);
     }
 }
 

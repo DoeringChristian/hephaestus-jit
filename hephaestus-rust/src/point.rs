@@ -1,9 +1,18 @@
+use std::hash::Hash;
+
 use super::Var;
 
 #[derive(Clone, Debug)]
 pub struct Point2<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
+}
+
+impl<T: jit::AsVarType> Hash for Point2<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.x.hash(state);
+        self.y.hash(state);
+    }
 }
 
 impl<T: jit::AsVarType> jit::Traverse for Point2<T> {
@@ -13,11 +22,6 @@ impl<T: jit::AsVarType> jit::Traverse for Point2<T> {
     }
     fn ravel(&self) -> jit::VarRef {
         jit::vec(&[self.x.0.clone(), self.y.0.clone()])
-    }
-
-    fn hash(&self, state: &mut dyn std::hash::Hasher) {
-        self.x.hash(state);
-        self.y.hash(state);
     }
 }
 
@@ -53,6 +57,14 @@ pub struct Point3<T: jit::AsVarType> {
     z: Var<T>,
 }
 
+impl<T: jit::AsVarType> Hash for Point3<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.x.hash(state);
+        self.y.hash(state);
+        self.z.hash(state);
+    }
+}
+
 impl<T: jit::AsVarType> jit::Traverse for Point3<T> {
     fn traverse(&self, vars: &mut Vec<jit::VarRef>) -> &'static jit::Layout {
         let layouts = [
@@ -64,11 +76,6 @@ impl<T: jit::AsVarType> jit::Traverse for Point3<T> {
     }
     fn ravel(&self) -> jit::VarRef {
         jit::vec(&[self.x.0.clone(), self.y.0.clone(), self.z.0.clone()])
-    }
-    fn hash(&self, state: &mut dyn std::hash::Hasher) {
-        self.x.hash(state);
-        self.y.hash(state);
-        self.z.hash(state);
     }
 }
 

@@ -1246,7 +1246,7 @@ fn record_vec2(#[case] device: Device) {
 #[rstest]
 #[case(vulkan())]
 fn record_struct(#[case] device: Device) {
-    #[derive(Clone, Traverse)]
+    #[derive(Clone, Traverse, Hash)]
     pub struct Test {
         a: VarRef,
     }

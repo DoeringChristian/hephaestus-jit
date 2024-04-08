@@ -8,7 +8,8 @@ mod vector;
 
 pub use jit;
 pub use jit::{
-    compile, record, recorded, vulkan, AsVarType, Construct, Device, Graph, ReduceOp, Traverse,
+    compile, record, recorded, vulkan, AsVarType, Construct, Device, DynHash, Graph, ReduceOp,
+    Traverse,
 };
 
 pub use accel::{Accel, AccelDesc, GeometryDesc};

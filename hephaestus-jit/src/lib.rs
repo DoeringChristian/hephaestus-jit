@@ -30,7 +30,7 @@ pub use trace::{
     index, is_empty, literal, loop_end, loop_start, mat, matfma, schedule_eval, sized_index,
     sized_literal, vec, AccelDesc, GeometryDesc, VarId, VarRef,
 };
-pub use traverse::{Construct, Layout, Traverse};
+pub use traverse::{Construct, DynHash, Layout, Traverse};
 pub use vartype::{AsVarType, Instance, Intersection, Ray3f, VarType};
 
 pub use hephaestus_macros::{recorded, AsVarType, Construct, Traverse};

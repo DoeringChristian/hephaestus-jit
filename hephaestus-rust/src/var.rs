@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -9,6 +10,13 @@ use crate::Scatter;
 
 #[derive(Clone, Debug)]
 pub struct Var<T>(pub(crate) jit::VarRef, pub(crate) PhantomData<T>);
+
+impl<T: jit::AsVarType> Hash for Var<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
 
 impl<T: jit::AsVarType> From<jit::VarRef> for Var<T> {
     fn from(value: jit::VarRef) -> Self {
@@ -31,10 +39,6 @@ impl<T: jit::AsVarType> jit::Traverse for Var<T> {
 
     fn ravel(&self) -> jit::VarRef {
         self.0.clone()
-    }
-
-    fn hash(&self, state: &mut dyn std::hash::Hasher) {
-        self.0.hash(state);
     }
 }
 impl<T: jit::AsVarType> jit::Construct for Var<T> {

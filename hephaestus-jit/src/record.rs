@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use crate::{backend, graph, tr, Layout};
 
 use crate::tr::{schedule_eval, with_trace, VarRef, TS};
-use crate::traverse::{Construct, Traverse};
+use crate::traverse::{Construct, DynHash, Traverse};
 
 pub trait WrapInput<Input, Output> {
     // type Input;
@@ -94,7 +94,7 @@ pub fn record<Input, Output, F>(
     f: F,
 ) -> impl Fn(&backend::Device, Input) -> graph::Result<(Output, graph::Report)>
 where
-    Input: Traverse,
+    Input: Traverse + DynHash,
     Output: Traverse + Construct,
     F: WrapInput<Input, Output>,
 {
@@ -125,7 +125,7 @@ impl FCache {
         input: Input,
     ) -> graph::Result<(Output, graph::Report)>
     where
-        Input: Traverse,
+        Input: Traverse + DynHash,
         Output: Traverse + Construct,
         F: Fn(Input) -> Output + 'static,
     {
@@ -160,7 +160,7 @@ impl FCache {
         // We calculate the hash of the inputs by using their resource descriptors, as they
         // uniquely identify the type and extent of the variable.
         // This also caputres the input layout.
-        input.hash(&mut hasher);
+        input.dyn_hash(&mut hasher);
 
         let hash = hasher.finish();
 

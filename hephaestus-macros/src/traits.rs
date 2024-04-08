@@ -106,9 +106,9 @@ pub fn derive_traverse_impl(input: DeriveInput) -> TokenStream {
                 let refs = [#(self.#names.ravel()),*];
                 #jit::composite(&refs)
             }
-            fn hash(&self, state: &mut dyn std::hash::Hasher) {
-                #(self.#names.hash(state);)*
-            }
+            // fn hash(&self, state: &mut dyn std::hash::Hasher) {
+            //     #(self.#names.hash(state);)*
+            // }
         }
     }
 }
