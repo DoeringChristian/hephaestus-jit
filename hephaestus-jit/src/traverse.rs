@@ -148,6 +148,7 @@ impl<T: Traverse> Traverse for Vec<T> {
     }
 
     fn hash(&self, state: &mut dyn Hasher) {
+        state.write_usize(self.len());
         for t in self {
             t.hash(state);
         }
