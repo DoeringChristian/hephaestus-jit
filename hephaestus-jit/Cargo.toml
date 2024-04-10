@@ -35,7 +35,7 @@ indexmap = "2.1.0"
 # raw-window-handle = "0.5"
 
 # spirv-tools = "0.9.0"
-ash = { git = "https://github.com/DoeringChristian/ash.git", version = "0.37.0", features = ["linked", "debug"] }
+ash = { git = "https://github.com/DoeringChristian/ash.git", features = ["linked", "debug"] }
 # ash-window = { git = "https://github.com/DoeringChristian/ash.git", version = "0.12.0" }
 vk-sync = { git = "https://github.com/DoeringChristian/vk-sync-rs.git", branch = "custom-ash", package = "vk-sync-fork" }
 gpu-allocator = { git = "https://github.com/DoeringChristian/gpu-allocator.git", branch = "custom-ash" }

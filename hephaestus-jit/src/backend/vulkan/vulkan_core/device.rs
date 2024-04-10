@@ -5,12 +5,13 @@ use std::fmt::Debug;
 use std::ops::{Deref, Range};
 use std::sync::{Arc, Mutex};
 
-use ash::extensions::ext::DebugUtils;
+use ash::ext::debug_utils;
+// use ash::extensions::ext::DebugUtils;
 use ash::Entry;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use gpu_allocator::{AllocationSizes, AllocatorDebugSettings};
 
-pub use ash::{extensions::khr, vk};
+pub use ash::{ext, khr, vk};
 use itertools::Itertools;
 
 use super::physical_device::PhysicalDevice;
@@ -52,7 +53,7 @@ pub struct Device {
     pub entry: ash::Entry,
     pub instance: ash::Instance,
     pub device: ash::Device,
-    pub debug_utils_loader: DebugUtils,
+    pub debug_utils_loader: debug_utils::Instance,
     pub debug_callback: vk::DebugUtilsMessengerEXT,
     pub physical_device: PhysicalDevice,
 
@@ -64,8 +65,8 @@ pub struct Device {
 
     pub fence: Mutex<vk::Fence>,
 
-    pub acceleration_structure_ext: Option<khr::AccelerationStructure>,
-    pub cooperative_matrix_ext: Option<khr::CooperativeMatrix>,
+    pub acceleration_structure_ext: Option<khr::acceleration_structure::Device>,
+    pub cooperative_matrix_ext: Option<khr::cooperative_matrix::Instance>,
     pub cooperative_matrix_properties: Vec<vk::CooperativeMatrixPropertiesKHR<'static>>,
 
     pub buffer_pool: pool::ResourcePool<buffer::InternalBuffer>,
@@ -104,7 +105,7 @@ impl Device {
                 [CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0").as_ptr()];
             // let layer_names = [];
 
-            let extension_names = [DebugUtils::NAME.as_ptr()];
+            let extension_names = [debug_utils::NAME.as_ptr()];
 
             let appinfo = vk::ApplicationInfo::default()
                 .application_name(app_name)
@@ -137,7 +138,7 @@ impl Device {
                 )
                 .pfn_user_callback(Some(vulkan_debug_callback));
 
-            let debug_utils_loader = DebugUtils::new(&entry, &instance);
+            let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
             let debug_callback =
                 debug_utils_loader.create_debug_utils_messenger(&debug_info, None)?;
 
@@ -163,17 +164,17 @@ impl Device {
                 .nth(index)
                 .ok_or(Error::PhysicalDeviceNotFound(index))?;
 
-            let mut device_extension_names = vec![vk::ExtDescriptorIndexingFn::NAME.as_ptr()];
+            let mut device_extension_names = vec![ext::descriptor_indexing::NAME.as_ptr()];
 
             if physical_device.supports_ray_query {
-                device_extension_names.push(vk::KhrRayQueryFn::NAME.as_ptr());
+                device_extension_names.push(khr::ray_query::NAME.as_ptr());
             }
             if physical_device.supports_accel_struct {
-                device_extension_names.push(vk::KhrAccelerationStructureFn::NAME.as_ptr());
-                device_extension_names.push(vk::KhrDeferredHostOperationsFn::NAME.as_ptr());
+                device_extension_names.push(khr::acceleration_structure::NAME.as_ptr());
+                device_extension_names.push(khr::deferred_host_operations::NAME.as_ptr());
             }
             if physical_device.supports_cooperative_matrix {
-                device_extension_names.push(vk::KhrCooperativeMatrixFn::NAME.as_ptr());
+                device_extension_names.push(khr::cooperative_matrix::NAME.as_ptr());
             }
 
             let queue_family_index = physical_device.queue_family_index;
@@ -249,11 +250,11 @@ impl Device {
             // Extensons:
             let acceleration_structure_ext = physical_device
                 .supports_accel_struct
-                .then(|| khr::AccelerationStructure::new(&instance, &device));
+                .then(|| khr::acceleration_structure::Device::new(&instance, &device));
 
             let cooperative_matrix_ext = physical_device
                 .supports_cooperative_matrix
-                .then(|| khr::CooperativeMatrix::new(&entry, &instance));
+                .then(|| khr::cooperative_matrix::Instance::new(&entry, &instance));
 
             let cooperative_matrix_properties = cooperative_matrix_ext
                 .as_ref()

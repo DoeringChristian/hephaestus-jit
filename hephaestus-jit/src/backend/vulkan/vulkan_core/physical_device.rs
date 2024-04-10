@@ -6,8 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use super::{Error, Result};
 use ash;
-use ash::extensions::khr;
-use ash::vk;
+use ash::{ext, khr, vk};
 
 // #[derive(thiserror::Error, Debug)]
 // pub enum Error {
@@ -127,13 +126,12 @@ impl PhysicalDevice {
             .map(|extension| unsafe { CStr::from_ptr(extension.extension_name.as_ptr()) })
             .collect::<HashSet<_>>();
 
-        let supports_accel_struct = extension_names.contains(vk::KhrAccelerationStructureFn::NAME)
-            && extension_names.contains(vk::KhrDeferredHostOperationsFn::NAME);
-        let supports_index_type_uint8 = extension_names.contains(vk::ExtIndexTypeUint8Fn::NAME);
-        let supports_ray_query = extension_names.contains(vk::KhrRayQueryFn::NAME);
-        let supports_ray_trace = extension_names.contains(vk::KhrRayTracingPipelineFn::NAME);
-        let supports_cooperative_matrix =
-            extension_names.contains(vk::KhrCooperativeMatrixFn::NAME);
+        let supports_accel_struct = extension_names.contains(khr::acceleration_structure::NAME)
+            && extension_names.contains(khr::deferred_host_operations::NAME);
+        let supports_index_type_uint8 = extension_names.contains(ext::index_type_uint8::NAME);
+        let supports_ray_query = extension_names.contains(khr::ray_query::NAME);
+        let supports_ray_trace = extension_names.contains(khr::ray_tracing_pipeline::NAME);
+        let supports_cooperative_matrix = extension_names.contains(khr::cooperative_matrix::NAME);
 
         let queue_family_index = unsafe {
             instance
