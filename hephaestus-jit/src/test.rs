@@ -42,7 +42,6 @@ static DEBUG: Lazy<()> = Lazy::new(|| {
     #[cfg(feature = "profile-with-puffin")]
     {
         AT_EXIT.with(|_| {});
-        dbg!("test");
         let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
         Box::leak(Box::new(puffin_http::Server::new(&server_addr).unwrap()));
         puffin::set_scopes_on(true);
@@ -1687,4 +1686,19 @@ fn recorded_change(#[case] device: Device) {
 
     assert_eq!(y1.to_vec::<i32>(..), vec![2i32, 3, 4]);
     assert_eq!(y2.to_vec::<u64>(..), vec![2u64, 3, 4]);
+}
+
+#[rstest]
+#[case(vulkan())]
+fn reindex(#[case] device: Device) {
+    let idx = tr::sized_index(10);
+    let idx2 = idx.gather(tr::sized_index(100));
+
+    idx2.schedule();
+
+    let graph = tr::compile().unwrap();
+    dbg!(&graph);
+    graph.launch(&device).unwrap();
+
+    dbg!(idx2.to_vec::<u32>(..));
 }

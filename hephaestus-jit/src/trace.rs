@@ -108,13 +108,16 @@ impl Trace {
     pub fn get_var_mut(&mut self, id: VarId) -> Option<&mut Var> {
         self.vars.get_mut(id.0)
     }
-    pub fn new_var(&mut self, mut var: Var) -> VarRef {
+    pub fn new_var_id(&mut self, mut var: Var) -> VarId {
         for id in var.deps.iter().chain(var.extent.get_dynamic().as_ref()) {
             self.inc_rc(*id);
         }
         var.rc = 1;
         let id = VarId(self.vars.insert(var));
-        VarRef { id }
+        id
+    }
+    pub fn new_var(&mut self, mut var: Var) -> VarRef {
+        VarRef { id: self.new_var_id(var) }
     }
     pub fn inc_rc(&mut self, id: VarId) {
         self.vars[id.0].rc += 1;
@@ -159,6 +162,59 @@ impl Trace {
     }
     pub fn is_empty(&self) -> bool {
         self.vars.is_empty()
+    }
+    pub fn reindex(&mut self, id: VarId, new_idx: VarId) -> Option<VarId>{
+        
+        let mut deps = {
+            let var = self.var(id);
+
+            if !var.data.is_none() {
+                return None;
+            }
+
+            if matches!(var.op, Op::KernelOp(KernelOp::BufferRef | KernelOp::AccelRef | KernelOp::TextureRef{..})){
+                return Some(id);
+            }
+
+            var.deps.clone()
+        };
+        
+        let mut failed = -1;
+        for (i, dep) in deps.iter_mut().enumerate(){
+            let reindexed = self.reindex(*dep, new_idx);
+            if let Some(reindexed) = reindexed{
+                *dep = reindexed;
+            }else{
+                failed = i as i32;
+            }
+        }
+        if failed >= 0{
+            for i in 0..=failed{
+                self.dec_rc(deps[i as usize]);
+            }
+            return None;
+        }
+        
+
+        
+        let var = self.var(id);
+        let new_idx_var = self.var(new_idx);
+
+        let res = if var.op == Op::KernelOp(KernelOp::Index){
+            self.inc_rc(new_idx);
+            Some(new_idx)
+        }else{
+            Some(
+                self.new_var_id(Var{
+                    op: var.op,
+                    ty: var.ty,
+                    extent: new_idx_var.extent.clone(),
+                    deps,
+                    ..Default::default()
+                })
+            )
+        };
+        res
     }
 }
 pub fn is_empty() -> bool {
@@ -883,8 +939,30 @@ impl VarRef {
     pub fn is_unsized(&self) -> bool {
         with_trace(|trace| trace.var(self.id()).extent.is_unsized())
     }
+    pub fn has_deps(&self) -> bool{
+        !with_trace(|trace| trace.var(self.id()).deps.is_empty())
+    }
     pub fn rc(&self) -> usize {
         with_trace(|trace| trace.vars[self.id().0].rc)
+    }
+    pub fn is_data(&self) -> bool{
+        !with_trace(|trace| trace.var(self.id()).data.is_none())
+    }
+    pub fn is_ref(&self) -> bool{
+        with_trace(|trace| matches!(trace.var(self.id()).op, Op::KernelOp(KernelOp::BufferRef | KernelOp::AccelRef | KernelOp::TextureRef{..})))
+    }
+    pub fn deps(&self) -> Vec<VarRef>{
+        with_trace(|trace|{
+            // TODO: remove clone by unsafe
+            trace.var(self.id()).deps.clone().into_iter().map(|dep|{
+                trace.ref_borrow(dep)
+            }).collect()
+        })
+    }
+    pub fn op(&self) -> Op{
+        with_trace(|trace|{
+            trace.var(self.id()).op
+        })
     }
 }
 macro_rules! bop {
@@ -1003,28 +1081,72 @@ impl VarRef {
         )
     }
 
-    pub fn gather(&self, idx: impl Into<Self>) -> Self {
-        let idx = idx.into();
+    pub fn reindex(&self, new_idx: &VarRef) -> Option<VarRef>{
 
-        self.schedule();
-        schedule_eval();
+        if self.is_data(){
+            return None;
+        }
+
+        if self.is_ref(){
+            return Some(self.clone());
+        }
+
+        let mut deps = self.deps();
+        
+        for dep in deps.iter_mut(){
+            *dep = dep.reindex(new_idx)?;
+        }
+        
+        // let var = self.var(id);
+        // let new_idx_var = self.var(new_idx);
+        let op = self.op();
         let ty = self.ty();
-        let extent = idx.extent();
-        let src_ref = self.get_ref();
-        new_var(
-            Var {
-                op: Op::KernelOp(KernelOp::Gather),
-                ty,
-                extent,
-                ..Default::default()
-            },
-            [&src_ref, &idx],
-        )
+        let extent = new_idx.extent();
+        let data = self.data();
+
+        let res = if op == Op::KernelOp(KernelOp::Index){
+            Some(new_idx.clone())
+        }else{
+            Some(
+                new_var(Var{
+                    op,
+                    ty,
+                    extent,
+                    data,
+                    ..Default::default()
+                }, deps.iter())
+            )
+        };
+        res
+    }
+    pub fn gather(&self, idx: impl Into<Self>) -> Self {
+        self.gather_if(idx, true)
     }
     pub fn gather_if(&self, idx: impl Into<Self>, active: impl Into<Self>) -> Self {
         let idx = idx.into();
         let active = active.into();
 
+        // Resize if the source variable is a literal
+        if self.is_unsized(){
+            return with_trace(|trace|{
+                let var = trace.var(self.id());
+                let extent = trace.var(idx.id()).extent.clone();
+                let  var = Var{
+                    op: var.op,
+                    ty: var.ty,
+                    extent,
+                    data: var.data.clone(),
+                    ..Default::default()
+                };
+                trace.new_var(var)
+            });
+        }
+
+        // Reindex if possible
+        if let Some(reindexed) = self.reindex(&idx){
+            return reindexed;
+        }
+        
         self.schedule();
         schedule_eval();
         let ty = self.ty();
@@ -1268,6 +1390,9 @@ impl VarRef {
     }
     pub fn extent(&self) -> Extent {
         with_trace(|t| t.var(self.id()).extent.clone())
+    }
+    pub fn data(&self) -> Resource{
+        with_trace(|t| t.var(self.id()).data.clone())
     }
     // pub fn scope(&self) -> ScopeId {
     //     with_trace(|t| t.var(self.id()).scope)

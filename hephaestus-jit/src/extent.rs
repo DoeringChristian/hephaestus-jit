@@ -119,4 +119,16 @@ impl Extent {
         let dim = shape.iter().take_while(|d| **d > 0).count();
         dim as u32
     }
+    pub fn clone_with_rc(&self, trace: &mut crate::trace::Trace) -> Self {
+        match self {
+            Extent::DynSize { capacity, size } => {
+                trace.inc_rc(*size);
+                Extent::DynSize {
+                    capacity: *capacity,
+                    size: *size,
+                }
+            }
+            _ => self.clone(),
+        }
+    }
 }

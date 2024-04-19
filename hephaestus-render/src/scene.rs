@@ -81,7 +81,7 @@ impl Scene {
         for (i, bsdf) in self.bsdfs.iter().enumerate() {
             let mask = si.bsdf.eq(i as u32);
             let bsdf_res = bsdf.eval(si.wi.clone(), wo.clone(), mask.clone());
-            result = bsdf_res.select(mask.clone(), result.clone());
+            result = result.select(mask.clone(), bsdf_res.clone());
         }
         return result;
     }
@@ -108,20 +108,17 @@ mod test {
         let z = hep::literal(2u32);
         let triangles = hep::vec3(x, y, z);
 
-        let one = hep::sized_literal(1.0, 1);
-        let zero = hep::sized_literal(0.0, 1);
-
         let transform = hep::Matrix4f {
-            x_axis: hep::vec4(&one, &zero, &zero, &zero),
-            y_axis: hep::vec4(&zero, &one, &zero, &zero),
-            z_axis: hep::vec4(&zero, &zero, &one, &zero),
-            w_axis: hep::vec4(&zero, &zero, &zero, &one),
+            x_axis: hep::vec4(1., 0., 0., 0.),
+            y_axis: hep::vec4(0., 1., 0., 0.),
+            z_axis: hep::vec4(0., 0., 1., 0.),
+            w_axis: hep::vec4(0., 0., 0., 1.),
         };
 
         let instances = Instance {
             transform,
             geometry: hep::sized_literal(0, 1).into(),
-            bsdf: hep::sized_literal(0, 1),
+            bsdf: 0.into(),
         };
 
         let desc = SceneDesc {
