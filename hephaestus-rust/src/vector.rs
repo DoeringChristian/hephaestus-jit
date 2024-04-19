@@ -7,8 +7,8 @@ use super::var::Var;
 
 #[derive(Clone, Debug)]
 pub struct Vector2<T: jit::AsVarType> {
-    x: Var<T>,
-    y: Var<T>,
+    pub x: Var<T>,
+    pub y: Var<T>,
 }
 
 impl<T: jit::AsVarType> From<&Vector2<T>> for Vector2<T> {
@@ -61,9 +61,9 @@ impl<T: jit::AsVarType> jit::Construct for Vector2<T> {
 
 #[derive(Clone, Debug)]
 pub struct Vector3<T: jit::AsVarType> {
-    x: Var<T>,
-    y: Var<T>,
-    z: Var<T>,
+    pub x: Var<T>,
+    pub y: Var<T>,
+    pub z: Var<T>,
 }
 
 impl<T: jit::AsVarType> From<&Vector3<T>> for Vector3<T> {
@@ -123,10 +123,10 @@ impl<T: jit::AsVarType> jit::Construct for Vector3<T> {
 
 #[derive(Clone, Debug)]
 pub struct Vector4<T: jit::AsVarType> {
-    x: Var<T>,
-    y: Var<T>,
-    z: Var<T>,
-    w: Var<T>,
+    pub x: Var<T>,
+    pub y: Var<T>,
+    pub z: Var<T>,
+    pub w: Var<T>,
 }
 
 impl<T: jit::AsVarType> From<&Vector4<T>> for Vector4<T> {
@@ -209,34 +209,34 @@ pub type Vector2u = Vector2<u32>;
 pub type Vector3u = Vector3<u32>;
 pub type Vector4u = Vector4<u32>;
 
-pub fn vec2<T: jit::AsVarType>(x: impl Into<jit::VarRef>, y: impl Into<jit::VarRef>) -> Vector2<T> {
+pub fn vec2<T: jit::AsVarType>(x: impl Into<Var<T>>, y: impl Into<Var<T>>) -> Vector2<T> {
     Vector2::<T> {
         x: x.into().into(),
         y: y.into().into(),
     }
 }
 pub fn vec3<T: jit::AsVarType>(
-    x: impl Into<jit::VarRef>,
-    y: impl Into<jit::VarRef>,
-    z: impl Into<jit::VarRef>,
+    x: impl Into<Var<T>>,
+    y: impl Into<Var<T>>,
+    z: impl Into<Var<T>>,
 ) -> Vector3<T> {
     Vector3::<T> {
-        x: x.into().into(),
-        y: y.into().into(),
-        z: z.into().into(),
+        x: x.into(),
+        y: y.into(),
+        z: z.into(),
     }
 }
 pub fn vec4<T: jit::AsVarType>(
-    x: impl Into<jit::VarRef>,
-    y: impl Into<jit::VarRef>,
-    z: impl Into<jit::VarRef>,
-    w: impl Into<jit::VarRef>,
+    x: impl Into<Var<T>>,
+    y: impl Into<Var<T>>,
+    z: impl Into<Var<T>>,
+    w: impl Into<Var<T>>,
 ) -> Vector4<T> {
     Vector4::<T> {
-        x: x.into().into(),
-        y: y.into().into(),
-        z: z.into().into(),
-        w: w.into().into(),
+        x: x.into(),
+        y: y.into(),
+        z: z.into(),
+        w: w.into(),
     }
 }
 

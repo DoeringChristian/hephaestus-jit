@@ -4,8 +4,8 @@ use super::Var;
 
 #[derive(Clone, Debug)]
 pub struct Point2<T: jit::AsVarType> {
-    x: Var<T>,
-    y: Var<T>,
+    pub x: Var<T>,
+    pub y: Var<T>,
 }
 
 impl<T: jit::AsVarType> Hash for Point2<T> {
@@ -52,9 +52,9 @@ impl<T: jit::AsVarType> jit::Construct for Point2<T> {
 
 #[derive(Clone, Debug)]
 pub struct Point3<T: jit::AsVarType> {
-    x: Var<T>,
-    y: Var<T>,
-    z: Var<T>,
+    pub x: Var<T>,
+    pub y: Var<T>,
+    pub z: Var<T>,
 }
 
 impl<T: jit::AsVarType> Hash for Point3<T> {
@@ -118,24 +118,21 @@ pub type Point3i = Point3<i32>;
 pub type Point2u = Point2<u32>;
 pub type Point3u = Point3<u32>;
 
-pub fn point2<T: jit::AsVarType>(
-    x: impl AsRef<jit::VarRef>,
-    y: impl AsRef<jit::VarRef>,
-) -> Point2<T> {
+pub fn point2<T: jit::AsVarType>(x: impl Into<Var<T>>, y: impl Into<Var<T>>) -> Point2<T> {
     Point2::<T> {
-        x: x.as_ref().into(),
-        y: y.as_ref().into(),
+        x: x.into(),
+        y: y.into(),
     }
 }
 pub fn point3<T: jit::AsVarType>(
-    x: impl AsRef<jit::VarRef>,
-    y: impl AsRef<jit::VarRef>,
-    z: impl AsRef<jit::VarRef>,
+    x: impl Into<Var<T>>,
+    y: impl Into<Var<T>>,
+    z: impl Into<Var<T>>,
 ) -> Point3<T> {
     Point3::<T> {
-        x: x.as_ref().into(),
-        y: y.as_ref().into(),
-        z: z.as_ref().into(),
+        x: x.into(),
+        y: y.into(),
+        z: z.into(),
     }
 }
 

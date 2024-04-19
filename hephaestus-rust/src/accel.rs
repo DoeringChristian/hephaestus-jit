@@ -19,6 +19,7 @@ pub struct AccelDesc<'a> {
     pub instances: Var<jit::Instance>,
 }
 
+#[derive(jit::Traverse, jit::Construct, Hash)]
 pub struct Accel {
     accel: jit::VarRef,
 }

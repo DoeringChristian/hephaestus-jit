@@ -4,9 +4,9 @@ use crate::{Vector3, Vector4};
 
 #[derive(Clone, Debug)]
 pub struct Matrix3<T: jit::AsVarType> {
-    x_axis: Vector3<T>,
-    y_axis: Vector3<T>,
-    z_axis: Vector3<T>,
+    pub x_axis: Vector3<T>,
+    pub y_axis: Vector3<T>,
+    pub z_axis: Vector3<T>,
 }
 
 impl<T: jit::AsVarType> Hash for Matrix3<T> {
@@ -64,10 +64,10 @@ impl<T: jit::AsVarType> jit::Construct for Matrix3<T> {
 
 #[derive(Clone, Debug)]
 pub struct Matrix4<T: jit::AsVarType> {
-    x_axis: Vector4<T>,
-    y_axis: Vector4<T>,
-    z_axis: Vector4<T>,
-    w_axis: Vector4<T>,
+    pub x_axis: Vector4<T>,
+    pub y_axis: Vector4<T>,
+    pub z_axis: Vector4<T>,
+    pub w_axis: Vector4<T>,
 }
 
 impl<T: jit::AsVarType> Hash for Matrix4<T> {

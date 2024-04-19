@@ -18,6 +18,21 @@ impl<T: jit::AsVarType> Hash for Var<T> {
     }
 }
 
+macro_rules! from_literal {
+    ($ty:ident) => {
+        impl From<$ty> for Var<$ty> {
+            fn from(value: $ty) -> Self {
+                literal(value)
+            }
+        }
+    };
+    ($($ty:ident),*) => {
+        $(from_literal!($ty);)*
+    };
+}
+
+from_literal!(bool, i8, u8, i16, u16, i32, u32, i64, u64, f16, f32, f64);
+
 impl<T: jit::AsVarType> From<jit::VarRef> for Var<T> {
     fn from(value: jit::VarRef) -> Self {
         assert_eq!(T::var_ty(), value.ty());
@@ -100,7 +115,9 @@ pub fn dyn_index(capacity: usize, size: impl Into<Var<u32>>) -> Var<u32> {
     jit::dynamic_index(capacity, &size.into().0).into()
 }
 // Composite Constructors
-pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl Into<Var<T>>; N]) -> Var<T> {
+pub fn arr<const N: usize, T: jit::AsVarType + 'static>(
+    vars: [impl Into<Var<T>>; N],
+) -> Var<[T; N]> {
     // TODO: use threadlocal vec to collect
     let refs = vars.into_iter().map(|var| var.into().0).collect::<Vec<_>>();
     jit::arr(&refs).into()

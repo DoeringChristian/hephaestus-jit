@@ -86,14 +86,14 @@ impl<T: jit::Traverse + jit::Construct> Gather for T {
     }
 }
 
-pub trait Select {
-    fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self;
+pub trait Select: Sized {
+    fn select(&self, condition: impl Into<Var<bool>>, false_val: impl Into<Self>) -> Self;
 }
 
 impl<T: jit::Traverse + jit::Construct> Select for T {
-    fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
-        let condition = condition.as_ref();
-        let false_val = false_val.as_ref();
+    fn select(&self, condition: impl Into<Var<bool>>, false_val: impl Into<Self>) -> Self {
+        let condition = condition.into();
+        let false_val = false_val.into();
 
         let mut true_vars = vec![];
         let mut false_vars = vec![];
@@ -104,7 +104,7 @@ impl<T: jit::Traverse + jit::Construct> Select for T {
         assert_eq!(true_layout, false_layout);
 
         for (true_var, false_var) in true_vars.iter_mut().zip(false_vars.iter()) {
-            *true_var = true_var.select(condition, false_var);
+            *true_var = true_var.select(condition.clone(), false_var);
         }
 
         Self::construct(&mut true_vars.into_iter(), true_layout)

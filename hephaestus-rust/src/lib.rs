@@ -2,7 +2,7 @@ mod accel;
 mod matrix;
 mod point;
 mod texture;
-mod traits;
+pub mod traits;
 pub mod var;
 mod vector;
 
