@@ -11,6 +11,12 @@ pub struct Vector2<T: jit::AsVarType> {
     y: Var<T>,
 }
 
+impl<T: jit::AsVarType> From<&Vector2<T>> for Vector2<T> {
+    fn from(value: &Vector2<T>) -> Self {
+        value.clone()
+    }
+}
+
 impl<T: jit::AsVarType> Hash for Vector2<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.x.hash(state);
@@ -58,6 +64,12 @@ pub struct Vector3<T: jit::AsVarType> {
     x: Var<T>,
     y: Var<T>,
     z: Var<T>,
+}
+
+impl<T: jit::AsVarType> From<&Vector3<T>> for Vector3<T> {
+    fn from(value: &Vector3<T>) -> Self {
+        value.clone()
+    }
 }
 
 impl<T: jit::AsVarType> Hash for Vector3<T> {
@@ -115,6 +127,12 @@ pub struct Vector4<T: jit::AsVarType> {
     y: Var<T>,
     z: Var<T>,
     w: Var<T>,
+}
+
+impl<T: jit::AsVarType> From<&Vector4<T>> for Vector4<T> {
+    fn from(value: &Vector4<T>) -> Self {
+        value.clone()
+    }
 }
 
 impl<T: jit::AsVarType> Hash for Vector4<T> {
