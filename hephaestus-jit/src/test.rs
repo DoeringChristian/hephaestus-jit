@@ -42,6 +42,7 @@ static DEBUG: Lazy<()> = Lazy::new(|| {
     #[cfg(feature = "profile-with-puffin")]
     {
         AT_EXIT.with(|_| {});
+        dbg!("test");
         let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
         Box::leak(Box::new(puffin_http::Server::new(&server_addr).unwrap()));
         puffin::set_scopes_on(true);
@@ -62,10 +63,6 @@ fn debug() {}
 #[rstest]
 #[case(vulkan())]
 fn simple1(#[case] device: Device) {
-    pretty_env_logger::try_init().ok();
-
-    let device = backend::Device::vulkan(0).unwrap();
-
     let i = tr::sized_index(10);
     let j = tr::sized_index(5);
 
@@ -92,6 +89,7 @@ fn simple1(#[case] device: Device) {
     dbg!(j.to_vec::<u32>(..));
     assert_eq!(i.to_vec::<u32>(..), vec![1, 2, 3, 4, 5, 5, 6, 7, 8, 9]);
     assert_eq!(j.to_vec::<u32>(..), vec![0, 1, 2, 3, 4]);
+    profiling::finish_frame!();
 }
 
 #[rstest]
