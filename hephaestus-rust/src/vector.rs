@@ -240,22 +240,6 @@ pub fn vec4<T: jit::AsVarType>(
     }
 }
 
-impl<T: jit::AsVarType> AsRef<Vector2<T>> for Vector2<T> {
-    fn as_ref(&self) -> &Vector2<T> {
-        self
-    }
-}
-impl<T: jit::AsVarType> AsRef<Vector3<T>> for Vector3<T> {
-    fn as_ref(&self) -> &Vector3<T> {
-        self
-    }
-}
-impl<T: jit::AsVarType> AsRef<Vector4<T>> for Vector4<T> {
-    fn as_ref(&self) -> &Vector4<T> {
-        self
-    }
-}
-
 impl<T: jit::AsVarType> From<jit::VarRef> for Vector2<T> {
     fn from(value: jit::VarRef) -> Self {
         Self {
@@ -309,14 +293,14 @@ impl<T: jit::AsVarType> Vector2<T>
 where
     Vector2<T>: Scatter,
 {
-    pub fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
+    pub fn scatter(&self, dst: impl Into<Self>, index: impl Into<Var<u32>>) {
         Scatter::scatter(self, dst, index)
     }
     pub fn scatter_if(
         &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
+        dst: impl Into<Self>,
+        index: impl Into<Var<u32>>,
+        condition: impl Into<Var<bool>>,
     ) {
         Scatter::scatter_if(self, dst, index, condition)
     }
@@ -326,14 +310,14 @@ impl<T: jit::AsVarType> Vector3<T>
 where
     Vector3<T>: Scatter,
 {
-    pub fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
+    pub fn scatter(&self, dst: impl Into<Self>, index: impl Into<Var<u32>>) {
         Scatter::scatter(self, dst, index)
     }
     pub fn scatter_if(
         &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
+        dst: impl Into<Self>,
+        index: impl Into<Var<u32>>,
+        condition: impl Into<Var<bool>>,
     ) {
         Scatter::scatter_if(self, dst, index, condition)
     }

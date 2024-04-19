@@ -96,16 +96,13 @@ pub fn index() -> Var<u32> {
 pub fn sized_index(size: usize) -> Var<u32> {
     jit::sized_index(size).into()
 }
-pub fn dyn_index(capacity: usize, size: impl AsRef<Var<u32>>) -> Var<u32> {
-    jit::dynamic_index(capacity, &size.as_ref().0).into()
+pub fn dyn_index(capacity: usize, size: impl Into<Var<u32>>) -> Var<u32> {
+    jit::dynamic_index(capacity, &size.into().0).into()
 }
 // Composite Constructors
-pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl AsRef<Var<T>>; N]) -> Var<T> {
+pub fn arr<'a, const N: usize, T: jit::AsVarType + 'a>(vars: [impl Into<Var<T>>; N]) -> Var<T> {
     // TODO: use threadlocal vec to collect
-    let refs = vars
-        .into_iter()
-        .map(|var| var.as_ref().0.clone())
-        .collect::<Vec<_>>();
+    let refs = vars.into_iter().map(|var| var.into().0).collect::<Vec<_>>();
     jit::arr(&refs).into()
 }
 
@@ -349,65 +346,29 @@ impl<T: jit::AsVarType> Var<T> {
     }
 }
 
-impl<T> Var<T>
-where
-    Var<T>: Scatter,
-{
-    pub fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
-        Scatter::scatter(self, dst, index)
-    }
-    pub fn scatter_if(
-        &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
-    ) {
-        Scatter::scatter_if(self, dst, index, condition)
-    }
-}
-impl<T> Var<T>
-where
-    Var<T>: Gather,
-{
-    pub fn gather(&self, index: impl AsRef<Var<u32>>) -> Self {
-        Gather::gather(self, index)
-    }
-    pub fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self {
-        Gather::gather_if(self, index, condition)
-    }
-}
-impl<T> Var<T>
-where
-    Var<T>: Select,
-{
-    pub fn select(&self, condition: impl AsRef<Var<bool>>, false_val: impl AsRef<Self>) -> Self {
-        Select::select(self, condition, false_val)
-    }
-}
-
 macro_rules! scatter_reduce {
     ($T:ident) => {
         impl Var<$T> {
             pub fn scatter_reduce(
                 &self,
-                dst: impl AsRef<Self>,
-                index: impl AsRef<Var<u32>>,
+                dst: impl Into<Self>,
+                index: impl Into<Var<u32>>,
                 op: jit::ReduceOp,
             ) {
                 self.0
-                    .scatter_reduce(&dst.as_ref().0, &index.as_ref().0, op)
+                    .scatter_reduce(&dst.into().0, &index.into().0, op)
             }
             pub fn scatter_reduce_if(
                 &self,
-                dst: impl AsRef<Self>,
-                index: impl AsRef<Var<u32>>,
-                condition: impl AsRef<Var<bool>>,
+                dst: impl Into<Self>,
+                index: impl Into<Var<u32>>,
+                condition: impl Into<Var<bool>>,
                 op: jit::ReduceOp,
             ) {
                 self.0.scatter_reduce_if(
-                    &dst.as_ref().0,
-                    &index.as_ref().0,
-                    &condition.as_ref().0,
+                    &dst.into().0,
+                    &index.into().0,
+                    &condition.into().0,
                     op,
                 )
             }
@@ -427,26 +388,26 @@ macro_rules! scatter_atomic {
         impl Var<$T> {
             pub fn scatter_atomic(
                 &self,
-                dst: impl AsRef<Self>,
-                index: impl AsRef<Var<u32>>,
+                dst: impl Into<Self>,
+                index: impl Into<Var<u32>>,
                 op: jit::ReduceOp,
             ) -> Self {
                 self.0
-                    .scatter_atomic(&dst.as_ref().0, &index.as_ref().0, op)
+                    .scatter_atomic(&dst.into().0, &index.into().0, op)
                     .into()
             }
             pub fn scatter_atomic_if(
                 &self,
-                dst: impl AsRef<Self>,
-                index: impl AsRef<Var<u32>>,
-                condition: impl AsRef<Var<bool>>,
+                dst: impl Into<Self>,
+                index: impl Into<Var<u32>>,
+                condition: impl Into<Var<bool>>,
                 op: jit::ReduceOp,
             ) -> Self {
                 self.0
                     .scatter_atomic_if(
-                        &dst.as_ref().0,
-                        &index.as_ref().0,
-                        &condition.as_ref().0,
+                        &dst.into().0,
+                        &index.into().0,
+                        &condition.into().0,
                         op,
                     )
                     .into()
@@ -454,11 +415,11 @@ macro_rules! scatter_atomic {
 
             pub fn atomic_inc(
                 &self,
-                index: impl AsRef<Var<u32>>,
-                condition: impl AsRef<Var<bool>>,
+                index: impl Into<Var<u32>>,
+                condition: impl Into<Var<bool>>,
             ) -> Self {
                 self.0
-                    .atomic_inc(&index.as_ref().0, &condition.as_ref().0)
+                    .atomic_inc(&index.into().0, &condition.into().0)
                     .into()
             }
         }

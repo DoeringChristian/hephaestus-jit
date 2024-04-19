@@ -40,10 +40,10 @@ impl<T: jit::AsVarType> Texture<2, T> {
 }
 
 impl<T: jit::AsVarType> Texture<3, T> {
-    pub fn lookup(&self, pos: impl AsRef<crate::Vector3<f32>>) -> impl Iterator<Item = Var<T>> {
+    pub fn lookup(&self, pos: impl Into<crate::Vector3<f32>>) -> impl Iterator<Item = Var<T>> {
         self.tex
             .0
-            .tex_lookup(&pos.as_ref().ravel())
+            .tex_lookup(&pos.into().ravel())
             .extract_all()
             .map(|r| Var::<T>(r, PhantomData))
     }

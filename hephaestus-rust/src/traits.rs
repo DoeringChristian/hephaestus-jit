@@ -1,20 +1,20 @@
 use super::var::Var;
 
-pub trait Scatter {
-    fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>);
+pub trait Scatter: Sized {
+    fn scatter(&self, dst: impl Into<Self>, index: impl Into<Var<u32>>);
 
     fn scatter_if(
         &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
+        dst: impl Into<Self>,
+        index: impl Into<Var<u32>>,
+        condition: impl Into<Var<bool>>,
     );
 }
 
 impl<T: jit::Traverse> Scatter for T {
-    fn scatter(&self, dst: impl AsRef<Self>, index: impl AsRef<Var<u32>>) {
-        let dst = dst.as_ref();
-        let index = index.as_ref();
+    fn scatter(&self, dst: impl Into<Self>, index: impl Into<Var<u32>>) {
+        let dst = dst.into();
+        let index = index.into();
 
         let mut src_vars = vec![];
         let mut dst_vars = vec![];
@@ -29,13 +29,13 @@ impl<T: jit::Traverse> Scatter for T {
 
     fn scatter_if(
         &self,
-        dst: impl AsRef<Self>,
-        index: impl AsRef<Var<u32>>,
-        condition: impl AsRef<Var<bool>>,
+        dst: impl Into<Self>,
+        index: impl Into<Var<u32>>,
+        condition: impl Into<Var<bool>>,
     ) {
-        let dst = dst.as_ref();
-        let index = index.as_ref();
-        let condition = condition.as_ref();
+        let dst = dst.into();
+        let index = index.into();
+        let condition = condition.into();
 
         let mut src_vars = vec![];
         let mut dst_vars = vec![];
