@@ -4,6 +4,7 @@ use hephaestus as hep;
 pub struct Instance {
     pub transform: hep::Matrix4f,
     pub geometry: hep::UInt32,
+    pub bsdf: hep::UInt32,
 }
 
 impl From<Instance> for hep::Var<jit::Instance> {

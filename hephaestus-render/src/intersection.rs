@@ -1,31 +1,42 @@
+use hep::*;
 use hephaestus as hep;
 use hephaestus::traits::*;
 
+use crate::scene::Scene;
+use crate::spectrum::Spectrum;
+
 #[derive(Clone, hep::Traverse, hep::Construct)]
 pub struct PreliminaryIntersection {
-    pub bx: hep::Float32,
-    pub by: hep::Float32,
-    pub instance_id: hep::UInt32,
-    pub primitive_id: hep::UInt32,
-    pub valid: hep::Mask,
+    pub bx: Float32,
+    pub by: Float32,
+    pub wi: Vector3f,
+    pub instance_id: UInt32,
+    pub primitive_id: UInt32,
+    pub valid: Mask,
 }
 
-impl From<hep::Var<jit::Intersection>> for PreliminaryIntersection {
-    fn from(value: hep::Var<jit::Intersection>) -> Self {
-        let intersection_type: hep::UInt32 = value.extract(4).into();
-        let valid = hep::literal(false).select(intersection_type.eq(0u32), true);
-
-        Self {
-            bx: value.extract(0).into(),
-            by: value.extract(1).into(),
-            instance_id: value.extract(2).into(),
-            primitive_id: value.extract(3).into(),
-            valid,
+impl PreliminaryIntersection {
+    pub fn finalize(self, scene: &Scene) -> SurfaceIntersection {
+        let instance = scene.instances.gather_if(&self.instance_id, &self.valid);
+        SurfaceIntersection {
+            bx: self.bx,
+            by: self.by,
+            wi: self.wi,
+            instance_id: self.instance_id,
+            primitive_id: self.primitive_id,
+            valid: self.valid,
+            bsdf: instance.bsdf.clone(),
         }
     }
 }
 
-#[derive(Clone, hep::Traverse, hep::Construct)]
+#[derive(Clone, Hash, Traverse, Construct)]
 pub struct SurfaceIntersection {
-    preliminary: PreliminaryIntersection,
+    pub bx: Float32,
+    pub by: Float32,
+    pub wi: Vector3f,
+    pub instance_id: UInt32,
+    pub primitive_id: UInt32,
+    pub valid: Mask,
+    pub bsdf: UInt32,
 }

@@ -50,14 +50,14 @@ impl<T: jit::Traverse> Scatter for T {
 }
 
 pub trait Gather {
-    fn gather(&self, index: impl AsRef<Var<u32>>) -> Self;
+    fn gather(&self, index: impl Into<Var<u32>>) -> Self;
 
-    fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self;
+    fn gather_if(&self, index: impl Into<Var<u32>>, condition: impl Into<Var<bool>>) -> Self;
 }
 
 impl<T: jit::Traverse + jit::Construct> Gather for T {
-    fn gather(&self, index: impl AsRef<Var<u32>>) -> Self {
-        let index = index.as_ref();
+    fn gather(&self, index: impl Into<Var<u32>>) -> Self {
+        let index = index.into();
 
         let mut vars = vec![];
 
@@ -70,9 +70,9 @@ impl<T: jit::Traverse + jit::Construct> Gather for T {
         Self::construct(&mut vars.into_iter(), layout)
     }
 
-    fn gather_if(&self, index: impl AsRef<Var<u32>>, condition: impl AsRef<Var<bool>>) -> Self {
-        let index = index.as_ref();
-        let condition = condition.as_ref();
+    fn gather_if(&self, index: impl Into<Var<u32>>, condition: impl Into<Var<bool>>) -> Self {
+        let index = index.into();
+        let condition = condition.into();
 
         let mut vars = vec![];
 
