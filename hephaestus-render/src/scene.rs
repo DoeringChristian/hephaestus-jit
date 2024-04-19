@@ -1,6 +1,7 @@
 use hephaestus as hep;
 
 use crate::bsdf::BSDF;
+use crate::instance::Instance;
 use crate::intersection::PreliminaryIntersection;
 use crate::ray::Ray3f;
 
@@ -15,7 +16,7 @@ pub struct Scene {
     bsdfs: Vec<Box<dyn BSDF>>,
 
     geometries: Vec<SceneGeometry>,
-    instances: hep::Var<jit::Instance>,
+    instances: Instance,
 
     accel: hep::Accel,
 }
@@ -33,7 +34,7 @@ impl From<SceneDesc> for Scene {
 
         let accel_desc = hep::AccelDesc {
             geometries: &geometries,
-            instances: desc.instances.clone(),
+            instances: desc.instances.clone().into(),
         };
         Self {
             bsdfs: desc.bsdfs,
@@ -49,7 +50,7 @@ pub struct SceneDesc {
     pub bsdfs: Vec<Box<dyn BSDF>>,
 
     pub geometries: Vec<SceneGeometry>,
-    pub instances: hep::Var<jit::Instance>,
+    pub instances: Instance,
 }
 
 impl Scene {

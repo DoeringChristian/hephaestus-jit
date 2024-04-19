@@ -1,6 +1,6 @@
 use hephaestus as hep;
 
-#[derive(Clone, hep::Traverse, hep::Construct)]
+#[derive(Clone, Hash, hep::Traverse, hep::Construct)]
 pub struct Instance {
     pub transform: hep::Matrix4f,
     pub geometry: hep::UInt32,
