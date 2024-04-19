@@ -81,7 +81,7 @@ impl Scene {
         for (i, bsdf) in self.bsdfs.iter().enumerate() {
             let mask = si.bsdf.eq(i as u32);
             let bsdf_res = bsdf.eval(si.wi.clone(), wo.clone(), mask.clone());
-            result = result.select(mask.clone(), bsdf_res.clone());
+            result = bsdf_res.select(mask.clone(), result.clone());
         }
         return result;
     }
@@ -93,6 +93,7 @@ mod test {
     use crate::instance::Instance;
 
     use super::*;
+    use hep::traits::Schedule;
     use hephaestus as hep;
     #[test]
     fn preliminary_intersection() {
@@ -118,13 +119,18 @@ mod test {
         let instances = Instance {
             transform,
             geometry: hep::sized_literal(0, 1).into(),
-            bsdf: 0.into(),
+            bsdf: hep::sized_literal(1, 1).into(),
         };
 
         let desc = SceneDesc {
-            bsdfs: vec![Box::new(DiffuseBSDF {
-                albedo: hep::vec3(hep::sized_literal(1., 1), 0., 0.),
-            })],
+            bsdfs: vec![
+                Box::new(DiffuseBSDF {
+                    albedo: hep::vec3(hep::sized_literal(1., 1), 0., 0.),
+                }),
+                Box::new(DiffuseBSDF {
+                    albedo: hep::vec3(hep::sized_literal(1., 1), 0., 0.),
+                }),
+            ],
             geometries: vec![SceneGeometry {
                 triangles,
                 vertices,
@@ -132,7 +138,7 @@ mod test {
             instances: instances.into(),
         };
 
-        let scene = desc.into();
+        let scene: Scene = desc.into();
 
         let ray = Ray3f {
             o: hep::point3(hep::sized_literal(0.6, 1), 0.6, 0.1),
@@ -141,14 +147,34 @@ mod test {
             tmax: (10_000.).into(),
         };
 
+        scene.schedule();
+        ray.schedule();
+
+        let graph = hep::compile().unwrap();
+        graph.launch(&device).unwrap();
+
         #[hep::recorded]
         fn render(scene: &Scene, ray: &Ray3f) -> hep::Vector3f {
             let si = scene.ray_intersect(ray);
-            scene.eval_bsdf(&si, hep::vec3(1., 0., 0.))
+            let color = scene.eval_bsdf(&si, hep::vec3(1., 0., 0.));
+            hep::vec3(
+                color.x,
+                hep::sized_literal(1., 1),
+                hep::sized_literal(1., 1),
+            )
         }
 
         let result = render(&device, &scene, &ray).unwrap().0;
 
+        let si = scene.ray_intersect(&ray);
+        let result2 = scene.eval_bsdf(&si, hep::vec3(1., 0., 0.));
+        result2.schedule();
+
+        let graph = hep::compile().unwrap();
+        dbg!(&graph);
+        graph.launch(&device).unwrap();
+
+        // dbg!(result.to_vec());
         dbg!(result.x.to_vec());
         dbg!(result.y.to_vec());
         dbg!(result.z.to_vec());

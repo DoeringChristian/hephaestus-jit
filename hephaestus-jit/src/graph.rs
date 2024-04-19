@@ -336,8 +336,11 @@ impl Graph {
                 let res = env.resources[id.0].clone();
                 let desc = &self.resource_descs[id.0];
 
-                let op = match res {
-                    Resource::Buffer(_) => op::Op::Buffer,
+                let op = match &res {
+                    Resource::Buffer(buf) => {
+                        // dbg!(buf.to_host::<f32>(0..1));
+                        op::Op::Buffer
+                    }
                     Resource::Texture(_) => op::Op::Texture,
                     Resource::Accel(_) => op::Op::Accel,
                     _ => todo!(),

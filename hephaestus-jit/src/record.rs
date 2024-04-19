@@ -183,6 +183,8 @@ impl FCache {
                     let ts = std::mem::take(&mut (*s));
                     graph::compile(&ts, &resource_inputs, &outputs)
                 })?;
+                log::trace!("Cache miss, traced new graph: {graph:?}.");
+                dbg!(&graph);
 
                 entry.insert(Func {
                     graph,
@@ -195,6 +197,10 @@ impl FCache {
         // Get the correct graph, launch it and construct the output struct.
         let func = &self.graphs[&hash];
         let (report, output) = func.graph.launch_with(device, &resource_inputs).unwrap();
+
+        for o in output.iter() {
+            dbg!(o.to_vec::<f32>(..));
+        }
 
         let mut output = output.into_iter();
         let output = Output::construct(&mut output, func.output_layout);

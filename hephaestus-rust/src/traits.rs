@@ -1,5 +1,19 @@
 use super::var::Var;
 
+pub trait Schedule {
+    fn schedule(&self);
+}
+
+impl<T: jit::Traverse> Schedule for T {
+    fn schedule(&self) {
+        let mut vars = vec![];
+        self.traverse(&mut vars);
+        for var in vars {
+            var.schedule();
+        }
+    }
+}
+
 pub trait Scatter: Sized {
     fn scatter(&self, dst: impl Into<Self>, index: impl Into<Var<u32>>);
 
