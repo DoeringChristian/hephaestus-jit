@@ -154,29 +154,29 @@ mod test {
         graph.launch(&device).unwrap();
 
         #[hep::recorded]
-        fn render(scene: &Scene, ray: &Ray3f) -> hep::Vector3f {
+        fn render(scene: &Scene, ray: &Ray3f) -> (hep::Float32, hep::Float32) {
             let si = scene.ray_intersect(ray);
-            let color = scene.eval_bsdf(&si, hep::vec3(1., 0., 0.));
-            hep::vec3(
-                color.x,
-                hep::sized_literal(1., 1),
-                hep::sized_literal(1., 1),
-            )
+            let color = scene.eval_bsdf(&si, hep::vec3(0., 0., 0.));
+            color.y.schedule();
+            color.x.schedule();
+            (color.x.clone(), color.x.clone())
         }
 
         let result = render(&device, &scene, &ray).unwrap().0;
 
-        let si = scene.ray_intersect(&ray);
-        let result2 = scene.eval_bsdf(&si, hep::vec3(1., 0., 0.));
-        result2.schedule();
+        // let si = scene.ray_intersect(&ray);
+        // let result2 = scene.eval_bsdf(&si, hep::vec3(1., 0., 0.));
+        // result2.schedule();
 
         let graph = hep::compile().unwrap();
         dbg!(&graph);
         graph.launch(&device).unwrap();
 
         // dbg!(result.to_vec());
-        dbg!(result.x.to_vec());
-        dbg!(result.y.to_vec());
-        dbg!(result.z.to_vec());
+        dbg!(result.0.to_vec());
+        dbg!(result.1.to_vec());
+        // dbg!(result.x.to_vec());
+        // dbg!(result.y.to_vec());
+        // dbg!(result.z.to_vec());
     }
 }
