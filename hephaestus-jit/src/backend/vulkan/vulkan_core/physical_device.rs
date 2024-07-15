@@ -40,6 +40,7 @@ pub struct PhysicalDevice {
     pub cooperative_matrix_properties: vk::PhysicalDeviceCooperativeMatrixPropertiesKHR<'static>,
 
     pub extensions: Vec<vk::ExtensionProperties>,
+    pub extension_names: HashSet<&'static CStr>,
 
     pub queue_family_index: u32,
 
@@ -174,6 +175,7 @@ impl PhysicalDevice {
                 cooperative_matrix_properties: std::mem::transmute(cooperative_matrix_properties),
 
                 extensions,
+                extension_names,
                 queue_family_index,
                 memory_properties,
 
@@ -184,5 +186,9 @@ impl PhysicalDevice {
                 supports_cooperative_matrix,
             })
         }
+    }
+
+    pub fn supports_extension(&self, name: &CStr) -> bool {
+        self.extension_names.contains(name)
     }
 }
